@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MediaType, SearchResult } from '../types'
 import { isDemoMode, searchMulti, trendingShows } from '../api/tmdb'
-import { ErrorBox, LoadingSpinner, PosterCard } from '../components/shared'
+import { ErrorBox, PosterCard, SkeletonGrid } from '../components/shared'
 import './search.css'
 
 type Filter = 'all' | MediaType
@@ -12,6 +12,30 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'movie', label: 'Movies' },
 ]
 
+// ---------- recent searches (localStorage, best-effort) ----------
+
+const RECENT_KEY = 'showtrackr_recent_searches'
+const RECENT_MAX = 6
+
+function loadRecent(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]')
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === 'string').slice(0, RECENT_MAX)
+      : []
+  } catch {
+    return []
+  }
+}
+
+function saveRecent(list: string[]) {
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list))
+  } catch {
+    /* storage is best-effort */
+  }
+}
+
 export default function Search() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
@@ -19,8 +43,31 @@ export default function Search() {
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [trending, setTrending] = useState<SearchResult[]>([])
+  const [recent, setRecent] = useState<string[]>(loadRecent)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const q = query.trim()
+
+  /** Remember a successful search; newer entries first, prefixes collapsed. */
+  const rememberSearch = (term: string) => {
+    setRecent((prev) => {
+      const lower = term.toLowerCase()
+      // Drop exact duplicates and shorter prefixes typed on the way here
+      // ("bre" → "break" keeps only "break").
+      const kept = prev.filter((r) => {
+        const rl = r.toLowerCase()
+        return rl !== lower && !lower.startsWith(rl)
+      })
+      const next = [term, ...kept].slice(0, RECENT_MAX)
+      saveRecent(next)
+      return next
+    })
+  }
+
+  const clearRecent = () => {
+    setRecent([])
+    saveRecent([])
+  }
 
   // Idle-state suggestions ("Popular right now")
   useEffect(() => {
@@ -54,6 +101,7 @@ export default function Search() {
           if (cancelled) return
           setResults(r)
           setSearching(false)
+          if (r.length > 0) rememberSearch(q)
         })
         .catch((e: unknown) => {
           if (cancelled) return
@@ -82,6 +130,7 @@ export default function Search() {
       <div className="search-box">
         <span className="search-icon">🔍</span>
         <input
+          ref={inputRef}
           className="search-input"
           type="text"
           value={query}
@@ -94,7 +143,10 @@ export default function Search() {
           <button
             className="search-clear"
             title="Clear search"
-            onClick={() => setQuery('')}
+            onClick={() => {
+              setQuery('')
+              inputRef.current?.focus()
+            }}
           >
             ✕
           </button>
@@ -107,10 +159,35 @@ export default function Search() {
             Type a title above — results appear as you type. Try{' '}
             {isDemoMode() ? <>“ashfall” or “starlight”</> : <>“breaking” or “office”</>}.
           </p>
+          {recent.length > 0 && (
+            <div className="search-recent fade-in">
+              <span className="search-recent-label">Recent</span>
+              {recent.map((r) => (
+                <button
+                  key={r}
+                  className="search-chip"
+                  title={`Search “${r}” again`}
+                  onClick={() => {
+                    setQuery(r)
+                    inputRef.current?.focus()
+                  }}
+                >
+                  {r}
+                </button>
+              ))}
+              <button
+                className="search-recent-clear"
+                title="Clear recent searches"
+                onClick={clearRecent}
+              >
+                Clear
+              </button>
+            </div>
+          )}
           {trending.length > 0 && (
             <>
               <h2 className="section-title">Popular right now</h2>
-              <div className="poster-grid">
+              <div className="poster-grid stagger">
                 {trending.map((it) => (
                   <PosterCard key={`${it.media_type}:${it.id}`} item={it} />
                 ))}
@@ -119,7 +196,7 @@ export default function Search() {
           )}
         </>
       ) : searching ? (
-        <LoadingSpinner />
+        <SkeletonGrid />
       ) : error ? (
         <ErrorBox message={error} />
       ) : results.length === 0 ? (
@@ -145,7 +222,7 @@ export default function Search() {
                 <span className="search-chip-count">{countFor(f.key)}</span>
               </button>
             ))}
-            <span className="search-count">
+            <span className="search-count fade-in" key={`${filter}|${q}`}>
               <b>{filtered.length}</b> result{filtered.length === 1 ? '' : 's'} for
               “{q}”
             </span>
@@ -162,7 +239,7 @@ export default function Search() {
               </p>
             </div>
           ) : (
-            <div className="poster-grid">
+            <div className="poster-grid stagger">
               {filtered.map((it) => (
                 <PosterCard key={`${it.media_type}:${it.id}`} item={it} />
               ))}

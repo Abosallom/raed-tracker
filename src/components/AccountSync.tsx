@@ -5,6 +5,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getSyncStatus, onSyncStatus, syncNow, type SyncStatus } from '../store/sync'
 import { timeAgo } from './shared'
+// Defines the settings-* classes used below, so this card is styled even when
+// rendered outside the Settings page.
+import '../pages/settings.css'
 
 export function AccountSyncCard() {
   const [status, setStatus] = useState<SyncStatus>(getSyncStatus())

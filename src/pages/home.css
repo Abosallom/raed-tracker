@@ -1,5 +1,180 @@
 /* Home (Discover) page — scoped styles, all classes prefixed with home- */
 
+/* ---------- hero carousel ---------- */
+
+.home-hero {
+  position: relative;
+  height: clamp(300px, 38vw, 420px);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+  box-shadow: var(--shadow);
+}
+
+.home-hero-slide {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+}
+
+.home-hero-slide.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.home-hero-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* dim the artwork so text always reads */
+  filter: brightness(0.72) saturate(1.05);
+}
+
+.home-hero-fallback {
+  filter: none;
+}
+
+/* gradient overlay blending the image into the page background */
+.home-hero-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      to top,
+      var(--bg) 0%,
+      rgba(23, 23, 23, 0.45) 42%,
+      rgba(23, 23, 23, 0.12) 100%
+    ),
+    linear-gradient(
+      100deg,
+      rgba(23, 23, 23, 0.82) 0%,
+      rgba(23, 23, 23, 0.28) 55%,
+      transparent 82%
+    );
+}
+
+.home-hero-content {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  padding: 26px 28px 28px;
+  max-width: 580px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.home-hero-title {
+  font-size: clamp(24px, 3.4vw, 38px);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+}
+
+.home-hero-meta {
+  display: flex;
+  gap: 8px;
+}
+
+.home-hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(23, 23, 23, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(6px);
+}
+
+.home-hero-rating {
+  color: var(--yellow);
+}
+
+.home-hero-overview {
+  font-size: 14px;
+  color: rgba(237, 237, 237, 0.88);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.5);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.home-hero-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.home-hero-actions .btn:not(.primary) {
+  background: rgba(23, 23, 23, 0.6);
+  border-color: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+}
+
+.home-hero-actions .btn:not(.primary):hover:not(:disabled) {
+  background: rgba(42, 42, 42, 0.75);
+}
+
+.home-hero-actions .btn:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.home-hero-dots {
+  position: absolute;
+  right: 20px;
+  bottom: 18px;
+  display: flex;
+  gap: 8px;
+  z-index: 2;
+}
+
+.home-hero-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.35);
+  transition: background 0.2s, width 0.2s;
+}
+
+.home-hero-dot:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.home-hero-dot.active {
+  width: 22px;
+  background: var(--accent);
+}
+
+/* ---------- row stagger (poster children of MediaRow) ---------- */
+
+.home-row-stagger .media-row > * {
+  animation: fade-in-up 0.35s ease both;
+}
+.home-row-stagger .media-row > *:nth-child(2) { animation-delay: 0.03s; }
+.home-row-stagger .media-row > *:nth-child(3) { animation-delay: 0.06s; }
+.home-row-stagger .media-row > *:nth-child(4) { animation-delay: 0.09s; }
+.home-row-stagger .media-row > *:nth-child(5) { animation-delay: 0.12s; }
+.home-row-stagger .media-row > *:nth-child(6) { animation-delay: 0.15s; }
+.home-row-stagger .media-row > *:nth-child(7) { animation-delay: 0.18s; }
+.home-row-stagger .media-row > *:nth-child(n + 8) { animation-delay: 0.21s; }
+
+/* ---------- keep watching ---------- */
+
 .home-kw-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
@@ -85,4 +260,32 @@
 
 .home-see-all:hover {
   color: var(--accent);
+}
+
+/* ---------- motion preferences & responsive ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-slide {
+    transition: none !important;
+  }
+  .home-row-stagger .media-row > * {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .home-hero-content {
+    padding: 16px 16px 20px;
+    padding-right: 48px;
+    gap: 8px;
+  }
+  .home-hero-dots {
+    right: 14px;
+    bottom: 14px;
+  }
+  .home-hero-overview {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    font-size: 13px;
+  }
 }

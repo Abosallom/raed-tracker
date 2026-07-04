@@ -5,13 +5,32 @@
   border-radius: var(--radius);
   border: 1px solid var(--border);
   overflow: hidden;
-  background-size: cover;
-  background-position: center 25%;
+  background: var(--bg-elev);
   box-shadow: var(--shadow);
   margin-bottom: 26px;
 }
 
+/* Backdrop lives on its own layer so it can slowly zoom without moving content. */
+.moviedetail-hero-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 25%;
+  animation: moviedetail-hero-zoom 20s ease-out both;
+  will-change: transform;
+}
+
+@keyframes moviedetail-hero-zoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+
 .moviedetail-hero-inner {
+  position: relative;
   display: flex;
   gap: 26px;
   padding: 26px;
@@ -58,10 +77,40 @@
   background: var(--green);
   border-color: var(--green);
   color: #06281c;
+  animation: moviedetail-watch-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes moviedetail-watch-pop {
+  0% {
+    transform: scale(0.85);
+  }
+  55% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .moviedetail-watched-btn.is-watched:hover {
   background: #4ade9d;
+}
+
+/* IMDb pill — brand yellow on dark */
+
+a.moviedetail-imdb-btn {
+  background: #f5c518;
+  border-color: #f5c518;
+  border-radius: 999px;
+  color: #131313;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+a.moviedetail-imdb-btn:hover {
+  background: #ffd633;
+  border-color: #ffd633;
+  color: #131313;
 }
 
 .moviedetail-fav {
@@ -160,5 +209,12 @@
   .moviedetail-chips,
   .moviedetail-actions {
     justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moviedetail-hero-bg,
+  .moviedetail-watched-btn.is-watched {
+    animation: none !important;
   }
 }

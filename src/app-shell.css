@@ -1,0 +1,153 @@
+/* App shell chrome (mobile only).
+   Desktop (>760px): everything in this file is inert — the sidebar from
+   global.css is untouched. On <=760px we hide the old wrapped top nav and
+   swap in an iOS-style fixed bottom tab bar + a compact secondary strip. */
+
+.tabbar,
+.mobile-topbar {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  /* Replace the wrapped top sidebar with the bottom tab bar */
+  .app-layout .sidebar {
+    display: none;
+  }
+
+  /* Leave room for the fixed tab bar (+ iPhone home indicator) */
+  .app-layout .main-content {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* ----- bottom tab bar ----- */
+
+  .tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 80;
+    display: flex;
+    align-items: stretch;
+    background: rgba(23, 23, 23, 0.92);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .tabbar-item {
+    flex: 1 1 0;
+    min-width: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 7px 2px 6px;
+    color: var(--text-dim);
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s;
+  }
+
+  .tabbar-item.active {
+    color: var(--accent);
+  }
+
+  /* subtle top indicator on the active tab */
+  .tabbar-item.active::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 30px;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--accent);
+  }
+
+  .tabbar-item:active .tabbar-icon {
+    transform: scale(0.88);
+  }
+
+  .tabbar-icon {
+    font-size: 21px;
+    line-height: 1.1;
+    transition: transform 0.15s;
+  }
+
+  .tabbar-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  /* ----- secondary strip (routes not in the tab bar) ----- */
+
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin: -4px -16px 18px;
+    padding: 4px 16px;
+  }
+
+  .mobile-topbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .strip-brand {
+    flex-shrink: 0;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: -0.4px;
+    margin-right: 4px;
+  }
+
+  .strip-brand span {
+    color: var(--accent);
+  }
+
+  .strip-pill {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 13px;
+    border-radius: 999px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .strip-pill.active {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--accent-hover);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabbar-item,
+  .tabbar-icon,
+  .strip-pill {
+    transition: none !important;
+  }
+  .tabbar-item:active .tabbar-icon {
+    transform: none;
+  }
+}

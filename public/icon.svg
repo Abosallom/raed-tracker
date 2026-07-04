@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Raed Tracker app icon: rounded dark square, yellow TV glyph -->
+  <rect width="512" height="512" rx="112" fill="#171717"/>
+  <!-- antenna -->
+  <path d="M186 128 L256 202 L326 118" fill="none" stroke="#fbbf24" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- tv body -->
+  <rect x="112" y="196" width="288" height="196" rx="40" fill="#fbbf24"/>
+  <!-- screen -->
+  <rect x="146" y="230" width="220" height="128" rx="20" fill="#171717"/>
+  <!-- play triangle -->
+  <path d="M234 262 L298 294 L234 326 Z" fill="#fbbf24"/>
+</svg>

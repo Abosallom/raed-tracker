@@ -47,6 +47,6 @@
 
 @media (max-width: 760px) {
   .toaster {
-    bottom: 84px; /* clear the mobile bottom tab bar */
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px)); /* clear the mobile bottom tab bar */
   }
 }

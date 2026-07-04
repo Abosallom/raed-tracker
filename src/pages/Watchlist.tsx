@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import type { MediaType, WatchlistItem } from '../types'
 import { useLibrary } from '../store/library'
 import { PosterImage, timeAgo } from '../components/shared'
+import { showToast } from '../components/toast'
 import './watchlist.css'
 
 type Filter = 'all' | MediaType
@@ -24,7 +25,10 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
         className="watchlist-remove"
         title="Remove from watchlist"
         aria-label={`Remove ${item.name} from watchlist`}
-        onClick={() => removeFromWatchlist(item.type, item.id)}
+        onClick={() => {
+          removeFromWatchlist(item.type, item.id)
+          showToast('Removed from watchlist', '🗑️')
+        }}
       >
         ✕
       </button>
@@ -101,7 +105,7 @@ export default function Watchlist() {
               <p>No {filter === 'tv' ? 'shows' : 'movies'} on your watchlist.</p>
             </div>
           ) : (
-            <div className="poster-grid">
+            <div className="poster-grid stagger">
               {items.map((item) => (
                 <WatchlistCard key={`${item.type}:${item.id}`} item={item} />
               ))}

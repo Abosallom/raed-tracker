@@ -1,5 +1,6 @@
 // Shared UI building blocks used across all pages.
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Emotion, SearchResult } from '../types'
 import { EMOTIONS } from '../types'
@@ -14,9 +15,26 @@ export function PosterImage({
   path: string | null
   title: string
 }) {
+  // Track which src has finished loading so the real image fades in
+  // (and re-fades if the src ever changes for a reused component).
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null)
   const url = posterUrl(path)
-  if (url) return <img className="poster-img" src={url} alt={title} loading="lazy" />
-  return <div className="poster-fallback">{title}</div>
+  if (!url) return <div className="poster-fallback">{title}</div>
+  const loaded = loadedSrc === url
+  return (
+    <img
+      ref={(img) => {
+        // Cached images can complete before onLoad is attached.
+        if (img && img.complete && img.naturalWidth > 0) setLoadedSrc(url)
+      }}
+      className="poster-img"
+      src={url}
+      alt={title}
+      loading="lazy"
+      onLoad={() => setLoadedSrc(url)}
+      style={{ opacity: loaded ? 1 : 0, transition: 'opacity 0.35s ease' }}
+    />
+  )
 }
 
 export function PosterCard({
@@ -26,13 +44,53 @@ export function PosterCard({
   item: SearchResult
   subtitle?: string
 }) {
+  const [hover, setHover] = useState(false)
   const year = (item.first_air_date ?? item.release_date ?? '').slice(0, 4)
   return (
     <Link
       className="poster-card"
       to={item.media_type === 'tv' ? `/show/${item.id}` : `/movie/${item.id}`}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+      style={{
+        transform: hover ? 'translateY(-4px) scale(1.025)' : 'translateY(0) scale(1)',
+        transition: 'transform 0.18s cubic-bezier(0.2, 0.7, 0.3, 1.05)',
+        zIndex: hover ? 2 : 'auto',
+      }}
     >
-      <PosterImage path={item.poster_path} title={item.name} />
+      <div
+        style={{
+          position: 'relative',
+          borderRadius: 'var(--radius-sm)',
+          boxShadow: hover
+            ? '0 14px 28px rgba(0, 0, 0, 0.5)'
+            : '0 0 0 rgba(0, 0, 0, 0)',
+          transition: 'box-shadow 0.18s ease',
+        }}
+      >
+        <PosterImage path={item.poster_path} title={item.name} />
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            right: 8,
+            bottom: 8,
+            padding: '3px 8px',
+            borderRadius: 6,
+            background: 'rgba(14, 15, 23, 0.85)',
+            color: 'var(--accent)',
+            fontSize: 11,
+            fontWeight: 700,
+            opacity: hover ? 1 : 0,
+            transition: 'opacity 0.18s ease',
+            pointerEvents: 'none',
+          }}
+        >
+          View →
+        </span>
+      </div>
       {item.vote_average > 0 && (
         <div className="poster-badge">★ {item.vote_average.toFixed(1)}</div>
       )}
@@ -50,6 +108,78 @@ export function MediaRow({ items }: { items: SearchResult[] }) {
       {items.map((it) => (
         <PosterCard key={`${it.media_type}:${it.id}`} item={it} />
       ))}
+    </div>
+  )
+}
+
+// ---------- Skeletons ----------
+
+function SkeletonPosterBlock() {
+  return (
+    <div>
+      <div className="skeleton skeleton-poster" />
+      <div className="skeleton skeleton-line" style={{ width: '85%' }} />
+      <div className="skeleton skeleton-line" style={{ width: '55%' }} />
+    </div>
+  )
+}
+
+export function SkeletonRow({ count = 6 }: { count?: number }) {
+  return (
+    <div className="media-row" aria-hidden="true">
+      {Array.from({ length: count }, (_, i) => (
+        <SkeletonPosterBlock key={i} />
+      ))}
+    </div>
+  )
+}
+
+export function SkeletonGrid({ count = 12 }: { count?: number }) {
+  return (
+    <div className="poster-grid" aria-hidden="true">
+      {Array.from({ length: count }, (_, i) => (
+        <SkeletonPosterBlock key={i} />
+      ))}
+    </div>
+  )
+}
+
+export function SkeletonDetail() {
+  return (
+    <div aria-hidden="true">
+      {/* Backdrop bar */}
+      <div
+        className="skeleton"
+        style={{ height: 200, borderRadius: 'var(--radius)' }}
+      />
+      {/* Poster + text lines */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 24,
+          alignItems: 'flex-start',
+          marginTop: -48,
+          padding: '0 24px',
+        }}
+      >
+        <div
+          className="skeleton skeleton-poster"
+          style={{ width: 150, flex: '0 0 150px' }}
+        />
+        <div style={{ flex: 1, paddingTop: 64 }}>
+          <div
+            className="skeleton skeleton-line"
+            style={{ height: 24, width: '45%', marginTop: 0 }}
+          />
+          <div
+            className="skeleton skeleton-line"
+            style={{ width: '30%', marginTop: 14 }}
+          />
+          <div className="skeleton skeleton-line" style={{ width: '90%', marginTop: 22 }} />
+          <div className="skeleton skeleton-line" style={{ width: '85%' }} />
+          <div className="skeleton skeleton-line" style={{ width: '60%' }} />
+        </div>
+      </div>
     </div>
   )
 }
@@ -117,8 +247,38 @@ export function Rating({ value }: { value: number }) {
 
 export function LoadingSpinner() {
   return (
-    <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)' }}>
-      Loading…
+    <div
+      role="status"
+      aria-label="Loading"
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 7,
+        padding: 60,
+      }}
+    >
+      <style>{`
+        @keyframes rt-dot-pulse {
+          0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
+          40% { opacity: 1; transform: scale(1); }
+        }
+        .rt-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: var(--text-dim);
+          animation: rt-dot-pulse 1.2s ease-in-out infinite;
+        }
+        .rt-dot:nth-of-type(2) { animation-delay: 0.18s; }
+        .rt-dot:nth-of-type(3) { animation-delay: 0.36s; }
+        @media (prefers-reduced-motion: reduce) {
+          .rt-dot { animation: none; opacity: 0.5; }
+        }
+      `}</style>
+      <span className="rt-dot" />
+      <span className="rt-dot" />
+      <span className="rt-dot" />
     </div>
   )
 }

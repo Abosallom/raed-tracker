@@ -135,6 +135,31 @@
   color: var(--text-dim);
 }
 
+/* Loading skeleton rows (mirror .upcoming-row proportions) */
+
+.upcoming-row-skeleton {
+  pointer-events: none;
+}
+
+.upcoming-row-skeleton:hover {
+  border-color: var(--border);
+  background: var(--bg-elev);
+}
+
+.upcoming-skel-poster {
+  width: 50px;
+  aspect-ratio: 2 / 3;
+  flex-shrink: 0;
+  border-radius: 6px;
+}
+
+.upcoming-skel-chip {
+  width: 84px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 999px;
+}
+
 @media (max-width: 640px) {
   .upcoming-date {
     display: none;

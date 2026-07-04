@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLibrary } from '../store/library'
 import { PosterImage, formatMinutes, timeAgo } from '../components/shared'
+import { showToast } from '../components/toast'
 import { EMOTIONS } from '../types'
 import type { TrackedMovie } from '../types'
 import './movies.css'
@@ -61,7 +62,11 @@ function MovieCard({ movie }: { movie: TrackedMovie }) {
         <span className="chip movies-runtime">{formatMinutes(snapshot.runtime)}</span>
         <button
           className={`btn small movies-toggle${watched ? ' on' : ' primary'}`}
-          onClick={() => toggleMovieWatched(snapshot.id)}
+          onClick={() => {
+            toggleMovieWatched(snapshot.id)
+            if (watched) showToast(`${snapshot.title} marked unwatched`, '↩️')
+            else showToast(`${snapshot.title} watched ✓`, '🎬')
+          }}
           title={watched ? 'Mark as not watched' : 'Mark as watched'}
         >
           {watched ? '✓ Watched' : 'Mark watched'}
@@ -124,7 +129,7 @@ export default function Movies() {
           {active.length === 0 ? (
             <div className="movies-tab-empty">{TAB_EMPTY[tab]}</div>
           ) : (
-            <div className="poster-grid">
+            <div className="poster-grid stagger">
               {active.map((m) => (
                 <MovieCard key={m.snapshot.id} movie={m} />
               ))}

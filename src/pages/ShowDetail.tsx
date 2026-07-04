@@ -3,14 +3,15 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import type { SeasonDetail, ShowDetail } from '../types'
-import { episodeKey } from '../types'
+import type { Emotion, SeasonDetail, ShowDetail } from '../types'
+import { EMOTIONS, episodeKey } from '../types'
 import {
   backdropUrl,
   getSeasonDetail,
   getShowDetail,
   imdbTitleUrl,
   profileUrl,
+  stillUrl,
 } from '../api/tmdb'
 import {
   nextEpisode,
@@ -20,13 +21,14 @@ import {
 } from '../store/library'
 import {
   ErrorBox,
-  LoadingSpinner,
   PosterImage,
   ProgressBar,
   Rating,
   ReactionPicker,
+  SkeletonDetail,
 } from '../components/shared'
 import { CommentsSection } from '../components/CommentsSection'
+import { showToast } from '../components/toast'
 import './show-detail.css'
 
 function epCode(season: number, episode: number): string {
@@ -46,6 +48,30 @@ function initials(name: string): string {
 function daysUntil(airDate: string): number {
   const ms = new Date(`${airDate}T00:00:00`).getTime() - Date.now()
   return Math.max(1, Math.ceil(ms / 86_400_000))
+}
+
+function toastEmotion(emo: Emotion | undefined) {
+  const meta = emo ? EMOTIONS.find((m) => m.key === emo) : undefined
+  if (meta) showToast(`Feeling ${meta.emoji} about it!`)
+  else showToast('Reaction cleared', '↩️')
+}
+
+/** Placeholder rows shown while a season's episodes are loading. */
+function SeasonSkeleton() {
+  return (
+    <div className="show-detail-episodes" aria-hidden="true">
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className="show-detail-ep">
+          <span className="show-detail-ep-num" />
+          <div className="skeleton show-detail-ep-still" />
+          <div className="show-detail-ep-main">
+            <div className="skeleton skeleton-line" style={{ width: '38%', marginTop: 0 }} />
+            <div className="skeleton skeleton-line" style={{ width: '22%' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export default function ShowDetailPage() {
@@ -123,7 +149,7 @@ export default function ShowDetailPage() {
     }
   }, [id, season])
 
-  if (loading) return <LoadingSpinner />
+  if (loading) return <SkeletonDetail />
   if (error) return <ErrorBox message={error} />
   if (!detail) return <ErrorBox message="Show not found." />
 
@@ -141,13 +167,19 @@ export default function ShowDetailPage() {
   }
 
   const handleToggleEpisode = (s: number, e: number) => {
+    const wasWatched = Boolean(tracked?.watched[episodeKey(s, e)])
     ensureFollowed()
     toggleEpisode(id, s, e)
+    showToast(
+      wasWatched ? `${epCode(s, e)} unmarked` : `${epCode(s, e)} marked watched ✓`,
+      wasWatched ? '↩️' : '🎬',
+    )
   }
 
   const handleMarkSeason = (s: number) => {
     ensureFollowed()
     markSeasonWatched(id, s)
+    showToast(`Season ${s} marked watched ✓`, '📺')
   }
 
   const seasonWatchedCount =
@@ -195,29 +227,49 @@ export default function ShowDetailPage() {
             </div>
             <div className="show-detail-actions">
               {followed ? (
-                <button className="btn" onClick={() => removeShow(id)} title="Stop following">
+                <button
+                  className="btn"
+                  onClick={() => {
+                    removeShow(id)
+                    showToast(`Unfollowed ${detail.name}`, '👋')
+                  }}
+                  title="Stop following"
+                >
                   ✓ Following
                 </button>
               ) : (
-                <button className="btn primary" onClick={() => addShow(detail)}>
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    addShow(detail)
+                    showToast(`Following ${detail.name} ✓`, '📺')
+                  }}
+                >
                   + Add show
                 </button>
               )}
               {onWatchlist ? (
-                <button className="btn" onClick={() => removeFromWatchlist('tv', id)}>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    removeFromWatchlist('tv', id)
+                    showToast('Removed from watchlist', '🔖')
+                  }}
+                >
                   ✓ Watchlist
                 </button>
               ) : (
                 <button
                   className="btn"
-                  onClick={() =>
+                  onClick={() => {
                     addToWatchlist({
                       type: 'tv',
                       id,
                       name: detail.name,
                       poster_path: detail.poster_path,
                     })
-                  }
+                    showToast('Added to watchlist', '🔖')
+                  }}
                 >
                   + Watchlist
                 </button>
@@ -225,7 +277,14 @@ export default function ShowDetailPage() {
               {followed && tracked && (
                 <button
                   className="btn"
-                  onClick={() => toggleFavoriteShow(id)}
+                  onClick={() => {
+                    const wasFavorite = tracked.favorite
+                    toggleFavoriteShow(id)
+                    showToast(
+                      wasFavorite ? 'Removed from favorites' : 'Added to favorites',
+                      wasFavorite ? '☆' : '⭐',
+                    )
+                  }}
                   title={tracked.favorite ? 'Remove from favorites' : 'Add to favorites'}
                   style={tracked.favorite ? { color: 'var(--yellow)' } : undefined}
                 >
@@ -234,7 +293,7 @@ export default function ShowDetailPage() {
               )}
               {detail.imdb_id && (
                 <a
-                  className="btn"
+                  className="btn show-detail-imdb-btn"
                   href={imdbTitleUrl(detail.imdb_id)}
                   target="_blank"
                   rel="noreferrer"
@@ -267,7 +326,13 @@ export default function ShowDetailPage() {
               )}
             </div>
             {upNext && (
-              <button className="btn small" onClick={() => markShowWatched(id)}>
+              <button
+                className="btn small"
+                onClick={() => {
+                  markShowWatched(id)
+                  showToast(`${detail.name} — all episodes watched ✓`, '🎉')
+                }}
+              >
                 Mark all watched
               </button>
             )}
@@ -292,10 +357,10 @@ export default function ShowDetailPage() {
         ))}
       </div>
 
-      {seasonLoading && <LoadingSpinner />}
+      {seasonLoading && <SeasonSkeleton />}
       {seasonError && <ErrorBox message={seasonError} />}
-      {seasonDetail && season != null && (
-        <>
+      {!seasonLoading && seasonDetail && season != null && (
+        <div key={season} className="show-detail-season-body">
           <div className="show-detail-season-head">
             <span style={{ color: 'var(--text-dim)', fontSize: 13.5 }}>
               {seasonWatchedCount}/{seasonDetail.episodes.length} watched
@@ -307,7 +372,13 @@ export default function ShowDetailPage() {
                 </button>
               )}
               {seasonWatchedCount > 0 && (
-                <button className="btn small" onClick={() => markSeasonUnwatched(id, season)}>
+                <button
+                  className="btn small"
+                  onClick={() => {
+                    markSeasonUnwatched(id, season)
+                    showToast(`Season ${season} unmarked`, '↩️')
+                  }}
+                >
                   Unmark season
                 </button>
               )}
@@ -319,11 +390,25 @@ export default function ShowDetailPage() {
               const record = tracked?.watched[key]
               const isWatched = Boolean(record)
               const isFuture = ep.air_date != null && ep.air_date > todayStr
+              const still = stillUrl(ep.still_path)
               return (
                 <div key={ep.id} className={`show-detail-ep${isWatched ? ' watched' : ''}`}>
                   <span className="show-detail-ep-num">
                     {epCode(ep.season_number, ep.episode_number)}
                   </span>
+                  {still ? (
+                    <img
+                      className="show-detail-ep-still"
+                      src={still}
+                      alt=""
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div
+                      className="show-detail-ep-still show-detail-ep-still-fallback"
+                      aria-hidden="true"
+                    />
+                  )}
                   <div className="show-detail-ep-main">
                     <div className="show-detail-ep-name">{ep.name}</div>
                     <div className="show-detail-ep-meta">
@@ -336,9 +421,10 @@ export default function ShowDetailPage() {
                     <ReactionPicker
                       compact
                       value={record?.emotion}
-                      onChange={(emo) =>
+                      onChange={(emo) => {
                         setEpisodeEmotion(id, ep.season_number, ep.episode_number, emo)
-                      }
+                        toastEmotion(emo)
+                      }}
                     />
                   )}
                   {isFuture && ep.air_date ? (
@@ -358,14 +444,14 @@ export default function ShowDetailPage() {
               )
             })}
           </div>
-        </>
+        </div>
       )}
 
       {/* ---------- cast ---------- */}
       {detail.cast.length > 0 && (
         <>
           <div className="section-title">Cast</div>
-          <div className="show-detail-cast">
+          <div className="show-detail-cast stagger">
             {detail.cast.map((c) => {
               const img = profileUrl(c.profile_path)
               return (

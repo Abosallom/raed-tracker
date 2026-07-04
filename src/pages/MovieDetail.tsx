@@ -4,19 +4,20 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import type { CastMember, MovieDetail as MovieDetailData } from '../types'
+import type { CastMember, Emotion, MovieDetail as MovieDetailData } from '../types'
 import { EMOTIONS } from '../types'
 import { backdropUrl, getMovieDetail, imdbTitleUrl, profileUrl } from '../api/tmdb'
 import { useLibrary } from '../store/library'
 import {
   ErrorBox,
-  LoadingSpinner,
   PosterImage,
   Rating,
   ReactionPicker,
+  SkeletonDetail,
   formatMinutes,
 } from '../components/shared'
 import { CommentsSection } from '../components/CommentsSection'
+import { showToast } from '../components/toast'
 import './moviedetail.css'
 
 function initials(name: string): string {
@@ -33,7 +34,7 @@ function CastStrip({ cast }: { cast: CastMember[] }) {
   return (
     <>
       <div className="section-title">Cast</div>
-      <div className="moviedetail-cast">
+      <div className="moviedetail-cast stagger">
         {cast.map((c) => {
           const photo = profileUrl(c.profile_path)
           return (
@@ -93,7 +94,7 @@ export default function MovieDetail() {
   }, [movieId])
 
   if (error) return <ErrorBox message={error} />
-  if (!detail) return <LoadingSpinner />
+  if (!detail) return <SkeletonDetail />
 
   const year = detail.release_date ? detail.release_date.slice(0, 4) : null
   const watched = tracked?.watched ?? null
@@ -107,24 +108,41 @@ export default function MovieDetail() {
     : 'linear-gradient(140deg, #241c4d 0%, #171825 60%, #0e0f17 100%)'
 
   const handleWatchedToggle = () => {
+    const wasWatched = Boolean(tracked?.watched)
     if (!tracked) addMovie(detail)
     toggleMovieWatched(movieId)
+    showToast(
+      wasWatched ? `${detail.title} unmarked` : `${detail.title} marked watched ✓`,
+      wasWatched ? '↩️' : '🎬',
+    )
   }
 
   const handleWatchlistToggle = () => {
-    if (onWatchlist) removeFromWatchlist('movie', movieId)
-    else
+    if (onWatchlist) {
+      removeFromWatchlist('movie', movieId)
+      showToast('Removed from watchlist', '🔖')
+    } else {
       addToWatchlist({
         type: 'movie',
         id: movieId,
         name: detail.title,
         poster_path: detail.poster_path,
       })
+      showToast('Added to watchlist', '🔖')
+    }
+  }
+
+  const handleEmotionChange = (e: Emotion | undefined) => {
+    setMovieEmotion(movieId, e)
+    const meta = e ? EMOTIONS.find((m) => m.key === e) : undefined
+    if (meta) showToast(`Feeling ${meta.emoji} about it!`)
+    else showToast('Reaction cleared', '↩️')
   }
 
   return (
     <div>
-      <div className="moviedetail-hero" style={{ backgroundImage: heroBg }}>
+      <div className="moviedetail-hero">
+        <div className="moviedetail-hero-bg" style={{ backgroundImage: heroBg }} />
         <div className="moviedetail-hero-inner">
           <div className="moviedetail-poster">
             <PosterImage path={detail.poster_path} title={detail.title} />
@@ -163,7 +181,14 @@ export default function MovieDetail() {
                 <button
                   className={`btn moviedetail-fav${tracked.favorite ? ' is-fav' : ''}`}
                   title={tracked.favorite ? 'Unfavorite' : 'Favorite'}
-                  onClick={() => toggleFavoriteMovie(movieId)}
+                  onClick={() => {
+                    const wasFavorite = tracked.favorite
+                    toggleFavoriteMovie(movieId)
+                    showToast(
+                      wasFavorite ? 'Removed from favorites' : 'Added to favorites',
+                      wasFavorite ? '☆' : '⭐',
+                    )
+                  }}
                 >
                   {tracked.favorite ? '★' : '☆'}
                 </button>
@@ -171,7 +196,7 @@ export default function MovieDetail() {
 
               {detail.imdb_id && (
                 <a
-                  className="btn"
+                  className="btn moviedetail-imdb-btn"
                   href={imdbTitleUrl(detail.imdb_id)}
                   target="_blank"
                   rel="noreferrer"
@@ -181,7 +206,13 @@ export default function MovieDetail() {
               )}
 
               {tracked && (
-                <button className="btn danger" onClick={() => removeMovie(movieId)}>
+                <button
+                  className="btn danger"
+                  onClick={() => {
+                    removeMovie(movieId)
+                    showToast(`Removed ${detail.title} from library`, '🗑️')
+                  }}
+                >
                   Remove from library
                 </button>
               )}
@@ -190,10 +221,7 @@ export default function MovieDetail() {
             {watched && (
               <div className="moviedetail-feel-card">
                 <span className="moviedetail-feel-label">How did it make you feel?</span>
-                <ReactionPicker
-                  value={watched.emotion}
-                  onChange={(e) => setMovieEmotion(movieId, e)}
-                />
+                <ReactionPicker value={watched.emotion} onChange={handleEmotionChange} />
                 <span className="moviedetail-feel-date">
                   {emotionMeta ? `${emotionMeta.label} · ` : ''}
                   Watched{' '}

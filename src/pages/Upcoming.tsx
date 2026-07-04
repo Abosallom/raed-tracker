@@ -6,7 +6,7 @@ import type { EpisodeSummary, SearchResult } from '../types'
 import { getShowDetail, isDemoMode, upcomingMovies } from '../api/tmdb'
 import { MOCK_SHOWS } from '../api/mockData'
 import { useLibrary } from '../store/library'
-import { ErrorBox, LoadingSpinner, MediaRow, PosterImage } from '../components/shared'
+import { ErrorBox, MediaRow, PosterImage, SkeletonRow } from '../components/shared'
 import './upcoming.css'
 
 interface UpcomingEntry {
@@ -81,6 +81,24 @@ function EpisodeRow({ entry }: { entry: UpcomingEntry }) {
           {countdownLabel(entry.days)}
         </span>
       </div>
+    </div>
+  )
+}
+
+/** Shimmering placeholder rows shaped like the real episode list. */
+function UpcomingListSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="upcoming-list" aria-hidden="true">
+      {Array.from({ length: rows }, (_, i) => (
+        <div className="upcoming-row upcoming-row-skeleton" key={i}>
+          <div className="skeleton upcoming-skel-poster" />
+          <div className="upcoming-info">
+            <div className="skeleton skeleton-line" style={{ width: '38%', marginTop: 0 }} />
+            <div className="skeleton skeleton-line" style={{ width: '58%' }} />
+          </div>
+          <div className="skeleton upcoming-skel-chip" />
+        </div>
+      ))}
     </div>
   )
 }
@@ -222,9 +240,9 @@ export default function Upcoming() {
       ) : error ? (
         <ErrorBox message={error} />
       ) : entries === null ? (
-        <LoadingSpinner />
+        <UpcomingListSkeleton />
       ) : entries.length === 0 ? (
-        <div className="card upcoming-caughtup">
+        <div className="card upcoming-caughtup fade-in">
           <div style={{ fontSize: 28, marginBottom: 8 }}>🎉</div>
           You’re all caught up — none of your followed shows have a scheduled episode.
         </div>
@@ -236,7 +254,7 @@ export default function Upcoming() {
               {g.label}
               <span className="upcoming-group-count">{g.items.length}</span>
             </h2>
-            <div className="upcoming-list">
+            <div className="upcoming-list stagger">
               {g.items.map((e) => (
                 <EpisodeRow key={`${e.showId}:${e.episode.id}`} entry={e} />
               ))}
@@ -251,11 +269,13 @@ export default function Upcoming() {
       {moviesError ? (
         <ErrorBox message={moviesError} />
       ) : movies === null ? (
-        <LoadingSpinner />
+        <SkeletonRow />
       ) : movies.length === 0 ? (
         <p style={{ color: 'var(--text-dim)' }}>No upcoming movies found.</p>
       ) : (
-        <MediaRow items={movies} />
+        <div className="fade-in">
+          <MediaRow items={movies} />
+        </div>
       )}
     </div>
   )

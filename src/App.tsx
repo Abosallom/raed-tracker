@@ -13,6 +13,7 @@ import Profile from './pages/Profile'
 import Account from './pages/Account'
 import Settings from './pages/Settings'
 import { Toaster } from './components/toast'
+import './app-shell.css'
 
 function Nav() {
   const item = (to: string, icon: string, label: string) => (
@@ -41,11 +42,54 @@ function Nav() {
   )
 }
 
+/** Mobile-only (<=760px) fixed bottom tab bar — primary destinations. */
+function TabBar() {
+  const tab = (to: string, icon: string, label: string) => (
+    <NavLink to={to} className={({ isActive }) => `tabbar-item${isActive ? ' active' : ''}`}>
+      <span className="tabbar-icon" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="tabbar-label">{label}</span>
+    </NavLink>
+  )
+  return (
+    <nav className="tabbar" aria-label="Primary">
+      {tab('/', '🏠', 'Discover')}
+      {tab('/search', '🔍', 'Search')}
+      {tab('/shows', '📺', 'My Shows')}
+      {tab('/upcoming', '🗓️', 'Upcoming')}
+      {tab('/profile', '👤', 'Profile')}
+    </nav>
+  )
+}
+
+/** Mobile-only compact strip keeping the remaining routes reachable. */
+function MobileTopStrip() {
+  const pill = (to: string, icon: string, label: string) => (
+    <NavLink to={to} className={({ isActive }) => `strip-pill${isActive ? ' active' : ''}`}>
+      <span aria-hidden="true">{icon}</span> {label}
+    </NavLink>
+  )
+  return (
+    <nav className="mobile-topbar" aria-label="More">
+      <div className="strip-brand">
+        Raed <span>Tracker</span>
+      </div>
+      {pill('/movies', '🎬', 'Movies')}
+      {pill('/watchlist', '🔖', 'Watchlist')}
+      {pill('/stats', '📊', 'Stats')}
+      {pill('/account', '🔐', 'Account')}
+      {pill('/settings', '⚙️', 'Settings')}
+    </nav>
+  )
+}
+
 export default function App() {
   return (
     <div className="app-layout">
       <Nav />
       <main className="main-content">
+        <MobileTopStrip />
         {isDemoMode() && (
           <div className="demo-banner">
             🎭 <b>Demo mode</b> — showing sample data. Add your free TMDB API key in{' '}
@@ -67,6 +111,7 @@ export default function App() {
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
+      <TabBar />
       <Toaster />
     </div>
   )

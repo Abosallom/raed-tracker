@@ -31,17 +31,30 @@ npm run build    # production build in dist/
 
 ## Features
 
-- **Discover** — trending / popular / top-rated shows and movies, keep-watching strip
-- **Search** — shows and movies with filters
-- **Show pages** — seasons & episodes, watched toggles, mark season/show watched,
-  progress bars, cast, IMDb link, per-episode emotion reactions, comments
+- **Discover** — hero carousel, trending / popular / top-rated rows, keep-watching strip
+- **Search** — shows and movies with filters and recent searches
+- **Show pages** — seasons & episodes with stills, watched toggles, mark season/show
+  watched, progress bars, cast, IMDb link, per-episode emotion reactions, comments
 - **Movie pages** — watched toggle, reactions, cast, IMDb link, comments
 - **My Shows** — TV Time–style "watch next" queue with one-tap episode check-off
 - **Movies / Watchlist** — libraries with quick actions
 - **Upcoming** — calendar of next episodes for followed shows + upcoming movies
 - **Stats** — watch time, genre breakdown, reactions, activity by month
 - **Profile** — avatar, favorites, your comments
-- **Settings** — TMDB key, JSON export/import of your library, reset
+- **Account** — email OTP or password sign-in, security controls, cloud-data management
+- **Cloud sync** — Supabase-backed cross-device library sync with conflict-safe merging
+  (deletion tombstones, last-writer-wins fields, realtime updates)
+- **Settings** — TMDB key, sync status, JSON export/import of your library, reset
+- **Native feel** — mobile bottom tab bar, PWA install (Add to Home Screen), skeleton
+  loaders, action toasts, micro-animations
+
+## Cloud sync setup (optional)
+
+Create a free [Supabase](https://supabase.com) project, run the SQL in the repo
+history (creates the `libraries` table with row-level security), and set
+`VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (locally in `.env`, in CI as
+Actions secrets). Without them the app runs local-only. For OTP codes, include
+`{{ .Token }}` in the Supabase Magic Link email template.
 
 ## Storage & architecture notes
 

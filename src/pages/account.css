@@ -5,6 +5,11 @@
   max-width: 640px;
 }
 
+/* Signed-out sign-in card */
+.account-signin {
+  max-width: 520px;
+}
+
 .account-card-title {
   font-weight: 700;
   margin-bottom: 8px;

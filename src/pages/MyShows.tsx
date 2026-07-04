@@ -1,10 +1,11 @@
 // My Shows — library page rendered purely from the store (no API calls).
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { nextEpisode, showProgress, useLibrary, watchedCount } from '../store/library'
 import type { TrackedShow } from '../types'
 import { PosterImage, ProgressBar } from '../components/shared'
+import { showToast } from '../components/toast'
 import './myshows.css'
 
 const TABS = [
@@ -55,6 +56,26 @@ function inTab(show: TrackedShow, tab: TabKey): boolean {
   }
 }
 
+/**
+ * Progress bar that animates its fill in on mount: first paint renders 0%,
+ * then the real value is applied on the next frame so the CSS width
+ * transition sweeps the bar to its actual position.
+ */
+function AnimatedProgressBar({ value }: { value: number }) {
+  const [shown, setShown] = useState(0)
+  useEffect(() => {
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setShown(value))
+    })
+    return () => {
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+    }
+  }, [value])
+  return <ProgressBar value={shown} />
+}
+
 function ShowCard({ show }: { show: TrackedShow }) {
   const toggleEpisode = useLibrary((s) => s.toggleEpisode)
   const toggleFavoriteShow = useLibrary((s) => s.toggleFavoriteShow)
@@ -76,7 +97,7 @@ function ShowCard({ show }: { show: TrackedShow }) {
         </Link>
         <div className="myshows-genres">{metaLine}</div>
         <div className="myshows-progress-row">
-          <ProgressBar value={showProgress(show)} />
+          <AnimatedProgressBar value={showProgress(show)} />
           <span className="myshows-eps">
             {seen}/{snap.totalEpisodes} episodes
           </span>
@@ -94,7 +115,15 @@ function ShowCard({ show }: { show: TrackedShow }) {
         {next ? (
           <button
             className="btn primary small myshows-watch"
-            onClick={() => toggleEpisode(snap.id, next.season, next.episode)}
+            onClick={() => {
+              toggleEpisode(snap.id, next.season, next.episode)
+              showToast(`${epCode(next.season, next.episode)} watched ✓`, '📺')
+              // Read fresh state: did that quick action fully catch us up?
+              const updated = useLibrary.getState().shows[snap.id]
+              if (updated && nextEpisode(updated) === null) {
+                showToast(`All caught up on ${snap.name} 🎉`)
+              }
+            }}
           >
             ✓ Watch {epCode(next.season, next.episode)}
           </button>
@@ -180,7 +209,7 @@ export default function MyShows() {
           </p>
         </div>
       ) : (
-        <div className="myshows-list">
+        <div className="myshows-list stagger">
           {visible.map((s) => (
             <ShowCard key={s.snapshot.id} show={s} />
           ))}
