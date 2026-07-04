@@ -1,0 +1,189 @@
+/* My Shows page (route /shows) — scoped styles, all classes prefixed myshows- */
+
+.myshows-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 18px;
+}
+
+.myshows-tab {
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.myshows-tab:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.myshows-tab.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.myshows-count {
+  margin-left: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.myshows-spacer {
+  flex: 1;
+}
+
+.myshows-fav.active {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.myshows-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.myshows-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  transition: border-color 0.15s;
+}
+
+.myshows-card:hover {
+  border-color: #3a3d5c;
+}
+
+.myshows-poster {
+  display: block;
+  width: 74px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  transition: transform 0.15s;
+}
+
+.myshows-poster:hover {
+  transform: scale(1.04);
+}
+
+.myshows-poster .poster-fallback {
+  font-size: 10.5px;
+  padding: 6px;
+  line-height: 1.25;
+}
+
+.myshows-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.myshows-name {
+  display: inline-block;
+  max-width: 100%;
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  transition: color 0.15s;
+}
+
+.myshows-name:hover {
+  color: var(--accent-hover);
+}
+
+.myshows-genres {
+  margin-top: 1px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.myshows-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.myshows-progress-row .progress-track {
+  flex: 1;
+}
+
+.myshows-eps {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.myshows-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  align-self: stretch;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 2px 0;
+}
+
+.myshows-star {
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px 4px;
+  color: var(--text-faint);
+  transition: color 0.15s, transform 0.15s;
+}
+
+.myshows-star:hover {
+  color: var(--yellow);
+  transform: scale(1.2);
+}
+
+.myshows-star.on {
+  color: var(--yellow);
+}
+
+.myshows-watch {
+  white-space: nowrap;
+}
+
+.myshows-uptodate {
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .myshows-card {
+    flex-wrap: wrap;
+  }
+  .myshows-actions {
+    flex-direction: row-reverse;
+    align-self: auto;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0;
+  }
+}

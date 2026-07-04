@@ -1,0 +1,164 @@
+/* MovieDetail page — scoped styles (prefix: moviedetail-) */
+
+.moviedetail-hero {
+  position: relative;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background-size: cover;
+  background-position: center 25%;
+  box-shadow: var(--shadow);
+  margin-bottom: 26px;
+}
+
+.moviedetail-hero-inner {
+  display: flex;
+  gap: 26px;
+  padding: 26px;
+  align-items: flex-start;
+}
+
+.moviedetail-poster {
+  width: 175px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+
+.moviedetail-title {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  line-height: 1.15;
+  margin-bottom: 4px;
+}
+
+.moviedetail-tagline {
+  color: var(--text-dim);
+  font-style: italic;
+  margin-bottom: 12px;
+}
+
+.moviedetail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.moviedetail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.moviedetail-watched-btn.is-watched {
+  background: var(--green);
+  border-color: var(--green);
+  color: #06281c;
+}
+
+.moviedetail-watched-btn.is-watched:hover {
+  background: #4ade9d;
+}
+
+.moviedetail-fav {
+  font-size: 19px;
+  padding: 7px 12px;
+  line-height: 1;
+}
+
+.moviedetail-fav.is-fav {
+  color: var(--yellow);
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.moviedetail-feel-card {
+  margin-top: 16px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  background: rgba(23, 24, 37, 0.75);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+}
+
+.moviedetail-feel-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.moviedetail-feel-date {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.moviedetail-overview {
+  color: var(--text-dim);
+  max-width: 760px;
+  line-height: 1.65;
+}
+
+.moviedetail-cast {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scrollbar-width: thin;
+}
+
+.moviedetail-cast-member {
+  flex: 0 0 92px;
+  text-align: center;
+}
+
+.moviedetail-cast-photo,
+.moviedetail-cast-initials {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  margin: 0 auto 8px;
+  display: block;
+  object-fit: cover;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+}
+
+.moviedetail-cast-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 20px;
+  color: var(--accent-hover);
+  background: linear-gradient(160deg, #4c3a8f 0%, #2b2350 60%, #171232 100%);
+}
+
+.moviedetail-cast-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.moviedetail-cast-role {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.25;
+}
+
+@media (max-width: 640px) {
+  .moviedetail-hero-inner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .moviedetail-chips,
+  .moviedetail-actions {
+    justify-content: center;
+  }
+}

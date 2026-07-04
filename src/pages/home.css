@@ -1,0 +1,88 @@
+/* Home (Discover) page — scoped styles, all classes prefixed with home- */
+
+.home-kw-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 12px;
+}
+
+.home-kw-card {
+  display: flex;
+  gap: 12px;
+  padding: 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.home-kw-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.home-kw-poster {
+  width: 62px;
+  flex-shrink: 0;
+}
+
+.home-kw-poster .poster-img {
+  border-radius: 6px;
+}
+
+.home-kw-poster .poster-fallback {
+  font-size: 9.5px;
+  padding: 6px;
+  border-radius: 6px;
+}
+
+.home-kw-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+
+.home-kw-name {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-kw-next {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.home-kw-badge {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-weight: 700;
+  font-size: 11.5px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  letter-spacing: 0.3px;
+}
+
+.home-kw-count {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.home-see-all {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-hover);
+  transition: color 0.15s;
+}
+
+.home-see-all:hover {
+  color: var(--accent);
+}

@@ -1,0 +1,242 @@
+/* Stats page — CSS-only charts, prefixed stats- */
+
+.stats-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.stats-card {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 16px 14px;
+}
+
+.stats-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--stats-card-color, var(--accent));
+  opacity: 0.85;
+}
+
+.stats-card-icon {
+  font-size: 17px;
+  margin-bottom: 8px;
+}
+
+.stats-card-value {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  color: var(--stats-card-color, var(--text));
+}
+
+.stats-card-label {
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+
+/* ---------- section grid ---------- */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-bottom: 18px;
+  align-items: start;
+}
+
+.stats-section-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.stats-empty-note {
+  color: var(--text-faint);
+  font-size: 13.5px;
+  padding: 10px 0 4px;
+}
+
+/* ---------- horizontal bars (genre + reactions) ---------- */
+
+.stats-bar-row {
+  display: grid;
+  grid-template-columns: 104px 1fr 58px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 11px;
+}
+
+.stats-emotion-row {
+  display: grid;
+  grid-template-columns: 26px 74px 1fr 34px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 11px;
+}
+
+.stats-emotion-emoji {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.stats-bar-label {
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stats-bar-label.left {
+  text-align: left;
+}
+
+.stats-bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  overflow: hidden;
+}
+
+.stats-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.stats-bar-value {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ---------- most watched shows ---------- */
+
+.stats-top-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.stats-top-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.stats-top-row:hover .stats-top-name {
+  color: var(--accent-hover);
+}
+
+.stats-top-rank {
+  width: 22px;
+  flex-shrink: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.stats-top-poster {
+  width: 40px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.stats-top-poster .poster-fallback {
+  font-size: 7px;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.stats-top-poster .poster-img {
+  border-radius: 6px;
+}
+
+.stats-top-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.stats-top-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s;
+}
+
+.stats-top-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+/* ---------- monthly activity columns ---------- */
+
+.stats-activity {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  min-height: 168px;
+  padding-top: 6px;
+}
+
+.stats-activity-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.stats-activity-count {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.stats-activity-bar {
+  width: 100%;
+  max-width: 44px;
+  border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, var(--accent-hover), var(--accent));
+  transition: height 0.4s ease;
+}
+
+.stats-activity-month {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 900px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,129 @@
+/* Movies page — scoped styles (prefix: movies-) */
+
+.movies-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 22px;
+  flex-wrap: wrap;
+}
+
+.movies-tab {
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 13.5px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.movies-tab:hover {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+
+.movies-tab.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.movies-tab-count {
+  margin-left: 6px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.movies-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.movies-poster {
+  display: block;
+  position: relative;
+  transition: transform 0.15s;
+}
+
+.movies-card:hover .movies-poster {
+  transform: translateY(-3px);
+}
+
+.movies-emotion {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(14, 15, 23, 0.85);
+  border-radius: 8px;
+  padding: 2px 6px;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.movies-fav {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(14, 15, 23, 0.85);
+  color: var(--text-dim);
+  font-size: 16px;
+  z-index: 2;
+  transition: color 0.15s, transform 0.15s;
+}
+
+.movies-fav:hover {
+  transform: scale(1.15);
+  color: var(--yellow);
+}
+
+.movies-fav.on {
+  color: var(--yellow);
+}
+
+.movies-title {
+  display: block;
+}
+
+.movies-title:hover {
+  color: var(--accent-hover);
+}
+
+.movies-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.movies-runtime {
+  padding: 2px 9px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.movies-toggle {
+  white-space: nowrap;
+}
+
+.movies-toggle.on {
+  color: var(--green);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+.movies-tab-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
