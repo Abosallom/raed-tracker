@@ -36,6 +36,12 @@
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
+  /* The bar background is a hardcoded near-black; give light theme a matching
+     near-white so var(--text-dim)/var(--accent) items stay readable. */
+  :root[data-theme='light'] .tabbar {
+    background: rgba(246, 246, 244, 0.92);
+  }
+
   .tabbar-item {
     flex: 1 1 0;
     min-width: 0;

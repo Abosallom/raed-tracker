@@ -4,6 +4,11 @@ import { HashRouter } from 'react-router-dom'
 import './styles/global.css'
 import App from './App'
 import { initSync } from './store/sync'
+import { applyTheme } from './lib/theme'
+
+// First paint gets the right theme; re-apply if the OS scheme changes.
+applyTheme()
+window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyTheme)
 
 initSync()
 

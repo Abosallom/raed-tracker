@@ -7,6 +7,7 @@ import type {
   Comment,
   Emotion,
   EpisodeKey,
+  ListItem,
   MovieDetail,
   MovieSnapshot,
   Profile,
@@ -14,6 +15,7 @@ import type {
   ShowSnapshot,
   TrackedMovie,
   TrackedShow,
+  UserList,
   WatchlistItem,
 } from '../types'
 import { episodeKey } from '../types'
@@ -48,6 +50,7 @@ export function showToSnapshot(s: ShowDetail): ShowSnapshot {
     nextEpisodeToAir: next
       ? { season: next.season_number, episode: next.episode_number, airDate: next.air_date }
       : null,
+    network: s.networks[0]?.name,
   }
 }
 
@@ -67,6 +70,7 @@ interface LibraryState {
   movies: Record<number, TrackedMovie>
   watchlist: WatchlistItem[]
   comments: Comment[] // user's own + likes state on seeded ones
+  lists: UserList[]
   profile: Profile
 
   // ----- shows -----
@@ -81,6 +85,22 @@ interface LibraryState {
   markSeasonWatched: (showId: number, season: number) => void
   markSeasonUnwatched: (showId: number, season: number) => void
   markShowWatched: (showId: number) => void
+  /** Toggle pause: paused shows leave the Watch Next queue. */
+  togglePauseShow: (id: number) => void
+  /** "Who was your favorite?" vote on a watched episode (undefined clears it). */
+  setEpisodeFavoriteCast: (
+    showId: number,
+    season: number,
+    episode: number,
+    cast: { id: number; name: string } | undefined,
+  ) => void
+
+  // ----- custom lists -----
+  createList: (name: string) => string
+  renameList: (id: string, name: string) => void
+  deleteList: (id: string) => void
+  /** Add if absent, remove if present. */
+  toggleListItem: (listId: string, item: Omit<ListItem, 'addedAt'>) => void
 
   // ----- movies -----
   addMovie: (detail: MovieDetail) => void
@@ -115,6 +135,7 @@ const EMPTY = {
   movies: {} as Record<number, TrackedMovie>,
   watchlist: [] as WatchlistItem[],
   comments: [] as Comment[],
+  lists: [] as UserList[],
   profile: { name: 'Watcher', avatar: '🍿', joinedAt: now() } as Profile,
 }
 
@@ -233,6 +254,61 @@ export const useLibrary = create<LibraryState>()(
           }
           return { shows: { ...st.shows, [showId]: { ...show, watched } } }
         }),
+
+      togglePauseShow: (id) =>
+        set((st) => {
+          const show = st.shows[id]
+          if (!show) return st
+          return { shows: { ...st.shows, [id]: { ...show, paused: !show.paused } } }
+        }),
+
+      setEpisodeFavoriteCast: (showId, season, episode, cast) =>
+        set((st) => {
+          const show = st.shows[showId]
+          if (!show) return st
+          const key = episodeKey(season, episode)
+          const rec = show.watched[key]
+          if (!rec) return st
+          return {
+            shows: {
+              ...st.shows,
+              [showId]: {
+                ...show,
+                watched: { ...show.watched, [key]: { ...rec, favoriteCast: cast } },
+              },
+            },
+          }
+        }),
+
+      createList: (name) => {
+        const id = `l_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+        set((st) => ({
+          lists: [...st.lists, { id, name, items: [], createdAt: now() }],
+        }))
+        return id
+      },
+
+      renameList: (id, name) =>
+        set((st) => ({
+          lists: st.lists.map((l) => (l.id === id ? { ...l, name } : l)),
+        })),
+
+      deleteList: (id) =>
+        set((st) => ({ lists: st.lists.filter((l) => l.id !== id) })),
+
+      toggleListItem: (listId, item) =>
+        set((st) => ({
+          lists: st.lists.map((l) => {
+            if (l.id !== listId) return l
+            const exists = l.items.some((i) => i.type === item.type && i.id === item.id)
+            return {
+              ...l,
+              items: exists
+                ? l.items.filter((i) => !(i.type === item.type && i.id === item.id))
+                : [...l.items, { ...item, addedAt: now() }],
+            }
+          }),
+        })),
 
       addMovie: (detail) =>
         set((st) => {

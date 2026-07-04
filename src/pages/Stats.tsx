@@ -1,29 +1,31 @@
-// Stats dashboard (/stats) — pure computation over the library store.
-// All charts are CSS-only (divs with widths/heights), no chart libraries.
+// Stats dashboard (/stats) — deep, tabbed dashboard computed purely from the
+// library store. All charts are CSS bars (divs), no chart libraries.
 
-import { useMemo } from 'react'
-import type { CSSProperties } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Emotion } from '../types'
 import { EMOTIONS } from '../types'
+import { useLibrary } from '../store/library'
+import type { Badge, MovieStats, ShowStats, WeekBucket } from '../lib/stats'
 import {
-  showProgress,
-  totalMinutesWatched,
-  useLibrary,
-  watchedCount,
-} from '../store/library'
-import { PosterImage, ProgressBar, formatMinutes } from '../components/shared'
+  computeBadges,
+  computeMovieStats,
+  computeShowStats,
+  fmtDate,
+  fmtDayKey,
+  splitDuration,
+} from '../lib/stats'
 import './stats.css'
 
-const GENRE_COLORS = [
+const BAR_COLORS = [
   '#fbbf24',
-  '#a3a3a3',
-  '#3b82f6',
+  '#60a5fa',
+  '#34d399',
+  '#f472b6',
+  '#fb923c',
+  '#a78bfa',
   '#06b6d4',
-  '#10b981',
-  '#f97316',
-  '#ef4444',
-  '#ec4899',
+  '#f87171',
 ]
 
 const EMOTION_COLORS: Record<Emotion, string> = {
@@ -35,112 +37,550 @@ const EMOTION_COLORS: Record<Emotion, string> = {
   scared: '#f87171',
 }
 
-function StatCard({
+// ---------- small building blocks ----------
+
+function num(n: number): string {
+  return n.toLocaleString('en-US')
+}
+
+/** Hero card: N MONTHS N DAYS N HOURS. */
+function DurationHero({
+  icon,
+  title,
+  minutes,
+  emptyNote,
+}: {
+  icon: string
+  title: string
+  minutes: number
+  emptyNote: string
+}) {
+  const d = splitDuration(minutes)
+  return (
+    <section className="card stats-hero">
+      <h2 className="stats-section-h">
+        {icon} {title}
+      </h2>
+      {minutes <= 0 ? (
+        <p className="stats-empty-note">{emptyNote}</p>
+      ) : (
+        <div className="stats-duration">
+          <div className="stats-duration-unit">
+            <span className="stats-duration-n">{num(d.months)}</span>
+            <span className="stats-duration-l">{d.months === 1 ? 'month' : 'months'}</span>
+          </div>
+          <div className="stats-duration-unit">
+            <span className="stats-duration-n">{num(d.days)}</span>
+            <span className="stats-duration-l">{d.days === 1 ? 'day' : 'days'}</span>
+          </div>
+          <div className="stats-duration-unit">
+            <span className="stats-duration-n">{num(d.hours)}</span>
+            <span className="stats-duration-l">{d.hours === 1 ? 'hour' : 'hours'}</span>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** Hero card: big count + subtitle. */
+function CountHero({
+  icon,
+  title,
+  value,
+  sub,
+}: {
+  icon: string
+  title: string
+  value: string
+  sub: string
+}) {
+  return (
+    <section className="card stats-hero">
+      <h2 className="stats-section-h">
+        {icon} {title}
+      </h2>
+      <div className="stats-hero-value">{value}</div>
+      <div className="stats-hero-sub">{sub}</div>
+    </section>
+  )
+}
+
+/** Small stat card used in the catch-up rows. */
+function MiniStat({
   icon,
   value,
   label,
-  color,
+  sub,
 }: {
   icon: string
   value: string
   label: string
-  color: string
+  sub?: string
 }) {
   return (
-    <div className="stats-card" style={{ '--stats-card-color': color } as CSSProperties}>
-      <div className="stats-card-icon">{icon}</div>
-      <div className="stats-card-value">{value}</div>
-      <div className="stats-card-label">{label}</div>
+    <div className="stats-mini card">
+      <div className="stats-mini-icon">{icon}</div>
+      <div className="stats-mini-value">{value}</div>
+      <div className="stats-mini-label">{label}</div>
+      {sub && <div className="stats-mini-sub">{sub}</div>}
     </div>
   )
 }
 
+/** Vertical per-week bar chart (last 12 ISO weeks, current in accent). */
+function WeekChart({ weeks, emptyNote }: { weeks: WeekBucket[]; emptyNote: string }) {
+  const max = Math.max(1, ...weeks.map((w) => w.count))
+  const empty = weeks.every((w) => w.count === 0)
+  return (
+    <>
+      <div className="stats-weeks">
+        {weeks.map((w, i) => (
+          <div className="stats-weeks-col" key={w.key}>
+            <span className="stats-weeks-count" style={{ opacity: w.count > 0 ? 1 : 0.3 }}>
+              {w.count}
+            </span>
+            <div
+              className={`stats-weeks-bar${w.current ? ' current' : ''}`}
+              style={
+                w.count > 0
+                  ? { height: Math.max(8, Math.round((w.count / max) * 96)) }
+                  : { height: 4 }
+              }
+            />
+            <span className="stats-weeks-label">
+              {w.current ? 'now' : i % 2 === 0 ? w.label : ' '}
+            </span>
+          </div>
+        ))}
+      </div>
+      {empty && <p className="stats-empty-note">{emptyNote}</p>}
+    </>
+  )
+}
+
+/** Horizontal bar table for [name, count] rows. */
+function BarTable({
+  rows,
+  unit,
+  emptyNote,
+}: {
+  rows: [string, number][]
+  unit: (n: number) => string
+  emptyNote: string
+}) {
+  if (rows.length === 0) return <p className="stats-empty-note">{emptyNote}</p>
+  const max = rows[0][1] || 1
+  return (
+    <>
+      {rows.map(([name, count], i) => (
+        <div className="stats-bar-row" key={name}>
+          <span className="stats-bar-label" title={name}>
+            {name}
+          </span>
+          <div className="stats-bar-track">
+            <div
+              className="stats-bar-fill"
+              style={{
+                width: `${Math.max(3, (count / max) * 100)}%`,
+                background: BAR_COLORS[i % BAR_COLORS.length],
+              }}
+            />
+          </div>
+          <span className="stats-bar-value">{unit(count)}</span>
+        </div>
+      ))}
+    </>
+  )
+}
+
+function ReactionBars({
+  reactions,
+  total,
+  emptyNote,
+}: {
+  reactions: Record<Emotion, number>
+  total: number
+  emptyNote: string
+}) {
+  if (total === 0) return <p className="stats-empty-note">{emptyNote}</p>
+  const max = Math.max(1, ...EMOTIONS.map((e) => reactions[e.key]))
+  return (
+    <>
+      {EMOTIONS.map((e) => {
+        const count = reactions[e.key]
+        return (
+          <div className="stats-emotion-row" key={e.key}>
+            <span className="stats-emotion-emoji">{e.emoji}</span>
+            <span className="stats-bar-label left">{e.label}</span>
+            <div className="stats-bar-track">
+              <div
+                className="stats-bar-fill"
+                style={{
+                  width: count > 0 ? `${Math.max(5, (count / max) * 100)}%` : '0%',
+                  background: EMOTION_COLORS[e.key],
+                  opacity: count > 0 ? 1 : 0.3,
+                }}
+              />
+            </div>
+            <span className="stats-bar-value">{count}</span>
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+function BadgeSection({ badges }: { badges: Badge[] }) {
+  const earned = badges.filter((b) => b.earned).length
+  return (
+    <section className="card stats-badges-card">
+      <h2 className="stats-section-h">
+        🎖️ Badges
+        <span className="stats-badges-headline">
+          {earned} of {badges.length} earned
+        </span>
+      </h2>
+      <div className="stats-badge-grid">
+        {badges.map((b) => (
+          <div
+            className={`stats-badge${b.earned ? ' earned' : ' locked'}`}
+            key={b.key}
+            title={`${b.desc} — ${b.progress}`}
+          >
+            <div className="stats-badge-hex">
+              <span>{b.emoji}</span>
+            </div>
+            <div className="stats-badge-name">{b.name}</div>
+            <div className="stats-badge-progress">{b.earned ? 'Earned' : b.progress}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// ---------- shows tab ----------
+
+function ShowsTab({ stats }: { stats: ShowStats }) {
+  return (
+    <div className="fade-in">
+      <div className="stats-hero-row">
+        <DurationHero
+          icon="⏱️"
+          title="TV time"
+          minutes={stats.totalMinutes}
+          emptyNote="Check off an episode and your TV clock starts ticking."
+        />
+        <CountHero
+          icon="📺"
+          title="Episodes watched"
+          value={num(stats.episodes)}
+          sub={
+            stats.episodes === 0
+              ? 'None yet — your next binge starts here.'
+              : `${num(stats.episodesLast7)} in the last 7 days`
+          }
+        />
+      </div>
+
+      <div className="stats-grid">
+        <section className="card">
+          <h2 className="stats-section-h">📅 Episodes per week</h2>
+          <WeekChart
+            weeks={stats.weeks}
+            emptyNote="Episodes you watch will chart here, week by week."
+          />
+        </section>
+
+        <section className="card">
+          <h2 className="stats-section-h">🔥 Biggest marathons</h2>
+          {stats.marathons.length === 0 ? (
+            <p className="stats-empty-note">
+              Watch 2+ episodes in a single day and your marathons show up here.
+            </p>
+          ) : (
+            <table className="stats-table">
+              <tbody>
+                {stats.marathons.map((m, i) => (
+                  <tr key={m.id}>
+                    <td className="stats-table-rank">{i + 1}</td>
+                    <td className="stats-table-name">
+                      <Link to={`/show/${m.id}`}>{m.name}</Link>
+                    </td>
+                    <td className="stats-table-num">{m.episodes} eps</td>
+                    <td className="stats-table-dim">{fmtDayKey(m.date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </div>
+
+      <div className="stats-grid">
+        <section className="card">
+          <h2 className="stats-section-h">🧬 Top genres</h2>
+          <BarTable
+            rows={stats.genres}
+            unit={(n) => `${num(n)} eps`}
+            emptyNote="Watch some episodes to see which genres own your evenings."
+          />
+        </section>
+
+        <section className="card">
+          <h2 className="stats-section-h">📡 Top networks</h2>
+          <BarTable
+            rows={stats.networks}
+            unit={(n) => `${n} ${n === 1 ? 'show' : 'shows'}`}
+            emptyNote="Follow shows and their networks stack up here."
+          />
+        </section>
+      </div>
+
+      <div className="stats-grid">
+        <section className="card">
+          <h2 className="stats-section-h">💜 Your reactions</h2>
+          <ReactionBars
+            reactions={stats.reactions}
+            total={stats.totalReactions}
+            emptyNote="React to episodes with an emoji — your feelings get charted here."
+          />
+        </section>
+
+        <section className="card">
+          <h2 className="stats-section-h">🎭 Favorite characters</h2>
+          {stats.characterVotes === 0 ? (
+            <p className="stats-empty-note">
+              Vote “who was your favorite?” on watched episodes to crown your characters.
+            </p>
+          ) : (
+            <>
+              <BarTable
+                rows={stats.characters.map((c) => [c.name, c.votes])}
+                unit={(n) => `${n} ${n === 1 ? 'vote' : 'votes'}`}
+                emptyNote=""
+              />
+              {stats.showTopCharacters.length > 0 && (
+                <>
+                  <div className="stats-subhead">Most voted per show</div>
+                  <table className="stats-table">
+                    <tbody>
+                      {stats.showTopCharacters.map((r) => (
+                        <tr key={r.showId}>
+                          <td className="stats-table-name">
+                            <Link to={`/show/${r.showId}`}>{r.showName}</Link>
+                          </td>
+                          <td className="stats-table-dim">{r.character}</td>
+                          <td className="stats-table-num">
+                            {r.votes} {r.votes === 1 ? 'vote' : 'votes'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </>
+          )}
+        </section>
+      </div>
+
+      <div className="stats-mini-row">
+        <MiniStat
+          icon="📌"
+          value={num(stats.addedShows)}
+          label="Added shows"
+          sub={`${num(stats.inProduction)} still in production`}
+        />
+        <MiniStat
+          icon="🧮"
+          value={num(stats.remainingEpisodes)}
+          label="Remaining episodes"
+          sub={
+            stats.startedShows === 0
+              ? 'no started shows yet'
+              : `on ${num(stats.startedShows)} started ${stats.startedShows === 1 ? 'show' : 'shows'}`
+          }
+        />
+        <MiniStat
+          icon="⏳"
+          value={num(Math.round(stats.remainingMinutes / 60))}
+          label="Hours to watch"
+          sub="to clear your backlog"
+        />
+        <MiniStat
+          icon="🔮"
+          value={
+            stats.remainingEpisodes === 0 && stats.startedShows > 0
+              ? 'Caught up!'
+              : stats.catchUpDate
+                ? fmtDate(stats.catchUpDate)
+                : '—'
+          }
+          label="When will you catch up"
+          sub={
+            stats.ratePerDay > 0
+              ? `at ${(stats.ratePerDay * 7).toFixed(1)} eps/week`
+              : 'watch something to project a date'
+          }
+        />
+      </div>
+
+      <section className="card">
+        <h2 className="stats-section-h">🗓️ Upcoming episodes — next 4 weeks</h2>
+        {stats.upcoming.every((u) => u.count === 0) ? (
+          <p className="stats-empty-note">
+            Nothing on the schedule — none of your shows air in the next 4 weeks.
+          </p>
+        ) : (
+          <div className="stats-upcoming">
+            {stats.upcoming.map((u) => {
+              const max = Math.max(1, ...stats.upcoming.map((x) => x.count))
+              return (
+                <div className="stats-weeks-col" key={u.label}>
+                  <span className="stats-weeks-count" style={{ opacity: u.count > 0 ? 1 : 0.3 }}>
+                    {u.count}
+                  </span>
+                  <div
+                    className="stats-weeks-bar upcoming"
+                    style={
+                      u.count > 0
+                        ? { height: Math.max(10, Math.round((u.count / max) * 72)) }
+                        : { height: 4 }
+                    }
+                  />
+                  <span className="stats-weeks-label">{u.label}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+// ---------- movies tab ----------
+
+function MoviesTab({ stats }: { stats: MovieStats }) {
+  return (
+    <div className="fade-in">
+      <div className="stats-hero-row">
+        <DurationHero
+          icon="⏱️"
+          title="Movie time"
+          minutes={stats.totalMinutes}
+          emptyNote="Mark a movie watched and your movie clock starts ticking."
+        />
+        <CountHero
+          icon="🎬"
+          title="Movies watched"
+          value={num(stats.watched)}
+          sub={
+            stats.watched === 0
+              ? 'None yet — movie night awaits.'
+              : `${num(stats.watchedLast7)} in the last 7 days`
+          }
+        />
+      </div>
+
+      <div className="stats-grid">
+        <section className="card">
+          <h2 className="stats-section-h">📅 Movies per week</h2>
+          <WeekChart
+            weeks={stats.weeks}
+            emptyNote="Movies you watch will chart here, week by week."
+          />
+        </section>
+
+        <section className="card">
+          <h2 className="stats-section-h">🧬 Top movie genres</h2>
+          <BarTable
+            rows={stats.genres}
+            unit={(n) => `${n} ${n === 1 ? 'movie' : 'movies'}`}
+            emptyNote="Watch a few movies to see your genre mix."
+          />
+        </section>
+      </div>
+
+      <div className="stats-grid">
+        <section className="card">
+          <h2 className="stats-section-h">💜 Your reactions</h2>
+          <ReactionBars
+            reactions={stats.reactions}
+            total={stats.totalReactions}
+            emptyNote="React to movies with an emoji — your feelings get charted here."
+          />
+        </section>
+
+        <div className="stats-mini-col">
+          <MiniStat
+            icon="🎞️"
+            value={num(stats.added)}
+            label="Added movies"
+            sub="tracked in your library"
+          />
+          <MiniStat
+            icon="🧮"
+            value={num(stats.remaining)}
+            label="Remaining movies"
+            sub="watchlist + unwatched in library"
+          />
+          <MiniStat
+            icon="🔮"
+            value={
+              stats.remaining === 0
+                ? 'All clear!'
+                : stats.finishDate
+                  ? fmtDate(stats.finishDate)
+                  : '—'
+            }
+            label="Projected finish"
+            sub={
+              stats.ratePerWeek > 0
+                ? `at ${stats.ratePerWeek.toFixed(1)} movies/week`
+                : 'watch something to project a date'
+            }
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------- page ----------
+
 export default function Stats() {
   const shows = useLibrary((s) => s.shows)
   const movies = useLibrary((s) => s.movies)
+  const watchlist = useLibrary((s) => s.watchlist)
+  const comments = useLibrary((s) => s.comments)
+  const [tab, setTab] = useState<'shows' | 'movies'>('shows')
 
-  const stats = useMemo(() => {
-    const showList = Object.values(shows)
-    const movieList = Object.values(movies)
+  const showStats = useMemo(() => computeShowStats(shows), [shows])
+  const movieStats = useMemo(() => computeMovieStats(movies, watchlist), [movies, watchlist])
+  const badges = useMemo(
+    () =>
+      computeBadges({
+        episodes: showStats.episodes,
+        maxDayEpisodes: showStats.maxDayEpisodes,
+        completedShows: showStats.completedShows,
+        premieres: showStats.premieres,
+        reactions: showStats.totalReactions + movieStats.totalReactions,
+        votes: showStats.characterVotes,
+        comments: comments.filter((c) => c.isMine).length,
+        moviesWatched: movieStats.watched,
+      }),
+    [showStats, movieStats, comments],
+  )
 
-    const episodes = showList.reduce((n, s) => n + watchedCount(s), 0)
-    const moviesWatched = movieList.filter((m) => m.watched).length
-    const completed = showList.filter(
-      (s) => s.snapshot.totalEpisodes > 0 && showProgress(s) >= 1,
-    ).length
+  const libraryEmpty =
+    Object.keys(shows).length === 0 &&
+    Object.keys(movies).length === 0 &&
+    watchlist.length === 0
 
-    // -- minutes per genre across watched episodes + watched movies --
-    const genreMin = new Map<string, number>()
-    for (const s of showList) {
-      const min = watchedCount(s) * s.snapshot.runtime
-      if (min <= 0) continue
-      for (const g of s.snapshot.genres) genreMin.set(g, (genreMin.get(g) ?? 0) + min)
-    }
-    for (const m of movieList) {
-      if (!m.watched) continue
-      for (const g of m.snapshot.genres)
-        genreMin.set(g, (genreMin.get(g) ?? 0) + m.snapshot.runtime)
-    }
-    const genres = [...genreMin.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
-
-    // -- emotion reaction counts across all watch records --
-    const reactions: Record<Emotion, number> = {
-      love: 0,
-      fun: 0,
-      wow: 0,
-      meh: 0,
-      sad: 0,
-      scared: 0,
-    }
-    for (const s of showList) {
-      for (const rec of Object.values(s.watched)) {
-        if (rec.emotion) reactions[rec.emotion] += 1
-      }
-    }
-    for (const m of movieList) {
-      if (m.watched?.emotion) reactions[m.watched.emotion] += 1
-    }
-
-    // -- top 5 most watched shows --
-    const topShows = showList
-      .filter((s) => watchedCount(s) > 0)
-      .sort((a, b) => watchedCount(b) - watchedCount(a))
-      .slice(0, 5)
-
-    // -- episodes watched per month, last 6 months --
-    const today = new Date()
-    const months: { key: string; label: string; count: number }[] = []
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1)
-      months.push({
-        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleString('en-US', { month: 'short' }),
-        count: 0,
-      })
-    }
-    const byMonth = new Map(months.map((m) => [m.key, m]))
-    for (const s of showList) {
-      for (const rec of Object.values(s.watched)) {
-        const bucket = byMonth.get(rec.watchedAt.slice(0, 7))
-        if (bucket) bucket.count += 1
-      }
-    }
-
-    return {
-      totalMin: totalMinutesWatched(shows, movies),
-      episodes,
-      moviesWatched,
-      followed: showList.length,
-      completed,
-      genres,
-      reactions,
-      topShows,
-      months,
-      libraryEmpty: showList.length === 0 && movieList.length === 0,
-    }
-  }, [shows, movies])
-
-  if (stats.libraryEmpty) {
+  if (libraryEmpty) {
     return (
       <div>
         <h1 className="page-title">Stats</h1>
@@ -161,166 +601,35 @@ export default function Stats() {
     )
   }
 
-  const maxGenre = stats.genres.length > 0 ? stats.genres[0][1] : 1
-  const totalReactions = EMOTIONS.reduce((n, e) => n + stats.reactions[e.key], 0)
-  const maxReaction = Math.max(1, ...EMOTIONS.map((e) => stats.reactions[e.key]))
-  const maxMonth = Math.max(1, ...stats.months.map((m) => m.count))
-  const noActivity = stats.months.every((m) => m.count === 0)
-
   return (
     <div>
       <h1 className="page-title">Stats</h1>
       <p className="page-subtitle">Your watching, quantified.</p>
 
-      <div className="stats-cards">
-        <StatCard
-          icon="⏱️"
-          value={formatMinutes(stats.totalMin)}
-          label="Watch time"
-          color="var(--accent-hover)"
-        />
-        <StatCard
-          icon="📺"
-          value={String(stats.episodes)}
-          label="Episodes watched"
-          color="#60a5fa"
-        />
-        <StatCard
-          icon="🎬"
-          value={String(stats.moviesWatched)}
-          label="Movies watched"
-          color="#f472b6"
-        />
-        <StatCard
-          icon="📌"
-          value={String(stats.followed)}
-          label="Shows followed"
-          color="var(--yellow)"
-        />
-        <StatCard
-          icon="🏁"
-          value={String(stats.completed)}
-          label="Shows completed"
-          color="var(--green)"
-        />
+      <div className="stats-tabs" role="tablist" aria-label="Stats category">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'shows'}
+          className={`stats-tab${tab === 'shows' ? ' active' : ''}`}
+          onClick={() => setTab('shows')}
+        >
+          📺 Shows
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'movies'}
+          className={`stats-tab${tab === 'movies' ? ' active' : ''}`}
+          onClick={() => setTab('movies')}
+        >
+          🎬 Movies
+        </button>
       </div>
 
-      <div className="stats-grid">
-        <section className="card">
-          <h2 className="stats-section-h">🧬 Time by genre</h2>
-          {stats.genres.length === 0 ? (
-            <p className="stats-empty-note">
-              Watch some episodes or movies to see where your hours go.
-            </p>
-          ) : (
-            stats.genres.map(([name, min], i) => (
-              <div className="stats-bar-row" key={name}>
-                <span className="stats-bar-label" title={name}>
-                  {name}
-                </span>
-                <div className="stats-bar-track">
-                  <div
-                    className="stats-bar-fill"
-                    style={{
-                      width: `${Math.max(3, (min / maxGenre) * 100)}%`,
-                      background: GENRE_COLORS[i % GENRE_COLORS.length],
-                    }}
-                  />
-                </div>
-                <span className="stats-bar-value">{formatMinutes(min)}</span>
-              </div>
-            ))
-          )}
-        </section>
+      {tab === 'shows' ? <ShowsTab stats={showStats} /> : <MoviesTab stats={movieStats} />}
 
-        <section className="card">
-          <h2 className="stats-section-h">💜 Your reactions</h2>
-          {totalReactions === 0 ? (
-            <p className="stats-empty-note">
-              React to episodes and movies with an emoji — your feelings get charted here.
-            </p>
-          ) : (
-            EMOTIONS.map((e) => {
-              const count = stats.reactions[e.key]
-              return (
-                <div className="stats-emotion-row" key={e.key}>
-                  <span className="stats-emotion-emoji">{e.emoji}</span>
-                  <span className="stats-bar-label left">{e.label}</span>
-                  <div className="stats-bar-track">
-                    <div
-                      className="stats-bar-fill"
-                      style={{
-                        width: count > 0 ? `${Math.max(5, (count / maxReaction) * 100)}%` : '0%',
-                        background: EMOTION_COLORS[e.key],
-                        opacity: count > 0 ? 1 : 0.3,
-                      }}
-                    />
-                  </div>
-                  <span className="stats-bar-value">{count}</span>
-                </div>
-              )
-            })
-          )}
-        </section>
-      </div>
-
-      <div className="stats-grid">
-        <section className="card">
-          <h2 className="stats-section-h">🏆 Most watched shows</h2>
-          {stats.topShows.length === 0 ? (
-            <p className="stats-empty-note">
-              No episodes ticked off yet — open a show and start checking them off.
-            </p>
-          ) : (
-            stats.topShows.map((s, i) => {
-              const n = watchedCount(s)
-              return (
-                <Link to={`/show/${s.snapshot.id}`} className="stats-top-row" key={s.snapshot.id}>
-                  <span className="stats-top-rank">{i + 1}</span>
-                  <div className="stats-top-poster">
-                    <PosterImage path={s.snapshot.poster_path} title={s.snapshot.name} />
-                  </div>
-                  <div className="stats-top-info">
-                    <div className="stats-top-name">{s.snapshot.name}</div>
-                    <div className="stats-top-sub">
-                      {n} of {s.snapshot.totalEpisodes} episodes ·{' '}
-                      {formatMinutes(n * s.snapshot.runtime)}
-                    </div>
-                    <ProgressBar value={showProgress(s)} />
-                  </div>
-                </Link>
-              )
-            })
-          )}
-        </section>
-
-        <section className="card">
-          <h2 className="stats-section-h">📅 Activity — last 6 months</h2>
-          <div className="stats-activity">
-            {stats.months.map((m) => (
-              <div className="stats-activity-col" key={m.key}>
-                <span className="stats-activity-count" style={{ opacity: m.count > 0 ? 1 : 0.35 }}>
-                  {m.count}
-                </span>
-                <div
-                  className="stats-activity-bar"
-                  style={
-                    m.count > 0
-                      ? { height: Math.max(8, Math.round((m.count / maxMonth) * 112)) }
-                      : { height: 4, background: 'var(--bg-elev-2)' }
-                  }
-                />
-                <span className="stats-activity-month">{m.label}</span>
-              </div>
-            ))}
-          </div>
-          {noActivity && (
-            <p className="stats-empty-note">
-              Episodes you watch will chart here, month by month.
-            </p>
-          )}
-        </section>
-      </div>
+      <BadgeSection badges={badges} />
     </div>
   )
 }

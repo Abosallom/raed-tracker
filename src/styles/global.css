@@ -349,6 +349,32 @@ textarea:focus {
   background: var(--green);
 }
 
+/* ---------- light theme (data-theme="light" on <html>) ---------- */
+
+:root[data-theme='light'] {
+  --bg: #f6f6f4;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #ececea;
+  --border: #d9d9d5;
+  --text: #1c1c1a;
+  --text-dim: #5c5c58;
+  --text-faint: #8b8b86;
+  --accent: #d99a06;
+  --accent-hover: #b57f02;
+  --accent-soft: rgba(217, 154, 6, 0.14);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+}
+
+:root[data-theme='light'] .poster-fallback {
+  background: linear-gradient(160deg, #d8d3c8 0%, #bdb7a8 55%, #9a937f 100%);
+  color: rgba(0, 0, 0, 0.72);
+}
+
+:root[data-theme='light'] .poster-badge {
+  background: rgba(255, 255, 255, 0.9);
+  color: #b57f02;
+}
+
 /* ---------- motion & skeletons (shared utilities) ---------- */
 
 @keyframes fade-in-up {

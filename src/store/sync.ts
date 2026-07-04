@@ -21,9 +21,11 @@
 
 import type {
   Comment,
+  ListItem,
   Profile,
   TrackedMovie,
   TrackedShow,
+  UserList,
   WatchRecord,
   WatchlistItem,
 } from '../types'
@@ -34,7 +36,7 @@ import { useLibrary } from './library'
  * Sync metadata: tombstones for deletions and last-writer timestamps for
  * value fields. Keys are namespaced strings, e.g. `show:123`, `ep:123:s1e2`,
  * `emo:123:s1e2`, `emo:m:456`, `movie:456`, `movie-watched:456`,
- * `wl:tv:123`, `comment:c_1`, `like:c_1`, `profile`.
+ * `fav:123`, `fav:m:456`, `wl:tv:123`, `comment:c_1`, `like:c_1`, `profile`.
  */
 export interface SyncMeta {
   /** key -> ISO time the item/field was deleted or cleared. */
@@ -50,6 +52,8 @@ export interface LibraryData {
   watchlist: WatchlistItem[]
   comments: Comment[]
   profile: Profile
+  /** Custom lists; absent on docs written by older versions. */
+  lists?: UserList[]
   /** Sync metadata; absent on docs written by older versions. */
   sync?: SyncMeta
 }
@@ -166,13 +170,20 @@ function recordChanges(prev: LibrarySlices, next: LibrarySlices) {
   for (const [id, n] of Object.entries(nShows)) {
     const p = pShows[Number(id)]
     if (!p || p === n) continue
+    if ((p.paused ?? false) !== (n.paused ?? false)) touch(`pause:${id}`)
+    if ((p.favorite ?? false) !== (n.favorite ?? false)) touch(`fav:${id}`)
     for (const [key, pr] of Object.entries(p.watched ?? {})) {
       const nr = n.watched?.[key]
       if (!nr) kill(`ep:${id}:${key}`)
-      else if (pr.emotion && !nr.emotion) kill(`emo:${id}:${key}`)
+      else {
+        if (pr.emotion && !nr.emotion) kill(`emo:${id}:${key}`)
+        if (pr.favoriteCast && !nr.favoriteCast) kill(`fc:${id}:${key}`)
+      }
     }
     for (const [key, nr] of Object.entries(n.watched ?? {})) {
       if (nr.emotion && nr.emotion !== p.watched?.[key]?.emotion) touch(`emo:${id}:${key}`)
+      if (nr.favoriteCast && nr.favoriteCast.id !== p.watched?.[key]?.favoriteCast?.id)
+        touch(`fc:${id}:${key}`)
     }
   }
 
@@ -184,6 +195,7 @@ function recordChanges(prev: LibrarySlices, next: LibrarySlices) {
   for (const [id, n] of Object.entries(nMovies)) {
     const p = pMovies[Number(id)]
     if (!p || p === n) continue
+    if ((p.favorite ?? false) !== (n.favorite ?? false)) touch(`fav:m:${id}`)
     if (p.watched && !n.watched) kill(`movie-watched:${id}`)
     if (p.watched?.emotion && n.watched && !n.watched.emotion) kill(`emo:m:${id}`)
     if (n.watched?.emotion && n.watched.emotion !== p.watched?.emotion) touch(`emo:m:${id}`)
@@ -200,6 +212,29 @@ function recordChanges(prev: LibrarySlices, next: LibrarySlices) {
     if (!n) kill(`comment:${c.id}`)
     else if (c.likedByMe && !n.likedByMe) kill(`like:${c.id}`)
     else if (!c.likedByMe && n.likedByMe) touch(`like:${c.id}`)
+  }
+
+  const pLists = new Map((prev.lists ?? []).map((l) => [l.id, l]))
+  const nLists = new Map((next.lists ?? []).map((l) => [l.id, l]))
+  for (const [id] of pLists) {
+    if (!nLists.has(id)) kill(`list:${id}`)
+  }
+  for (const [id, n] of nLists) {
+    const p = pLists.get(id)
+    if (!p) {
+      touch(`list:${id}`)
+      continue
+    }
+    if (p === n) continue
+    if (p.name !== n.name) touch(`listname:${id}`)
+    const nItems = new Set(n.items.map((it) => `${it.type}:${it.id}`))
+    const pItems = new Set(p.items.map((it) => `${it.type}:${it.id}`))
+    for (const k of pItems) {
+      if (!nItems.has(k)) kill(`li:${id}:${k}`)
+    }
+    for (const k of nItems) {
+      if (!pItems.has(k)) touch(`li:${id}:${k}`)
+    }
   }
 
   if (prev.profile !== next.profile) touch('profile')
@@ -219,6 +254,7 @@ export function noteLibraryReplaced(next: {
   watchlist?: WatchlistItem[]
   comments?: Comment[]
   profile?: Profile
+  lists?: UserList[]
 }) {
   const prev = pickData()
   recordChanges(prev, {
@@ -227,6 +263,9 @@ export function noteLibraryReplaced(next: {
     watchlist: next.watchlist ?? [],
     comments: next.comments ?? [],
     profile: next.profile ?? prev.profile,
+    // Backups from older versions have no lists; keep the current ones rather
+    // than tombstoning every list the backup predates.
+    lists: next.lists ?? prev.lists,
   })
 }
 
@@ -238,6 +277,7 @@ function pickData(): LibraryData {
     watchlist: s.watchlist,
     comments: s.comments,
     profile: s.profile,
+    lists: s.lists,
     sync: loadMeta(),
   }
 }
@@ -267,12 +307,14 @@ function mergeWatchRecord(
   local: WatchRecord,
   remote: WatchRecord,
   emoKey: string,
+  fcKey: string,
   localMeta: SyncMeta,
   remoteMeta: SyncMeta,
 ): WatchRecord {
   return {
     watchedAt: earlier(local.watchedAt, remote.watchedAt),
     emotion: pickLww(emoKey, local.emotion, remote.emotion, localMeta, remoteMeta),
+    favoriteCast: pickLww(fcKey, local.favoriteCast, remote.favoriteCast, localMeta, remoteMeta),
   }
 }
 
@@ -293,16 +335,37 @@ function mergeShows(
     const watched: Record<string, WatchRecord> = { ...rs.watched }
     for (const [key, rec] of Object.entries(ls.watched)) {
       watched[key] = watched[key]
-        ? mergeWatchRecord(rec, watched[key], `emo:${id}:${key}`, localMeta, remoteMeta)
+        ? mergeWatchRecord(
+            rec,
+            watched[key],
+            `emo:${id}:${key}`,
+            `fc:${id}:${key}`,
+            localMeta,
+            remoteMeta,
+          )
         : rec
     }
+    // Paused is LWW on the pause:<id> touch-times; with no recorded flip on
+    // either side (older docs) fall back to "paused anywhere wins".
+    const pk = `pause:${id}`
+    const plt = localMeta.set[pk] ?? ''
+    const prt = remoteMeta.set[pk] ?? ''
+    const paused = plt || prt ? (prt > plt ? rs.paused : ls.paused) : ls.paused || rs.paused
+    // Favorite is LWW on the fav:<id> touch-times; with no recorded flip on
+    // either side (older docs) fall back to "favorited anywhere wins".
+    const fk = `fav:${id}`
+    const flt = localMeta.set[fk] ?? ''
+    const frt = remoteMeta.set[fk] ?? ''
+    const favorite =
+      flt || frt ? (frt > flt ? rs.favorite : ls.favorite) : ls.favorite || rs.favorite
     out[id] = {
       // prefer the snapshot captured most recently (larger episode data wins ties)
       snapshot:
         ls.snapshot.totalEpisodes >= rs.snapshot.totalEpisodes ? ls.snapshot : rs.snapshot,
       addedAt: earlier(ls.addedAt, rs.addedAt),
       watched,
-      favorite: ls.favorite || rs.favorite,
+      favorite,
+      paused,
     }
   }
   return out
@@ -322,14 +385,21 @@ function mergeMovies(
       out[id] = lm
       continue
     }
+    // Favorite is LWW on the fav:m:<id> touch-times; with no recorded flip on
+    // either side (older docs) fall back to "favorited anywhere wins".
+    const fk = `fav:m:${id}`
+    const flt = localMeta.set[fk] ?? ''
+    const frt = remoteMeta.set[fk] ?? ''
+    const favorite =
+      flt || frt ? (frt > flt ? rm.favorite : lm.favorite) : lm.favorite || rm.favorite
     out[id] = {
       snapshot: lm.snapshot,
       addedAt: earlier(lm.addedAt, rm.addedAt),
       watched:
         lm.watched && rm.watched
-          ? mergeWatchRecord(lm.watched, rm.watched, `emo:m:${id}`, localMeta, remoteMeta)
+          ? mergeWatchRecord(lm.watched, rm.watched, `emo:m:${id}`, `fc:m:${id}`, localMeta, remoteMeta)
           : lm.watched ?? rm.watched,
-      favorite: lm.favorite || rm.favorite,
+      favorite,
     }
   }
   return out
@@ -371,6 +441,48 @@ function mergeComments(
   return [...seen.values()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
 }
 
+function mergeLists(
+  local: UserList[],
+  remote: UserList[],
+  localMeta: SyncMeta,
+  remoteMeta: SyncMeta,
+): UserList[] {
+  const remoteById = new Map(remote.map((l) => [l.id, l]))
+  const out: UserList[] = []
+  const seen = new Set<string>()
+  for (const ll of local) {
+    seen.add(ll.id)
+    const rl = remoteById.get(ll.id)
+    if (!rl) {
+      out.push(ll)
+      continue
+    }
+    // Name is LWW on listname:<id> touch-times; with no recorded rename on
+    // either side (or a tie) keep the remote name.
+    const nk = `listname:${ll.id}`
+    const lt = localMeta.set[nk] ?? ''
+    const rt = remoteMeta.set[nk] ?? ''
+    const name = lt > rt ? ll.name : rl.name
+    // Items: union per list, earliest addedAt wins for duplicates.
+    const items = new Map<string, ListItem>()
+    for (const it of [...rl.items, ...ll.items]) {
+      const k = `${it.type}:${it.id}`
+      const prev = items.get(k)
+      if (!prev || it.addedAt < prev.addedAt) items.set(k, it)
+    }
+    out.push({
+      id: ll.id,
+      name,
+      items: [...items.values()].sort((a, b) => (a.addedAt < b.addedAt ? -1 : 1)),
+      createdAt: earlier(ll.createdAt, rl.createdAt),
+    })
+  }
+  for (const rl of remote) {
+    if (!seen.has(rl.id)) out.push(rl)
+  }
+  return out.sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
+}
+
 function mergeProfile(
   local: Profile,
   remote: Profile | undefined,
@@ -407,12 +519,18 @@ function applyDeletions(data: LibraryData, meta: SyncMeta): LibraryData {
         changed = true
         continue
       }
-      if (rec.emotion && isDeleted(meta, `emo:${id}:${key}`)) {
-        watched[key] = { watchedAt: rec.watchedAt }
+      let out = rec
+      if (out.emotion && isDeleted(meta, `emo:${id}:${key}`)) {
+        const { emotion: _emo, ...rest } = out
+        out = rest
         changed = true
-        continue
       }
-      watched[key] = rec
+      if (out.favoriteCast && isDeleted(meta, `fc:${id}:${key}`)) {
+        const { favoriteCast: _fc, ...rest } = out
+        out = rest
+        changed = true
+      }
+      watched[key] = out
     }
     shows[id] = changed ? { ...s, watched } : s
   }
@@ -426,7 +544,12 @@ function applyDeletions(data: LibraryData, meta: SyncMeta): LibraryData {
       out = { ...out, watched: null }
     }
     if (out.watched?.emotion && isDeleted(meta, `emo:m:${id}`)) {
-      out = { ...out, watched: { watchedAt: out.watched.watchedAt } }
+      const { emotion: _emo, ...rest } = out.watched
+      out = { ...out, watched: rest }
+    }
+    if (out.watched?.favoriteCast && isDeleted(meta, `fc:m:${id}`)) {
+      const { favoriteCast: _fc, ...rest } = out.watched
+      out = { ...out, watched: rest }
     }
     movies[id] = out
   }
@@ -443,7 +566,16 @@ function applyDeletions(data: LibraryData, meta: SyncMeta): LibraryData {
         : c,
     )
 
-  return { ...data, shows, movies, watchlist, comments }
+  const lists = (data.lists ?? [])
+    .filter((l) => !isDeleted(meta, `list:${l.id}`, l.createdAt))
+    .map((l) => {
+      const items = l.items.filter(
+        (it) => !isDeleted(meta, `li:${l.id}:${it.type}:${it.id}`, it.addedAt),
+      )
+      return items.length === l.items.length ? l : { ...l, items }
+    })
+
+  return { ...data, shows, movies, watchlist, comments, lists }
 }
 
 export function mergeLibraries(local: LibraryData, remote: LibraryData): LibraryData {
@@ -461,6 +593,8 @@ export function mergeLibraries(local: LibraryData, remote: LibraryData): Library
     watchlist: mergeWatchlist(l.watchlist ?? [], r.watchlist ?? []),
     comments: mergeComments(l.comments ?? [], r.comments ?? [], localMeta, remoteMeta),
     profile: mergeProfile(l.profile, r.profile, localMeta, remoteMeta),
+    // Older docs have no lists; treat as empty so they merge cleanly.
+    lists: mergeLists(l.lists ?? [], r.lists ?? [], localMeta, remoteMeta),
     sync: meta,
   }
 }
@@ -652,4 +786,14 @@ export async function signOut(): Promise<void> {
 
 export async function syncNow(): Promise<void> {
   await pullAndMerge()
+}
+
+/**
+ * Forget the last-pushed snapshot so the next push always upserts, even if
+ * the local store is byte-identical to what was pushed before. Needed after
+ * the cloud row is deleted out-of-band (Account > "Delete cloud copy"),
+ * otherwise the dedupe guard in push() would skip the re-upload.
+ */
+export function invalidateLastPush(): void {
+  lastPushed = ''
 }

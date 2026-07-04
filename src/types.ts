@@ -116,6 +116,8 @@ export function episodeKey(season: number, episode: number): EpisodeKey {
 export interface WatchRecord {
   watchedAt: string // ISO date
   emotion?: Emotion
+  /** "Who was your favorite?" character vote for this episode/movie. */
+  favoriteCast?: { id: number; name: string }
 }
 
 /** Lightweight snapshot so library pages render without hitting the API. */
@@ -137,6 +139,8 @@ export interface ShowSnapshot {
   airedEpisodeCounts?: Record<number, number>
   /** First episode not yet aired at snapshot time, so aired counts can advance without a refetch. */
   nextEpisodeToAir?: { season: number; episode: number; airDate: string | null } | null
+  /** Primary network/streamer name (e.g. "HBO"), for Upcoming rows and stats. */
+  network?: string
 }
 
 export interface TrackedShow {
@@ -144,6 +148,8 @@ export interface TrackedShow {
   addedAt: string
   watched: Record<EpisodeKey, WatchRecord>
   favorite: boolean
+  /** Paused shows drop out of the Watch Next queue. */
+  paused?: boolean
 }
 
 export interface MovieSnapshot {
@@ -187,4 +193,21 @@ export interface Profile {
   name: string
   avatar: string // emoji
   joinedAt: string
+}
+
+// ---------- custom lists ----------
+
+export interface ListItem {
+  type: MediaType
+  id: number
+  name: string
+  poster_path: string | null
+  addedAt: string
+}
+
+export interface UserList {
+  id: string
+  name: string
+  items: ListItem[]
+  createdAt: string
 }

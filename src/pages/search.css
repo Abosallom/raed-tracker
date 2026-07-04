@@ -146,3 +146,282 @@
   color: var(--red);
   background: var(--bg-elev-2);
 }
+
+/* ---------- Explore hub (empty-query state) ---------- */
+
+/* Pill tabs: Discover / For you / Genres */
+
+.explore-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0 4px;
+}
+
+.explore-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.explore-tab:hover {
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+
+.explore-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #171717;
+  font-weight: 700;
+}
+
+/* Quick-add corner button over poster cards */
+
+.explore-card {
+  position: relative;
+}
+
+.explore-quick-add {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  z-index: 3;
+  background: rgba(14, 15, 23, 0.82);
+  color: #ededed;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  transition: background 0.15s, color 0.15s, transform 0.15s, border-color 0.15s;
+}
+
+.explore-quick-add:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #171717;
+  transform: scale(1.08);
+}
+
+.explore-quick-add.done {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #171717;
+  font-size: 15px;
+}
+
+:root[data-theme='light'] .explore-quick-add {
+  background: rgba(255, 255, 255, 0.92);
+  color: #1c1c1a;
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+:root[data-theme='light'] .explore-quick-add.done,
+:root[data-theme='light'] .explore-quick-add:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.explore-row-empty {
+  color: var(--text-faint);
+  font-size: 14px;
+  padding: 6px 0 14px;
+}
+
+/* Full-width CTA banners (Discover tab) */
+
+.explore-banner {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 28px 0;
+  padding: 18px 22px;
+  border-radius: var(--radius);
+  text-align: left;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background:
+    linear-gradient(
+      120deg,
+      color-mix(in srgb, var(--accent) 20%, transparent),
+      color-mix(in srgb, var(--accent) 5%, transparent)
+    ),
+    var(--bg-elev);
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.explore-banner:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.explore-banner-emoji {
+  font-size: 30px;
+}
+
+.explore-banner-text b {
+  display: block;
+  font-size: 16px;
+  letter-spacing: -0.2px;
+}
+
+.explore-banner-text small {
+  display: block;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.explore-banner-arrow {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 22px;
+}
+
+/* For you tab */
+
+.explore-foryou-sub {
+  color: var(--text-dim);
+  font-size: 14px;
+  margin: 4px 0 -6px;
+}
+
+.explore-foryou-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 18px 0 6px;
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+}
+
+.explore-foryou-empty .explore-foryou-emoji {
+  font-size: 26px;
+}
+
+.explore-foryou-empty b {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.explore-foryou-empty p {
+  color: var(--text-dim);
+  font-size: 13.5px;
+}
+
+/* Genres tab: hub cards */
+
+.explore-genre-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.explore-genre-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 112px;
+  padding: 16px;
+  border-radius: var(--radius);
+  text-align: left;
+  font-weight: 700;
+  font-size: 14.5px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--accent) 24%, transparent),
+      color-mix(in srgb, var(--accent) 4%, transparent)
+    ),
+    var(--bg-elev);
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+/* Subtle variety across the grid */
+.explore-genre-card:nth-child(3n + 2) {
+  background:
+    linear-gradient(
+      215deg,
+      color-mix(in srgb, var(--accent) 18%, transparent),
+      color-mix(in srgb, var(--accent) 3%, transparent)
+    ),
+    var(--bg-elev);
+}
+
+.explore-genre-card:nth-child(3n) {
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--accent) 30%, transparent) 0%,
+      color-mix(in srgb, var(--accent) 6%, transparent) 70%
+    ),
+    var(--bg-elev);
+}
+
+.explore-genre-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+.explore-genre-emoji {
+  font-size: 26px;
+}
+
+.explore-genre-name {
+  line-height: 1.25;
+}
+
+.explore-genre-skel {
+  min-height: 112px;
+  border-radius: var(--radius);
+}
+
+/* Genres tab: inline genre browse */
+
+.explore-browse-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.explore-browse-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.explore-browse-title span {
+  color: var(--text-dim);
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.explore-load-more {
+  display: flex;
+  justify-content: center;
+  margin: 24px 0 8px;
+}

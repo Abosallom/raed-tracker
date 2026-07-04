@@ -12,6 +12,7 @@ import Stats from './pages/Stats'
 import Profile from './pages/Profile'
 import Account from './pages/Account'
 import Settings from './pages/Settings'
+import ListDetail from './pages/ListDetail'
 import { Toaster } from './components/toast'
 import './app-shell.css'
 
@@ -26,8 +27,8 @@ function Nav() {
       <div className="sidebar-logo">
         Raed <span>Tracker</span>
       </div>
-      {item('/', '🏠', 'Discover')}
-      {item('/search', '🔍', 'Search')}
+      {item('/', '🏠', 'Home')}
+      {item('/search', '🔍', 'Explore')}
       <div className="nav-section">Library</div>
       {item('/shows', '📺', 'My Shows')}
       {item('/movies', '🎬', 'Movies')}
@@ -54,8 +55,8 @@ function TabBar() {
   )
   return (
     <nav className="tabbar" aria-label="Primary">
-      {tab('/', '🏠', 'Discover')}
-      {tab('/search', '🔍', 'Search')}
+      {tab('/', '🏠', 'Home')}
+      {tab('/search', '🔍', 'Explore')}
       {tab('/shows', '📺', 'My Shows')}
       {tab('/upcoming', '🗓️', 'Upcoming')}
       {tab('/profile', '👤', 'Profile')}
@@ -109,6 +110,7 @@ export default function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/account" element={<Account />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/list/:id" element={<ListDetail />} />
         </Routes>
       </main>
       <TabBar />

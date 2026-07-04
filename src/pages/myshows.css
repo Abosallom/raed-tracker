@@ -1,102 +1,505 @@
-/* My Shows page (route /shows) — scoped styles, all classes prefixed myshows- */
+/* My Shows page (route /shows) — Watch Next queue, classes prefixed queue- */
 
-.myshows-tabs {
+/* ---------- header: segmented control + favorites chip ---------- */
+
+.queue-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin: 4px 0 18px;
+  margin: 4px 0 20px;
 }
 
-.myshows-tab {
-  padding: 7px 14px;
+.queue-segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+}
+
+.queue-seg {
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+  transition: color 0.15s, background 0.15s;
+}
+
+.queue-seg:hover {
+  color: var(--text);
+}
+
+.queue-seg.active {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.queue-seg-count {
+  margin-left: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-header-spacer {
+  flex: 1;
+}
+
+/* ---------- chips (favorites / browse filters) ---------- */
+
+.queue-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
   border-radius: 999px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   color: var(--text-dim);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
-.myshows-tab:hover {
+.queue-chip:hover {
   color: var(--text);
   border-color: var(--text-faint);
 }
 
-.myshows-tab.active {
+.queue-chip.active {
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent-hover);
 }
 
-.myshows-count {
-  margin-left: 5px;
-  font-size: 12px;
-  font-weight: 500;
-  opacity: 0.75;
-}
-
-.myshows-spacer {
-  flex: 1;
-}
-
-.myshows-fav.active {
+.queue-fav.active {
   background: rgba(251, 191, 36, 0.12);
   border-color: var(--yellow);
   color: var(--yellow);
 }
 
-.myshows-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.queue-chip-count {
+  font-size: 11.5px;
+  font-weight: 600;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
 }
 
-.myshows-card {
+.queue-browse {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 22px 0 14px;
+}
+
+/* ---------- sections ---------- */
+
+.queue-section {
+  margin-bottom: 26px;
+}
+
+.queue-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+
+.queue-collapse-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  padding: 2px 0;
+  margin-bottom: 6px;
+  transition: color 0.15s;
+}
+
+.queue-collapse-head:hover {
+  color: var(--accent-hover);
+}
+
+.queue-caret {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--text-dim);
+  transition: transform 0.15s;
+}
+
+.queue-caret.open {
+  transform: rotate(90deg);
+}
+
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---------- watch-next queue rows ---------- */
+
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  padding: 10px 14px;
+  max-height: 160px;
   transition: border-color 0.15s;
 }
 
-.myshows-card:hover {
-  border-color: #3a3d5c;
+.queue-row:hover {
+  border-color: var(--text-faint);
 }
 
-.myshows-poster {
+.queue-row.flash {
+  animation: queue-flash 0.7s ease;
+}
+
+@keyframes queue-flash {
+  0% {
+    background: var(--bg-elev);
+  }
+  22% {
+    background: rgba(52, 211, 153, 0.16);
+    border-color: var(--green);
+  }
+  100% {
+    background: var(--bg-elev);
+  }
+}
+
+.queue-row.leaving {
+  animation: queue-leave 0.5s ease forwards;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+@keyframes queue-leave {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+    max-height: 160px;
+  }
+  55% {
+    opacity: 0;
+    transform: translateX(36px);
+    max-height: 160px;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(36px);
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-bottom: -10px;
+    border-color: transparent;
+  }
+}
+
+.queue-poster {
   display: block;
-  width: 74px;
+  width: 52px;
   flex-shrink: 0;
   border-radius: var(--radius-sm);
   overflow: hidden;
   transition: transform 0.15s;
 }
 
-.myshows-poster:hover {
-  transform: scale(1.04);
+.queue-poster:hover {
+  transform: scale(1.05);
 }
 
-.myshows-poster .poster-fallback {
-  font-size: 10.5px;
-  padding: 6px;
-  line-height: 1.25;
+.queue-poster .poster-fallback {
+  font-size: 9px;
+  padding: 4px;
+  line-height: 1.2;
 }
 
-.myshows-info {
+.queue-main {
   flex: 1;
   min-width: 0;
 }
 
-.myshows-name {
+.queue-showpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.queue-showpill:hover {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.queue-showpill-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-showpill-arrow {
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.queue-showpill:hover .queue-showpill-arrow {
+  color: var(--accent);
+}
+
+/* Episode block re-mounts (keyed) when the row advances — slide it in. */
+.queue-ep {
+  margin-top: 7px;
+  animation: queue-ep-in 0.3s ease;
+}
+
+@keyframes queue-ep-in {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.queue-ep-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.queue-ep-code {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.queue-ep-sep {
+  color: var(--accent);
+  font-weight: 400;
+}
+
+.queue-behind {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-badge {
+  padding: 1.5px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.queue-badge.new {
+  background: rgba(52, 211, 153, 0.16);
+  color: var(--green);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+}
+
+.queue-badge.premiere {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  border: 1px solid var(--accent);
+}
+
+.queue-ep-title {
+  margin-top: 2px;
+  min-height: 17px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- big circular check ---------- */
+
+.queue-check {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 18px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.12s;
+}
+
+.queue-check:hover {
+  border-color: var(--green);
+  color: var(--green);
+  transform: scale(1.06);
+}
+
+.queue-check.pop {
+  animation: queue-pop 0.4s cubic-bezier(0.2, 0.7, 0.3, 1.4);
+  background: var(--green);
+  border-color: var(--green);
+  color: #101010;
+}
+
+@keyframes queue-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.28);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ---------- watched history ---------- */
+
+.queue-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.queue-history-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.queue-history-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+
+.queue-history-name:hover {
+  color: var(--accent-hover);
+}
+
+.queue-history-ep {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.queue-history-time {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.queue-undo {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--green);
+  background: rgba(52, 211, 153, 0.14);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.queue-undo:hover {
+  background: transparent;
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* ---------- compact rows (paused + filtered views) ---------- */
+
+.queue-compact-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  transition: border-color 0.15s;
+}
+
+.queue-compact-row:hover {
+  border-color: var(--text-faint);
+}
+
+.queue-compact-poster {
+  display: block;
+  width: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.queue-compact-poster .poster-fallback {
+  font-size: 8px;
+  padding: 3px;
+  line-height: 1.2;
+}
+
+.queue-compact-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-compact-name {
   display: inline-block;
   max-width: 100%;
-  font-size: 16px;
+  font-size: 13.5px;
   font-weight: 700;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -104,86 +507,49 @@
   transition: color 0.15s;
 }
 
-.myshows-name:hover {
+.queue-compact-name:hover {
   color: var(--accent-hover);
 }
 
-.myshows-genres {
-  margin-top: 1px;
-  font-size: 12.5px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.myshows-progress-row {
+.queue-compact-progress {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 10px;
-}
-
-.myshows-progress-row .progress-track {
-  flex: 1;
-}
-
-.myshows-eps {
-  font-size: 12.5px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.myshows-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: space-between;
-  align-self: stretch;
   gap: 10px;
-  flex-shrink: 0;
-  padding: 2px 0;
+  margin-top: 6px;
 }
 
-.myshows-star {
-  font-size: 20px;
-  line-height: 1;
-  padding: 2px 4px;
-  color: var(--text-faint);
-  transition: color 0.15s, transform 0.15s;
+.queue-compact-progress .progress-track {
+  flex: 1;
+  max-width: 260px;
 }
 
-.myshows-star:hover {
-  color: var(--yellow);
-  transform: scale(1.2);
-}
-
-.myshows-star.on {
-  color: var(--yellow);
-}
-
-.myshows-watch {
+.queue-compact-eps {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.myshows-uptodate {
-  color: var(--green);
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-}
+/* ---------- responsive + reduced motion ---------- */
 
-@media (max-width: 640px) {
-  .myshows-card {
-    flex-wrap: wrap;
+@media (max-width: 560px) {
+  .queue-history-time {
+    display: none;
   }
-  .myshows-actions {
-    flex-direction: row-reverse;
-    align-self: auto;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: 0;
+  .queue-check {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-row.flash,
+  .queue-row.leaving,
+  .queue-ep,
+  .queue-check.pop {
+    animation: none;
+  }
+  .queue-row.leaving {
+    opacity: 0;
   }
 }

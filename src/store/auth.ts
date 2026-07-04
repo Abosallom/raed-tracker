@@ -2,6 +2,7 @@
 // Complements src/store/sync.ts, which owns the library-sync lifecycle.
 
 import { supabase } from '../api/supabase'
+import { invalidateLastPush } from './sync'
 
 const NOT_CONFIGURED = 'Sync is not configured in this build.'
 
@@ -69,5 +70,9 @@ export async function deleteCloudData(): Promise<string | null> {
   const uid = data.user?.id
   if (!uid) return 'Not signed in.'
   const { error } = await supabase.from('libraries').delete().eq('user_id', uid)
-  return error ? error.message : null
+  if (error) return error.message
+  // The push dedupe cache still holds the just-deleted doc; drop it so the
+  // next sync actually re-uploads the library as the UI promises.
+  invalidateLastPush()
+  return null
 }

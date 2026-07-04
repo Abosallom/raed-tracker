@@ -2,6 +2,7 @@
 // Get a free key at https://www.themoviedb.org/settings/api and paste it in Settings.
 
 import type {
+  Genre,
   MovieDetail,
   SearchResult,
   SeasonDetail,
@@ -167,6 +168,56 @@ export async function upcomingMovies(): Promise<SearchResult[]> {
   if (isDemoMode()) return MOCK_TRENDING_MOVIES.slice(0, 4)
   const data = await fetchTmdb<{ results: RawResult[] }>('/movie/upcoming')
   return data.results.map((r) => normalize(r, 'movie'))
+}
+
+/** Static genre sets used in demo mode and as instant fallback. */
+const DEMO_GENRES: Record<'tv' | 'movie', Genre[]> = {
+  tv: [
+    { id: 10759, name: 'Action & Adventure' },
+    { id: 16, name: 'Animation' },
+    { id: 35, name: 'Comedy' },
+    { id: 80, name: 'Crime' },
+    { id: 18, name: 'Drama' },
+    { id: 9648, name: 'Mystery' },
+    { id: 10765, name: 'Sci-Fi & Fantasy' },
+  ],
+  movie: [
+    { id: 28, name: 'Action' },
+    { id: 16, name: 'Animation' },
+    { id: 35, name: 'Comedy' },
+    { id: 80, name: 'Crime' },
+    { id: 18, name: 'Drama' },
+    { id: 27, name: 'Horror' },
+    { id: 878, name: 'Science Fiction' },
+    { id: 53, name: 'Thriller' },
+  ],
+}
+
+export async function getGenres(type: 'tv' | 'movie'): Promise<Genre[]> {
+  if (isDemoMode()) return DEMO_GENRES[type]
+  try {
+    const data = await fetchTmdb<{ genres: Genre[] }>(`/genre/${type}/list`)
+    return data.genres
+  } catch {
+    return DEMO_GENRES[type]
+  }
+}
+
+/** Browse by genre, sorted by popularity. */
+export async function discoverByGenre(
+  type: 'tv' | 'movie',
+  genreId: number,
+  page = 1,
+): Promise<SearchResult[]> {
+  if (isDemoMode()) {
+    return type === 'tv' ? MOCK_TRENDING_TV : MOCK_TRENDING_MOVIES
+  }
+  const data = await fetchTmdb<{ results: RawResult[] }>(`/discover/${type}`, {
+    with_genres: String(genreId),
+    sort_by: 'popularity.desc',
+    page: String(page),
+  })
+  return data.results.map((r) => normalize(r, type))
 }
 
 interface RawShowDetail extends Omit<ShowDetail, 'imdb_id' | 'cast'> {
