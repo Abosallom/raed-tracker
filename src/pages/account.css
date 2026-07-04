@@ -1,0 +1,85 @@
+.account-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 640px;
+}
+
+.account-card-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.account-desc {
+  color: var(--text-dim);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.account-hint {
+  color: var(--text-faint);
+  font-size: 12.5px;
+  margin-top: 8px;
+}
+
+.account-error {
+  color: var(--red);
+  font-size: 13.5px;
+}
+
+.account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 400px;
+}
+
+.account-form-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  max-width: 460px;
+}
+
+.account-form-row input {
+  flex: 1;
+}
+
+.account-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.account-otp-input {
+  font-size: 28px;
+  letter-spacing: 14px;
+  text-align: center;
+  font-weight: 700;
+  max-width: 260px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.account-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.account-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.account-row:last-child {
+  border-bottom: none;
+}
+
+.account-row-label {
+  color: var(--text-dim);
+}

@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import './styles/global.css'
 import App from './App'
+import { initSync } from './store/sync'
+
+initSync()
 
 // HashRouter (#/shows) instead of BrowserRouter: GitHub Pages is static hosting
 // with no URL rewriting, so deep links would otherwise 404 on refresh.

@@ -1,0 +1,655 @@
+// Cloud sync engine: mirrors the zustand library store to a single jsonb row
+// per user in Supabase (table `libraries`), merging across devices.
+//
+// Design:
+// - Local-first: the store stays the source of truth; sync never blocks the UI.
+// - Push: store changes are debounced (1.5s) and upserted as one JSON document.
+// - Pull: on startup / sign-in / realtime event, remote is fetched and MERGED
+//   (union of watch history, watchlist, comments) — never blindly overwritten,
+//   so two devices that both watched episodes offline keep both histories.
+// - Deletions: a plain union would resurrect anything removed on one device
+//   (the copy still exists in the remote doc / on other devices). Every
+//   destructive store change is therefore recorded as a tombstone in a small
+//   sync-metadata map (persisted in localStorage and shipped inside the doc);
+//   merging applies tombstones to both sides before taking the union.
+// - LWW fields: emotions, comment likes and the profile carry "last set"
+//   timestamps in the same metadata map so edits converge to the most recent
+//   writer instead of each device keeping its own value forever.
+// - Echo guard: every push carries this tab's deviceId; realtime events from
+//   the same deviceId are ignored. The id is per-tab (in memory), NOT
+//   per-browser: two tabs of one browser must see each other's pushes.
+
+import type {
+  Comment,
+  Profile,
+  TrackedMovie,
+  TrackedShow,
+  WatchRecord,
+  WatchlistItem,
+} from '../types'
+import { supabase } from '../api/supabase'
+import { useLibrary } from './library'
+
+/**
+ * Sync metadata: tombstones for deletions and last-writer timestamps for
+ * value fields. Keys are namespaced strings, e.g. `show:123`, `ep:123:s1e2`,
+ * `emo:123:s1e2`, `emo:m:456`, `movie:456`, `movie-watched:456`,
+ * `wl:tv:123`, `comment:c_1`, `like:c_1`, `profile`.
+ */
+export interface SyncMeta {
+  /** key -> ISO time the item/field was deleted or cleared. */
+  deleted: Record<string, string>
+  /** key -> ISO time an LWW field (emotion, like, profile) was last set. */
+  set: Record<string, string>
+}
+
+/** The persisted slice of the store that gets synced. */
+export interface LibraryData {
+  shows: Record<number, TrackedShow>
+  movies: Record<number, TrackedMovie>
+  watchlist: WatchlistItem[]
+  comments: Comment[]
+  profile: Profile
+  /** Sync metadata; absent on docs written by older versions. */
+  sync?: SyncMeta
+}
+
+type LibrarySlices = Omit<LibraryData, 'sync'>
+
+export type SyncStatus =
+  | { state: 'off' } // no Supabase config in this build
+  | { state: 'signed-out' }
+  | { state: 'syncing' }
+  | { state: 'synced'; at: string; email: string }
+  // `email` present = the error happened while signed in (auth is still valid).
+  | { state: 'error'; message: string; email?: string }
+
+type Listener = (s: SyncStatus) => void
+
+// Per-tab echo-guard id. Deliberately NOT persisted: localStorage would share
+// one id across every tab of the browser, making tabs ignore each other's
+// realtime pushes as "own echoes" and silently clobber one another.
+const DEVICE_ID = `dev_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
+
+function deviceId(): string {
+  return DEVICE_ID
+}
+
+// ---------- sync metadata (tombstones + LWW timestamps) ----------
+
+const META_KEY = 'showtrackr_sync_meta'
+const LAST_USER_KEY = 'showtrackr_sync_user'
+
+function emptyMeta(): SyncMeta {
+  return { deleted: {}, set: {} }
+}
+
+function normMeta(m: Partial<SyncMeta> | null | undefined): SyncMeta {
+  return { deleted: m?.deleted ?? {}, set: m?.set ?? {} }
+}
+
+function loadMeta(): SyncMeta {
+  try {
+    const raw = localStorage.getItem(META_KEY)
+    return raw ? normMeta(JSON.parse(raw) as Partial<SyncMeta>) : emptyMeta()
+  } catch {
+    return emptyMeta()
+  }
+}
+
+function saveMeta(meta: SyncMeta) {
+  try {
+    localStorage.setItem(META_KEY, JSON.stringify(meta))
+  } catch {
+    // best effort; sync still works within this session
+  }
+}
+
+function clearMeta() {
+  try {
+    localStorage.removeItem(META_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+function mergeMeta(a: SyncMeta, b: SyncMeta): SyncMeta {
+  const out = emptyMeta()
+  for (const src of [a, b]) {
+    for (const [k, v] of Object.entries(src.deleted)) {
+      if (!out.deleted[k] || v > out.deleted[k]) out.deleted[k] = v
+    }
+    for (const [k, v] of Object.entries(src.set)) {
+      if (!out.set[k] || v > out.set[k]) out.set[k] = v
+    }
+  }
+  return out
+}
+
+/**
+ * A tombstone applies unless the field was re-set after the deletion or the
+ * surviving item itself is newer than the deletion (re-added/re-watched).
+ */
+function isDeleted(meta: SyncMeta, key: string, itemTime?: string): boolean {
+  const d = meta.deleted[key]
+  if (!d) return false
+  const s = meta.set[key]
+  if (s && s > d) return false
+  if (itemTime && itemTime > d) return false
+  return true
+}
+
+/**
+ * Diff two store snapshots and record tombstones / set-times for everything
+ * the transition deleted, cleared or (re)set. Runs synchronously on every
+ * store change, so tombstones are already persisted even if the page reloads
+ * before the debounced push fires (e.g. Settings "Reset everything").
+ */
+function recordChanges(prev: LibrarySlices, next: LibrarySlices) {
+  const meta = loadMeta()
+  const at = new Date().toISOString()
+  let dirty = false
+  const kill = (k: string) => {
+    meta.deleted[k] = at
+    dirty = true
+  }
+  const touch = (k: string) => {
+    meta.set[k] = at
+    dirty = true
+  }
+
+  const pShows = prev.shows ?? {}
+  const nShows = next.shows ?? {}
+  for (const id of Object.keys(pShows)) {
+    if (!nShows[Number(id)]) kill(`show:${id}`)
+  }
+  for (const [id, n] of Object.entries(nShows)) {
+    const p = pShows[Number(id)]
+    if (!p || p === n) continue
+    for (const [key, pr] of Object.entries(p.watched ?? {})) {
+      const nr = n.watched?.[key]
+      if (!nr) kill(`ep:${id}:${key}`)
+      else if (pr.emotion && !nr.emotion) kill(`emo:${id}:${key}`)
+    }
+    for (const [key, nr] of Object.entries(n.watched ?? {})) {
+      if (nr.emotion && nr.emotion !== p.watched?.[key]?.emotion) touch(`emo:${id}:${key}`)
+    }
+  }
+
+  const pMovies = prev.movies ?? {}
+  const nMovies = next.movies ?? {}
+  for (const id of Object.keys(pMovies)) {
+    if (!nMovies[Number(id)]) kill(`movie:${id}`)
+  }
+  for (const [id, n] of Object.entries(nMovies)) {
+    const p = pMovies[Number(id)]
+    if (!p || p === n) continue
+    if (p.watched && !n.watched) kill(`movie-watched:${id}`)
+    if (p.watched?.emotion && n.watched && !n.watched.emotion) kill(`emo:m:${id}`)
+    if (n.watched?.emotion && n.watched.emotion !== p.watched?.emotion) touch(`emo:m:${id}`)
+  }
+
+  const nWl = new Set((next.watchlist ?? []).map((w) => `${w.type}:${w.id}`))
+  for (const w of prev.watchlist ?? []) {
+    if (!nWl.has(`${w.type}:${w.id}`)) kill(`wl:${w.type}:${w.id}`)
+  }
+
+  const nComments = new Map((next.comments ?? []).map((c) => [c.id, c]))
+  for (const c of prev.comments ?? []) {
+    const n = nComments.get(c.id)
+    if (!n) kill(`comment:${c.id}`)
+    else if (c.likedByMe && !n.likedByMe) kill(`like:${c.id}`)
+    else if (!c.likedByMe && n.likedByMe) touch(`like:${c.id}`)
+  }
+
+  if (prev.profile !== next.profile) touch('profile')
+
+  if (dirty) saveMeta(meta)
+}
+
+/**
+ * Record deletions implied by replacing the local library wholesale (backup
+ * import): everything the replacement drops gets a tombstone, so the intent
+ * survives the immediate page reload and propagates to the cloud instead of
+ * being silently re-merged from the remote doc.
+ */
+export function noteLibraryReplaced(next: {
+  shows?: Record<number, TrackedShow>
+  movies?: Record<number, TrackedMovie>
+  watchlist?: WatchlistItem[]
+  comments?: Comment[]
+  profile?: Profile
+}) {
+  const prev = pickData()
+  recordChanges(prev, {
+    shows: next.shows ?? {},
+    movies: next.movies ?? {},
+    watchlist: next.watchlist ?? [],
+    comments: next.comments ?? [],
+    profile: next.profile ?? prev.profile,
+  })
+}
+
+function pickData(): LibraryData {
+  const s = useLibrary.getState()
+  return {
+    shows: s.shows,
+    movies: s.movies,
+    watchlist: s.watchlist,
+    comments: s.comments,
+    profile: s.profile,
+    sync: loadMeta(),
+  }
+}
+
+// ---------- merge ----------
+
+function earlier(a: string, b: string): string {
+  return a <= b ? a : b
+}
+
+/** Last-writer-wins pick between the local and remote value for one key. */
+function pickLww<T>(
+  key: string,
+  local: T | undefined,
+  remote: T | undefined,
+  localMeta: SyncMeta,
+  remoteMeta: SyncMeta,
+): T | undefined {
+  const lt = localMeta.set[key] ?? ''
+  const rt = remoteMeta.set[key] ?? ''
+  if (rt > lt) return remote ?? local
+  if (lt > rt) return local ?? remote
+  return local ?? remote
+}
+
+function mergeWatchRecord(
+  local: WatchRecord,
+  remote: WatchRecord,
+  emoKey: string,
+  localMeta: SyncMeta,
+  remoteMeta: SyncMeta,
+): WatchRecord {
+  return {
+    watchedAt: earlier(local.watchedAt, remote.watchedAt),
+    emotion: pickLww(emoKey, local.emotion, remote.emotion, localMeta, remoteMeta),
+  }
+}
+
+function mergeShows(
+  local: Record<number, TrackedShow>,
+  remote: Record<number, TrackedShow>,
+  localMeta: SyncMeta,
+  remoteMeta: SyncMeta,
+): Record<number, TrackedShow> {
+  const out: Record<number, TrackedShow> = { ...remote }
+  for (const [idStr, ls] of Object.entries(local)) {
+    const id = Number(idStr)
+    const rs = out[id]
+    if (!rs) {
+      out[id] = ls
+      continue
+    }
+    const watched: Record<string, WatchRecord> = { ...rs.watched }
+    for (const [key, rec] of Object.entries(ls.watched)) {
+      watched[key] = watched[key]
+        ? mergeWatchRecord(rec, watched[key], `emo:${id}:${key}`, localMeta, remoteMeta)
+        : rec
+    }
+    out[id] = {
+      // prefer the snapshot captured most recently (larger episode data wins ties)
+      snapshot:
+        ls.snapshot.totalEpisodes >= rs.snapshot.totalEpisodes ? ls.snapshot : rs.snapshot,
+      addedAt: earlier(ls.addedAt, rs.addedAt),
+      watched,
+      favorite: ls.favorite || rs.favorite,
+    }
+  }
+  return out
+}
+
+function mergeMovies(
+  local: Record<number, TrackedMovie>,
+  remote: Record<number, TrackedMovie>,
+  localMeta: SyncMeta,
+  remoteMeta: SyncMeta,
+): Record<number, TrackedMovie> {
+  const out: Record<number, TrackedMovie> = { ...remote }
+  for (const [idStr, lm] of Object.entries(local)) {
+    const id = Number(idStr)
+    const rm = out[id]
+    if (!rm) {
+      out[id] = lm
+      continue
+    }
+    out[id] = {
+      snapshot: lm.snapshot,
+      addedAt: earlier(lm.addedAt, rm.addedAt),
+      watched:
+        lm.watched && rm.watched
+          ? mergeWatchRecord(lm.watched, rm.watched, `emo:m:${id}`, localMeta, remoteMeta)
+          : lm.watched ?? rm.watched,
+      favorite: lm.favorite || rm.favorite,
+    }
+  }
+  return out
+}
+
+function mergeWatchlist(local: WatchlistItem[], remote: WatchlistItem[]): WatchlistItem[] {
+  const seen = new Map<string, WatchlistItem>()
+  for (const item of [...remote, ...local]) {
+    const key = `${item.type}:${item.id}`
+    const prev = seen.get(key)
+    if (!prev || item.addedAt < prev.addedAt) seen.set(key, item)
+  }
+  return [...seen.values()].sort((a, b) => (a.addedAt < b.addedAt ? 1 : -1))
+}
+
+function mergeComments(
+  local: Comment[],
+  remote: Comment[],
+  localMeta: SyncMeta,
+  remoteMeta: SyncMeta,
+): Comment[] {
+  const seen = new Map<string, Comment>()
+  for (const c of remote) seen.set(c.id, c)
+  for (const c of local) {
+    const r = seen.get(c.id)
+    if (!r) {
+      seen.set(c.id, c)
+      continue
+    }
+    // Keep the copy from the side that changed the like state most recently;
+    // with no recorded times fall back to "likedByMe true wins".
+    const key = `like:${c.id}`
+    const lt = localMeta.set[key] ?? localMeta.deleted[key] ?? ''
+    const rt = remoteMeta.set[key] ?? remoteMeta.deleted[key] ?? ''
+    if (lt > rt) seen.set(c.id, c)
+    else if (rt > lt) seen.set(c.id, r)
+    else if (c.likedByMe && !r.likedByMe) seen.set(c.id, c)
+  }
+  return [...seen.values()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+}
+
+function mergeProfile(
+  local: Profile,
+  remote: Profile | undefined,
+  localMeta: SyncMeta,
+  remoteMeta: SyncMeta,
+): Profile {
+  // Docs from older schemas may lack a profile entirely.
+  if (!remote) return local
+  const lt = localMeta.set['profile'] ?? ''
+  const rt = remoteMeta.set['profile'] ?? ''
+  let base: Profile
+  if (lt || rt) {
+    // Last writer wins once either side has recorded a profile edit.
+    base = rt > lt ? remote : local
+  } else if (local.name === 'Watcher' && remote.name !== 'Watcher') {
+    // Legacy heuristic: prefer a customized profile over the untouched default.
+    base = remote
+  } else {
+    base = local
+  }
+  return { ...base, joinedAt: earlier(local.joinedAt, remote.joinedAt ?? local.joinedAt) }
+}
+
+/** Remove everything the (already merged) tombstone set says is deleted. */
+function applyDeletions(data: LibraryData, meta: SyncMeta): LibraryData {
+  const shows: Record<number, TrackedShow> = {}
+  for (const [idStr, s] of Object.entries(data.shows ?? {})) {
+    const id = Number(idStr)
+    if (isDeleted(meta, `show:${id}`, s.addedAt)) continue
+    const watched: Record<string, WatchRecord> = {}
+    let changed = false
+    for (const [key, rec] of Object.entries(s.watched ?? {})) {
+      if (isDeleted(meta, `ep:${id}:${key}`, rec.watchedAt)) {
+        changed = true
+        continue
+      }
+      if (rec.emotion && isDeleted(meta, `emo:${id}:${key}`)) {
+        watched[key] = { watchedAt: rec.watchedAt }
+        changed = true
+        continue
+      }
+      watched[key] = rec
+    }
+    shows[id] = changed ? { ...s, watched } : s
+  }
+
+  const movies: Record<number, TrackedMovie> = {}
+  for (const [idStr, m] of Object.entries(data.movies ?? {})) {
+    const id = Number(idStr)
+    if (isDeleted(meta, `movie:${id}`, m.addedAt)) continue
+    let out = m
+    if (out.watched && isDeleted(meta, `movie-watched:${id}`, out.watched.watchedAt)) {
+      out = { ...out, watched: null }
+    }
+    if (out.watched?.emotion && isDeleted(meta, `emo:m:${id}`)) {
+      out = { ...out, watched: { watchedAt: out.watched.watchedAt } }
+    }
+    movies[id] = out
+  }
+
+  const watchlist = (data.watchlist ?? []).filter(
+    (w) => !isDeleted(meta, `wl:${w.type}:${w.id}`, w.addedAt),
+  )
+
+  const comments = (data.comments ?? [])
+    .filter((c) => !isDeleted(meta, `comment:${c.id}`, c.createdAt))
+    .map((c) =>
+      c.likedByMe && isDeleted(meta, `like:${c.id}`)
+        ? { ...c, likedByMe: false, likes: Math.max(0, c.likes - 1) }
+        : c,
+    )
+
+  return { ...data, shows, movies, watchlist, comments }
+}
+
+export function mergeLibraries(local: LibraryData, remote: LibraryData): LibraryData {
+  const localMeta = normMeta(local.sync)
+  const remoteMeta = normMeta(remote.sync)
+  const meta = mergeMeta(localMeta, remoteMeta)
+  // Apply tombstones to each side BEFORE the union, so a deleted copy cannot
+  // be resurrected and cannot leak stale fields (e.g. an old addedAt) into
+  // an item that was legitimately re-added on the other side.
+  const l = applyDeletions(local, meta)
+  const r = applyDeletions(remote, meta)
+  return {
+    shows: mergeShows(l.shows ?? {}, r.shows ?? {}, localMeta, remoteMeta),
+    movies: mergeMovies(l.movies ?? {}, r.movies ?? {}, localMeta, remoteMeta),
+    watchlist: mergeWatchlist(l.watchlist ?? [], r.watchlist ?? []),
+    comments: mergeComments(l.comments ?? [], r.comments ?? [], localMeta, remoteMeta),
+    profile: mergeProfile(l.profile, r.profile, localMeta, remoteMeta),
+    sync: meta,
+  }
+}
+
+// ---------- sync engine ----------
+
+let status: SyncStatus = supabase ? { state: 'signed-out' } : { state: 'off' }
+const listeners = new Set<Listener>()
+let pushTimer: ReturnType<typeof setTimeout> | null = null
+let applyingRemote = false
+let lastPushed = ''
+let initialized = false
+let activeUserId: string | null = null
+let realtimeUserId: string | null = null
+
+function setStatus(s: SyncStatus) {
+  status = s
+  for (const l of listeners) l(s)
+}
+
+export function getSyncStatus(): SyncStatus {
+  return status
+}
+
+export function onSyncStatus(l: Listener): () => void {
+  listeners.add(l)
+  return () => listeners.delete(l)
+}
+
+async function currentUser() {
+  if (!supabase) return null
+  const { data } = await supabase.auth.getUser()
+  return data.user ?? null
+}
+
+async function push() {
+  if (!supabase) return
+  const user = await currentUser()
+  if (!user) return
+  const data = pickData()
+  const serialized = JSON.stringify(data)
+  if (serialized === lastPushed) return
+  setStatus({ state: 'syncing' })
+  const { error } = await supabase.from('libraries').upsert({
+    user_id: user.id,
+    data,
+    device_id: deviceId(),
+    updated_at: new Date().toISOString(),
+  })
+  if (error) {
+    setStatus({ state: 'error', message: error.message, email: user.email ?? '' })
+    return
+  }
+  lastPushed = serialized
+  setStatus({ state: 'synced', at: new Date().toISOString(), email: user.email ?? '' })
+}
+
+function schedulePush() {
+  if (applyingRemote) return
+  if (pushTimer) clearTimeout(pushTimer)
+  pushTimer = setTimeout(() => void push(), 1500)
+}
+
+/** Fetch the remote library, merge with local, apply, and push back if needed. */
+export async function pullAndMerge(): Promise<void> {
+  if (!supabase) return
+  const user = await currentUser()
+  if (!user) return
+  const email = user.email ?? ''
+  setStatus({ state: 'syncing' })
+  try {
+    const { data: row, error } = await supabase
+      .from('libraries')
+      .select('data')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (error) {
+      setStatus({ state: 'error', message: error.message, email })
+      return
+    }
+    const local = pickData()
+    const merged = row?.data ? mergeLibraries(local, row.data as LibraryData) : local
+    if (merged.sync) saveMeta(merged.sync)
+    const { sync: _sync, ...slices } = merged
+    applyingRemote = true
+    useLibrary.setState(slices)
+    applyingRemote = false
+    setStatus({ state: 'synced', at: new Date().toISOString(), email })
+    // If local had anything the remote lacked, push the merged doc back.
+    if (JSON.stringify(merged) !== JSON.stringify(row?.data ?? null)) await push()
+  } catch (e) {
+    applyingRemote = false
+    setStatus({ state: 'error', message: e instanceof Error ? e.message : String(e), email })
+  }
+}
+
+function subscribeRealtime(userId: string) {
+  // supabase-js emits SIGNED_IN repeatedly (tab focus, token refresh); only
+  // ever hold one realtime subscription per signed-in user.
+  if (!supabase || realtimeUserId === userId) return
+  realtimeUserId = userId
+  supabase
+    .channel('library-sync')
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'libraries', filter: `user_id=eq.${userId}` },
+      (payload) => {
+        const row = payload.new as { device_id?: string }
+        if (row.device_id === deviceId()) return // our own push echoing back
+        void pullAndMerge()
+      },
+    )
+    .subscribe()
+}
+
+/** Idempotent per user: first pull + realtime subscription for a session. */
+function connect(user: { id: string; email?: string }) {
+  if (activeUserId === user.id) return
+  activeUserId = user.id
+  // Switching accounts in the same browser: wipe the previous account's local
+  // library and tombstones so they are not unioned into (or delete items
+  // from) the new account's cloud data.
+  const prevUser = localStorage.getItem(LAST_USER_KEY)
+  if (prevUser && prevUser !== user.id) {
+    applyingRemote = true
+    useLibrary.getState().resetAll()
+    applyingRemote = false
+    clearMeta()
+    lastPushed = ''
+  }
+  localStorage.setItem(LAST_USER_KEY, user.id)
+  void pullAndMerge()
+  subscribeRealtime(user.id)
+}
+
+/** Wire everything up. Call once at app startup; safe no-op without config. */
+export function initSync() {
+  if (!supabase || initialized) return
+  initialized = true
+
+  useLibrary.subscribe((state, prev) => {
+    if (!applyingRemote) recordChanges(prev, state)
+    schedulePush()
+  })
+
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session?.user) {
+      connect(session.user)
+    }
+    if (event === 'SIGNED_OUT') {
+      supabase?.removeAllChannels()
+      activeUserId = null
+      realtimeUserId = null
+      lastPushed = ''
+      setStatus({ state: 'signed-out' })
+    }
+  })
+
+  // Resume an existing session on load.
+  void (async () => {
+    const user = await currentUser()
+    if (user) connect(user)
+  })()
+
+  // Re-pull when the tab regains focus (cheap freshness without polling).
+  window.addEventListener('focus', () => {
+    if (status.state === 'synced') void pullAndMerge()
+  })
+}
+
+// ---------- auth helpers for the UI ----------
+
+export async function signUp(email: string, password: string): Promise<string | null> {
+  if (!supabase) return 'Sync is not configured in this build.'
+  const { error } = await supabase.auth.signUp({ email, password })
+  return error ? error.message : null
+}
+
+export async function signIn(email: string, password: string): Promise<string | null> {
+  if (!supabase) return 'Sync is not configured in this build.'
+  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  return error ? error.message : null
+}
+
+export async function signOut(): Promise<void> {
+  if (!supabase) return
+  await supabase.auth.signOut()
+}
+
+export async function syncNow(): Promise<void> {
+  await pullAndMerge()
+}

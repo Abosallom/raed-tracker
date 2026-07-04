@@ -10,7 +10,9 @@ import Watchlist from './pages/Watchlist'
 import Upcoming from './pages/Upcoming'
 import Stats from './pages/Stats'
 import Profile from './pages/Profile'
+import Account from './pages/Account'
 import Settings from './pages/Settings'
+import { Toaster } from './components/toast'
 
 function Nav() {
   const item = (to: string, icon: string, label: string) => (
@@ -33,6 +35,7 @@ function Nav() {
       <div className="nav-section">You</div>
       {item('/stats', '📊', 'Stats')}
       {item('/profile', '👤', 'Profile')}
+      {item('/account', '🔐', 'Account')}
       {item('/settings', '⚙️', 'Settings')}
     </nav>
   )
@@ -60,9 +63,11 @@ export default function App() {
           <Route path="/upcoming" element={<Upcoming />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/account" element={<Account />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
+      <Toaster />
     </div>
   )
 }

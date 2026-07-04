@@ -3,6 +3,8 @@
 import { useRef, useState } from 'react'
 import { getApiKey, isDemoMode, setApiKey } from '../api/tmdb'
 import { useLibrary } from '../store/library'
+import { noteLibraryReplaced } from '../store/sync'
+import { AccountSyncCard } from '../components/AccountSync'
 import './settings.css'
 
 const LIBRARY_STORAGE_KEY = 'showtrackr_library'
@@ -105,6 +107,10 @@ export default function Settings() {
     ) {
       return
     }
+    // Record sync tombstones for everything the imported backup drops, so a
+    // signed-in user's "replace" survives the reload instead of being
+    // re-merged back from the cloud copy.
+    noteLibraryReplaced((parsed as { state: Parameters<typeof noteLibraryReplaced>[0] }).state)
     localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(parsed))
     window.location.reload()
   }
@@ -126,6 +132,9 @@ export default function Settings() {
       <p className="page-subtitle">Data source, backups and app info.</p>
 
       <div className="settings-stack">
+        {/* ---------- Card 0: Account & cloud sync ---------- */}
+        <AccountSyncCard />
+
         {/* ---------- Card 1: Data source ---------- */}
         <section className="card">
           <div className="settings-card-head">

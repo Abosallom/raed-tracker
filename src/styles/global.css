@@ -349,6 +349,77 @@ textarea:focus {
   background: var(--green);
 }
 
+/* ---------- motion & skeletons (shared utilities) ---------- */
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fade-in-up 0.3s ease both;
+}
+
+/* Apply to a grid/row container to stagger its children's entrance. */
+.stagger > * {
+  animation: fade-in-up 0.35s ease both;
+}
+.stagger > *:nth-child(2) { animation-delay: 0.03s; }
+.stagger > *:nth-child(3) { animation-delay: 0.06s; }
+.stagger > *:nth-child(4) { animation-delay: 0.09s; }
+.stagger > *:nth-child(5) { animation-delay: 0.12s; }
+.stagger > *:nth-child(6) { animation-delay: 0.15s; }
+.stagger > *:nth-child(7) { animation-delay: 0.18s; }
+.stagger > *:nth-child(n + 8) { animation-delay: 0.21s; }
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    100deg,
+    var(--bg-elev) 40%,
+    var(--bg-elev-2) 50%,
+    var(--bg-elev) 60%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.skeleton-poster {
+  aspect-ratio: 2 / 3;
+  width: 100%;
+}
+
+.skeleton-line {
+  height: 12px;
+  margin-top: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in,
+  .stagger > *,
+  .skeleton,
+  .poster-card,
+  .toast {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 760px) {
