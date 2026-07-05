@@ -23,19 +23,41 @@ import { episodeKey } from '../types'
 export function showToSnapshot(s: ShowDetail): ShowSnapshot {
   const counts: Record<number, number> = {}
   const aired: Record<number, number> = {}
-  const last = s.last_episode_to_air
+  const rawLast = s.last_episode_to_air
+  // A Specials episode (season 0) as "last aired" says nothing about regular
+  // seasons — using it would zero every aired count. Fall back to deriving
+  // from next_episode_to_air instead, or leave counts unset (airedEpisodeCount
+  // then treats the season as fully aired) rather than falsely report 0.
+  const last = rawLast && rawLast.season_number > 0 ? rawLast : null
+  const next = s.next_episode_to_air
+  const usableNext = next && next.season_number > 0 ? next : null
   for (const season of s.seasons) {
     if (season.season_number <= 0) continue
     counts[season.season_number] = season.episode_count
     // Episodes aired so far, derived from the last episode TMDB says has aired.
-    if (!last) aired[season.season_number] = 0
-    else if (season.season_number < last.season_number)
-      aired[season.season_number] = season.episode_count
-    else if (season.season_number === last.season_number)
-      aired[season.season_number] = Math.min(season.episode_count, last.episode_number)
-    else aired[season.season_number] = 0
+    if (last) {
+      if (season.season_number < last.season_number)
+        aired[season.season_number] = season.episode_count
+      else if (season.season_number === last.season_number)
+        aired[season.season_number] = Math.min(season.episode_count, last.episode_number)
+      else aired[season.season_number] = 0
+    } else if (rawLast && usableNext) {
+      // Last aired was a special — anchor on the next regular episode instead.
+      if (season.season_number < usableNext.season_number)
+        aired[season.season_number] = season.episode_count
+      else if (season.season_number === usableNext.season_number)
+        aired[season.season_number] = Math.max(
+          0,
+          Math.min(season.episode_count, usableNext.episode_number - 1),
+        )
+      else aired[season.season_number] = 0
+    } else if (!rawLast) {
+      // Nothing has aired at all (upcoming show).
+      aired[season.season_number] = 0
+    }
+    // else: last aired is a special and no next episode is scheduled — skip
+    // the entry so airedEpisodeCount falls back to the full season count.
   }
-  const next = s.next_episode_to_air
   return {
     id: s.id,
     name: s.name,

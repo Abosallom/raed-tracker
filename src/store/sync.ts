@@ -83,6 +83,21 @@ function deviceId(): string {
 
 const META_KEY = 'showtrackr_sync_meta'
 const LAST_USER_KEY = 'showtrackr_sync_user'
+/** Where the pre-wipe library is stashed when switching accounts (recovery). */
+const WIPED_BACKUP_KEY = 'showtrackr_wiped_library_backup'
+
+// Captured ONCE at module load, before any auth event can rewrite it.
+// connect()'s account-switch wipe must compare against the user this tab's
+// data actually belongs to: reading localStorage at event time races the
+// cross-tab SIGNED_IN broadcast — the signing-in tab writes the NEW user id
+// first, so a background tab still holding the old user's library would skip
+// the wipe and merge it into the new account's cloud data.
+let lastSyncUser: string | null = null
+try {
+  lastSyncUser = localStorage.getItem(LAST_USER_KEY)
+} catch {
+  // storage unavailable — treated as no previous user
+}
 
 function emptyMeta(): SyncMeta {
   return { deleted: {}, set: {} }
@@ -161,6 +176,15 @@ function recordChanges(prev: LibrarySlices, next: LibrarySlices) {
     meta.set[k] = at
     dirty = true
   }
+  // Re-added item with a stale tombstone: record a fresh set-time so
+  // isDeleted()'s escape hatch rescues it. Restored backups and re-run
+  // TV Time imports keep their ORIGINAL addedAt/watchedAt, which predates any
+  // tombstone recorded since the export — without this the first pullAndMerge
+  // after a restore silently wipes the restored data again and pushes the
+  // wipe to the cloud. Only tombstoned keys are touched to keep meta small.
+  const revive = (k: string) => {
+    if (meta.deleted[k]) touch(k)
+  }
 
   const pShows = prev.shows ?? {}
   const nShows = next.shows ?? {}
@@ -169,7 +193,13 @@ function recordChanges(prev: LibrarySlices, next: LibrarySlices) {
   }
   for (const [id, n] of Object.entries(nShows)) {
     const p = pShows[Number(id)]
-    if (!p || p === n) continue
+    if (!p) {
+      revive(`show:${id}`)
+      for (const key of Object.keys(n.watched ?? {})) revive(`ep:${id}:${key}`)
+      continue
+    }
+    if (p === n) continue
+    if (p.snapshot !== n.snapshot) touch(`snap:${id}`)
     if ((p.paused ?? false) !== (n.paused ?? false)) touch(`pause:${id}`)
     if ((p.favorite ?? false) !== (n.favorite ?? false)) touch(`fav:${id}`)
     for (const [key, pr] of Object.entries(p.watched ?? {})) {
@@ -181,6 +211,7 @@ function recordChanges(prev: LibrarySlices, next: LibrarySlices) {
       }
     }
     for (const [key, nr] of Object.entries(n.watched ?? {})) {
+      if (!p.watched?.[key]) revive(`ep:${id}:${key}`)
       if (nr.emotion && nr.emotion !== p.watched?.[key]?.emotion) touch(`emo:${id}:${key}`)
       if (nr.favoriteCast && nr.favoriteCast.id !== p.watched?.[key]?.favoriteCast?.id)
         touch(`fc:${id}:${key}`)
@@ -194,24 +225,38 @@ function recordChanges(prev: LibrarySlices, next: LibrarySlices) {
   }
   for (const [id, n] of Object.entries(nMovies)) {
     const p = pMovies[Number(id)]
-    if (!p || p === n) continue
+    if (!p) {
+      revive(`movie:${id}`)
+      if (n.watched) revive(`movie-watched:${id}`)
+      continue
+    }
+    if (p === n) continue
     if ((p.favorite ?? false) !== (n.favorite ?? false)) touch(`fav:m:${id}`)
     if (p.watched && !n.watched) kill(`movie-watched:${id}`)
+    if (!p.watched && n.watched) revive(`movie-watched:${id}`)
     if (p.watched?.emotion && n.watched && !n.watched.emotion) kill(`emo:m:${id}`)
     if (n.watched?.emotion && n.watched.emotion !== p.watched?.emotion) touch(`emo:m:${id}`)
   }
 
   const nWl = new Set((next.watchlist ?? []).map((w) => `${w.type}:${w.id}`))
+  const pWl = new Set((prev.watchlist ?? []).map((w) => `${w.type}:${w.id}`))
   for (const w of prev.watchlist ?? []) {
     if (!nWl.has(`${w.type}:${w.id}`)) kill(`wl:${w.type}:${w.id}`)
   }
+  for (const w of next.watchlist ?? []) {
+    if (!pWl.has(`${w.type}:${w.id}`)) revive(`wl:${w.type}:${w.id}`)
+  }
 
   const nComments = new Map((next.comments ?? []).map((c) => [c.id, c]))
+  const pComments = new Set((prev.comments ?? []).map((c) => c.id))
   for (const c of prev.comments ?? []) {
     const n = nComments.get(c.id)
     if (!n) kill(`comment:${c.id}`)
     else if (c.likedByMe && !n.likedByMe) kill(`like:${c.id}`)
     else if (!c.likedByMe && n.likedByMe) touch(`like:${c.id}`)
+  }
+  for (const c of next.comments ?? []) {
+    if (!pComments.has(c.id)) revive(`comment:${c.id}`)
   }
 
   const pLists = new Map((prev.lists ?? []).map((l) => [l.id, l]))
@@ -223,6 +268,7 @@ function recordChanges(prev: LibrarySlices, next: LibrarySlices) {
     const p = pLists.get(id)
     if (!p) {
       touch(`list:${id}`)
+      for (const it of n.items) revive(`li:${id}:${it.type}:${it.id}`)
       continue
     }
     if (p === n) continue
@@ -358,10 +404,23 @@ function mergeShows(
     const frt = remoteMeta.set[fk] ?? ''
     const favorite =
       flt || frt ? (frt > flt ? rs.favorite : ls.favorite) : ls.favorite || rs.favorite
+    // Snapshot is LWW on the snap:<id> touch-times recorded by refreshShow —
+    // "larger totalEpisodes wins" alone could never propagate a legitimate
+    // TMDB episode-count correction (a stale larger copy always won). Older
+    // docs without touch-times keep that heuristic as the fallback.
+    const sk = `snap:${id}`
+    const slt = localMeta.set[sk] ?? ''
+    const srt = remoteMeta.set[sk] ?? ''
+    const snapshot =
+      slt || srt
+        ? srt > slt
+          ? rs.snapshot
+          : ls.snapshot
+        : ls.snapshot.totalEpisodes >= rs.snapshot.totalEpisodes
+          ? ls.snapshot
+          : rs.snapshot
     out[id] = {
-      // prefer the snapshot captured most recently (larger episode data wins ties)
-      snapshot:
-        ls.snapshot.totalEpisodes >= rs.snapshot.totalEpisodes ? ls.snapshot : rs.snapshot,
+      snapshot,
       addedAt: earlier(ls.addedAt, rs.addedAt),
       watched,
       favorite,
@@ -578,6 +637,25 @@ function applyDeletions(data: LibraryData, meta: SyncMeta): LibraryData {
   return { ...data, shows, movies, watchlist, comments, lists }
 }
 
+/**
+ * Deterministic stringify with sorted object keys. The library doc round-trips
+ * through a Postgres jsonb column, which does not preserve key order — a plain
+ * JSON.stringify comparison therefore saw every pulled doc as "changed" and
+ * re-uploaded the full library (and fanned realtime pulls out to every other
+ * device) after every pull, even when nothing differed.
+ */
+export function stableStringify(v: unknown): string {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null'
+  if (Array.isArray(v)) return `[${v.map((x) => stableStringify(x)).join(',')}]`
+  const rec = v as Record<string, unknown>
+  const parts: string[] = []
+  for (const k of Object.keys(rec).sort()) {
+    if (rec[k] === undefined) continue
+    parts.push(`${JSON.stringify(k)}:${stableStringify(rec[k])}`)
+  }
+  return `{${parts.join(',')}}`
+}
+
 export function mergeLibraries(local: LibraryData, remote: LibraryData): LibraryData {
   const localMeta = normMeta(local.sync)
   const remoteMeta = normMeta(remote.sync)
@@ -677,14 +755,20 @@ export async function pullAndMerge(): Promise<void> {
     }
     const local = pickData()
     const merged = row?.data ? mergeLibraries(local, row.data as LibraryData) : local
-    if (merged.sync) saveMeta(merged.sync)
-    const { sync: _sync, ...slices } = merged
-    applyingRemote = true
-    useLibrary.setState(slices)
-    applyingRemote = false
+    const mergedStr = stableStringify(merged)
+    // Only touch the store (new references for every object = full re-render
+    // + localStorage rewrite) when the merge actually changed something.
+    if (mergedStr !== stableStringify(local)) {
+      if (merged.sync) saveMeta(merged.sync)
+      const { sync: _sync, ...slices } = merged
+      applyingRemote = true
+      useLibrary.setState(slices)
+      applyingRemote = false
+    }
     setStatus({ state: 'synced', at: new Date().toISOString(), email })
     // If local had anything the remote lacked, push the merged doc back.
-    if (JSON.stringify(merged) !== JSON.stringify(row?.data ?? null)) await push()
+    // Key-order-insensitive compare: jsonb does not preserve key order.
+    if (mergedStr !== stableStringify(row?.data ?? null)) await push()
   } catch (e) {
     applyingRemote = false
     setStatus({ state: 'error', message: e instanceof Error ? e.message : String(e), email })
@@ -717,15 +801,29 @@ function connect(user: { id: string; email?: string }) {
   // Switching accounts in the same browser: wipe the previous account's local
   // library and tombstones so they are not unioned into (or delete items
   // from) the new account's cloud data.
-  const prevUser = localStorage.getItem(LAST_USER_KEY)
+  const prevUser = lastSyncUser
   if (prevUser && prevUser !== user.id) {
+    // Stash what is about to be wiped so the data is recoverable (the local
+    // library may include work done while signed out, not just the previous
+    // account's copy).
+    try {
+      const wiped = localStorage.getItem('showtrackr_library')
+      if (wiped) localStorage.setItem(WIPED_BACKUP_KEY, wiped)
+    } catch {
+      // best effort — the wipe below is still required for account isolation
+    }
     applyingRemote = true
     useLibrary.getState().resetAll()
     applyingRemote = false
     clearMeta()
     lastPushed = ''
   }
-  localStorage.setItem(LAST_USER_KEY, user.id)
+  lastSyncUser = user.id
+  try {
+    localStorage.setItem(LAST_USER_KEY, user.id)
+  } catch {
+    // storage unavailable — next session just can't detect an account switch
+  }
   void pullAndMerge()
   subscribeRealtime(user.id)
 }

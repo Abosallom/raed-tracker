@@ -358,10 +358,18 @@ export default function ShowDetailPage() {
         ).length
       : 0
 
-  // Episodes of the selected season that have already aired ("mark season" only covers these).
-  const seasonAiredCount = seasonDetail
-    ? seasonDetail.episodes.filter((ep) => !(ep.air_date != null && ep.air_date > todayStr)).length
-    : 0
+  // Episodes of the selected season that have already aired ("mark season" only
+  // covers these). For tracked shows this MUST match what markSeasonWatched()
+  // marks (snapshot-derived airedEpisodeCount) — counting null-air-date
+  // episodes as aired would leave a "Mark season watched" button that does
+  // nothing while still toasting success.
+  const seasonAiredCount =
+    seasonDetail && season != null
+      ? tracked
+        ? airedEpisodeCount(tracked, season)
+        : seasonDetail.episodes.filter((ep) => !(ep.air_date != null && ep.air_date > todayStr))
+            .length
+      : 0
 
   const nextAir = detail.next_episode_to_air
   const nextAirDays = nextAir?.air_date ? daysUntil(nextAir.air_date) : null

@@ -128,8 +128,16 @@ export function refreshFollowedShows(options?: { force?: boolean }): Promise<voi
 async function runRefresh(force: boolean): Promise<void> {
   try {
     const map = readRefreshedMap()
+    // Least-recently-refreshed first (never-refreshed sorts oldest), so runs
+    // rotate through the whole library instead of always re-fetching the same
+    // MAX_PER_RUN lowest-id shows when more than that are stale/forced.
     const candidates = Object.values(useLibrary.getState().shows)
       .filter((s) => !s.paused && (force || isStale(map, s.snapshot.id)))
+      .sort(
+        (a, b) =>
+          (map[String(a.snapshot.id)] ?? '').localeCompare(map[String(b.snapshot.id)] ?? '') ||
+          a.snapshot.id - b.snapshot.id,
+      )
       .slice(0, MAX_PER_RUN)
 
     if (candidates.length === 0) return
@@ -153,7 +161,10 @@ async function runRefresh(force: boolean): Promise<void> {
           }
         }
       } catch {
-        // swallow individual fetch errors; try the next show
+        // Swallow individual fetch errors, but still record the attempt so a
+        // permanently failing show (id gone from TMDB, wrong catalog) doesn't
+        // stay "stale" forever and starve every higher-id show of refreshes.
+        writeRefreshedAt(id)
       }
       if (i < candidates.length - 1) await sleep(GAP_MS)
     }

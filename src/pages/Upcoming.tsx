@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import type { SearchResult, ShowDetail } from '../types'
+import type { SearchResult, ShowDetail, TrackedShow } from '../types'
 import { episodeKey } from '../types'
 import { getShowDetail, isDemoMode, upcomingMovies } from '../api/tmdb'
 import { MOCK_SHOWS } from '../api/mockData'
@@ -15,17 +15,17 @@ import './upcoming.css'
 // ---------- module-level cache (survives remounts, caps refetching) ----------
 
 const MAX_SHOW_FETCHES = 40
-const showDetailCache = new Map<number, Promise<ShowDetail>>()
+const SHOW_DETAIL_TTL_MS = 6 * 60 * 60 * 1000 // long-lived tabs still see fresh air dates
+const showDetailCache = new Map<number, { promise: Promise<ShowDetail>; at: number }>()
 
 function cachedShowDetail(id: number): Promise<ShowDetail> {
-  let p = showDetailCache.get(id)
-  if (!p) {
-    p = getShowDetail(id)
-    // Don't poison the cache with failures — allow a retry next visit.
-    p.catch(() => showDetailCache.delete(id))
-    showDetailCache.set(id, p)
-  }
-  return p
+  const hit = showDetailCache.get(id)
+  if (hit && Date.now() - hit.at <= SHOW_DETAIL_TTL_MS) return hit.promise
+  const promise = getShowDetail(id)
+  // Don't poison the cache with failures — allow a retry next visit.
+  promise.catch(() => showDetailCache.delete(id))
+  showDetailCache.set(id, { promise, at: Date.now() })
+  return promise
 }
 
 // ---------- filter persistence ----------
@@ -261,17 +261,34 @@ export default function Upcoming() {
   const demo = isDemoMode()
 
   // Stable key of followed non-paused ids so re-renders from watch-toggles
-  // (new `shows` object) don't retrigger the fetch effect.
-  const followKey = useMemo(
-    () =>
-      Object.values(shows)
-        .filter((s) => !s.paused)
-        .map((s) => s.snapshot.id)
-        .sort((a, b) => a - b)
-        .join(','),
-    [shows],
-  )
+  // (new `shows` object) don't retrigger the fetch effect. Only the first
+  // MAX_SHOW_FETCHES ids are fetched, so order by how likely each show is to
+  // actually have something on the calendar (known upcoming episode first,
+  // then still-airing shows, then most recently added) — NOT by TMDB id,
+  // which silently starved the newest shows on large libraries.
+  const followKey = useMemo(() => {
+    const rank = (s: TrackedShow): number =>
+      s.snapshot.nextEpisodeToAir?.airDate
+        ? 0
+        : /Returning|In Production/i.test(s.snapshot.status)
+          ? 1
+          : 2
+    return Object.values(shows)
+      .filter((s) => !s.paused)
+      .sort(
+        (a, b) =>
+          rank(a) - rank(b) ||
+          (a.snapshot.nextEpisodeToAir?.airDate ?? '').localeCompare(
+            b.snapshot.nextEpisodeToAir?.airDate ?? '',
+          ) ||
+          b.addedAt.localeCompare(a.addedAt) ||
+          a.snapshot.id - b.snapshot.id,
+      )
+      .map((s) => s.snapshot.id)
+      .join(',')
+  }, [shows])
   const followedCount = followKey ? followKey.split(',').length : 0
+  const truncatedCount = Math.max(0, followedCount - MAX_SHOW_FETCHES)
 
   const [entries, setEntries] = useState<UpcomingEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -540,6 +557,13 @@ export default function Upcoming() {
                 </div>
               </section>
             ))
+          )}
+          {truncatedCount > 0 && (
+            <p style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 14 }}>
+              Schedule checked for the {MAX_SHOW_FETCHES} shows most likely to be airing —{' '}
+              {truncatedCount} other followed {truncatedCount === 1 ? 'show was' : 'shows were'}{' '}
+              not checked.
+            </p>
           )}
         </>
       )}

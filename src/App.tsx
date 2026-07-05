@@ -1,20 +1,7 @@
-import { useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react'
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { isDemoMode } from './api/tmdb'
-import Home from './pages/Home'
-import Search from './pages/Search'
-import ShowDetail from './pages/ShowDetail'
-import MovieDetail from './pages/MovieDetail'
-import MyShows from './pages/MyShows'
-import Movies from './pages/Movies'
-import Watchlist from './pages/Watchlist'
-import Upcoming from './pages/Upcoming'
-import Stats from './pages/Stats'
-import Profile from './pages/Profile'
-import Account from './pages/Account'
-import Settings from './pages/Settings'
-import ListDetail from './pages/ListDetail'
-import Migrate from './pages/Migrate'
+import { LoadingSpinner } from './components/shared'
 import { Toaster } from './components/toast'
 import { nextEpisode, useLibrary } from './store/library'
 import {
@@ -25,6 +12,32 @@ import {
   subscribeFreshness,
 } from './lib/freshness'
 import './app-shell.css'
+
+// Route-level code splitting: each page loads on demand so the initial
+// bundle stays small. All pages ship default exports.
+const Home = lazy(() => import('./pages/Home'))
+const Search = lazy(() => import('./pages/Search'))
+const ShowDetail = lazy(() => import('./pages/ShowDetail'))
+const MovieDetail = lazy(() => import('./pages/MovieDetail'))
+const MyShows = lazy(() => import('./pages/MyShows'))
+const Movies = lazy(() => import('./pages/Movies'))
+const Watchlist = lazy(() => import('./pages/Watchlist'))
+const Upcoming = lazy(() => import('./pages/Upcoming'))
+const Stats = lazy(() => import('./pages/Stats'))
+const Profile = lazy(() => import('./pages/Profile'))
+const Account = lazy(() => import('./pages/Account'))
+const Settings = lazy(() => import('./pages/Settings'))
+const ListDetail = lazy(() => import('./pages/ListDetail'))
+const Migrate = lazy(() => import('./pages/Migrate'))
+
+/** Minimal centered fallback shown while a route chunk downloads. */
+function RouteFallback() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem 0' }}>
+      <LoadingSpinner />
+    </div>
+  )
+}
 
 /** Followed, non-paused shows with at least one aired unwatched episode. */
 function useUnwatchedShowCount(): number {
@@ -167,22 +180,24 @@ export default function App() {
           </div>
         )}
         <div key={location.pathname} className="page-enter">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/search" element={<Search />} />
-            <Route path="/show/:id" element={<ShowDetail />} />
-            <Route path="/movie/:id" element={<MovieDetail />} />
-            <Route path="/shows" element={<MyShows />} />
-            <Route path="/movies" element={<Movies />} />
-            <Route path="/watchlist" element={<Watchlist />} />
-            <Route path="/upcoming" element={<Upcoming />} />
-            <Route path="/stats" element={<Stats />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/account" element={<Account />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/list/:id" element={<ListDetail />} />
-            <Route path="/migrate" element={<Migrate />} />
-          </Routes>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/search" element={<Search />} />
+              <Route path="/show/:id" element={<ShowDetail />} />
+              <Route path="/movie/:id" element={<MovieDetail />} />
+              <Route path="/shows" element={<MyShows />} />
+              <Route path="/movies" element={<Movies />} />
+              <Route path="/watchlist" element={<Watchlist />} />
+              <Route path="/upcoming" element={<Upcoming />} />
+              <Route path="/stats" element={<Stats />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/account" element={<Account />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/list/:id" element={<ListDetail />} />
+              <Route path="/migrate" element={<Migrate />} />
+            </Routes>
+          </Suspense>
         </div>
       </main>
       <TabBar showsBadge={showsBadge} exploreDot={hasNewTrending} />

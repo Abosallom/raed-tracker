@@ -39,9 +39,12 @@ export function Toaster() {
       listeners.delete(l)
     }
   }, [])
-  if (items.length === 0) return null
+  // Toasts are the app's only confirmation channel, so they must be announced
+  // to screen readers. The live region has to be MOUNTED PERSISTENTLY (not
+  // conditionally rendered) — assistive tech only announces content inserted
+  // into an existing live region. Container is pointer-events: none in CSS.
   return (
-    <div className="toaster">
+    <div className="toaster" role="status" aria-live="polite">
       {items.map((t) => (
         <div key={t.id} className="toast">
           {t.emoji && <span className="toast-emoji">{t.emoji}</span>}

@@ -2,7 +2,7 @@
 // episode of each show, react in the EpisodeSheet, and keep momentum.
 // Rendered from the store; episode titles are fetched lazily and cached.
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -14,6 +14,7 @@ import {
   watchedCount,
 } from '../store/library'
 import type { SeasonDetail, TrackedShow } from '../types'
+import { episodeKey } from '../types'
 import { getSeasonDetail, stillUrl } from '../api/tmdb'
 import {
   getFreshnessSnapshot,
@@ -63,11 +64,17 @@ function lastActivity(show: TrackedShow): number {
 
 /** Aired episodes still unwatched AFTER the current queue row. */
 function behindCount(show: TrackedShow): number {
-  let aired = 0
+  // Count unwatched aired episodes per key: watch records outside the aired
+  // set (null-air-date episodes, mismapped import keys) must not deflate the
+  // "+N behind" badge, so a plain aired-total minus watchedCount() won't do.
+  let unwatchedAired = 0
   for (const s of Object.keys(show.snapshot.seasonEpisodeCounts).map(Number)) {
-    aired += airedEpisodeCount(show, s)
+    const aired = airedEpisodeCount(show, s)
+    for (let e = 1; e <= aired; e++) {
+      if (!show.watched[episodeKey(s, e)]) unwatchedAired++
+    }
   }
-  return aired - watchedCount(show) - 1
+  return unwatchedAired - 1
 }
 
 function parseEpKey(key: string): { season: number; episode: number } | null {
@@ -144,6 +151,10 @@ function usePullToRefresh(
 
     const onStart = (e: TouchEvent) => {
       if (busy) return
+      // Touches on the EpisodeSheet modal (a DOM child of this page) must not
+      // drive pull-to-refresh: it would block the sheet's own scrolling and
+      // fire a hidden forced refresh behind the backdrop.
+      if (e.target instanceof Element && e.target.closest('.epsheet-backdrop')) return
       const top = document.scrollingElement?.scrollTop ?? window.scrollY
       if (top > 0) return
       startY = e.touches[0].clientY
@@ -214,7 +225,9 @@ function usePullToRefresh(
 
 // ---------- queue row ----------
 
-function QueueRow({
+// Memoized: the store updates immutably per show, so a single check-off only
+// re-renders the affected row instead of all ~N queue rows.
+const QueueRow = memo(function QueueRow({
   show,
   index,
   onCaughtUp,
@@ -375,7 +388,7 @@ function QueueRow({
       </button>
     </div>
   )
-}
+})
 
 // ---------- compact rows (paused / filtered views) ----------
 
@@ -487,57 +500,67 @@ export default function MyShows() {
     [],
   )
 
-  const all = Object.values(shows)
-  const pool = favOnly ? all.filter((s) => s.favorite) : all
-  const nowMs = Date.now()
-
   // Freeze row order + staleness bucket per visit, so a checked row advances
   // IN PLACE instead of jumping to the top of the "recently watched" sort.
   const layoutRef = useRef(new Map<number, { rank: number; stale: boolean }>())
-  {
-    let nextRank = layoutRef.current.size
-    for (const s of [...all].sort((a, b) => lastActivity(b) - lastActivity(a))) {
-      if (!layoutRef.current.has(s.snapshot.id)) {
-        layoutRef.current.set(s.snapshot.id, {
-          rank: nextRank++,
-          stale: nowMs - lastActivity(s) > STALE_MS,
-        })
+
+  // All derived lists in one memo: sorting ~150 shows and scanning thousands
+  // of watch records on every unrelated state change (sheet open, PTR phase,
+  // freshness emits) caused 100ms+ renders per tap on large libraries.
+  const { all, pool, gridPool, fresh, stale, paused, notStarted, upToDate, recent, totalEps } =
+    useMemo(() => {
+      const all = Object.values(shows)
+      const pool = favOnly ? all.filter((s) => s.favorite) : all
+      const nowMs = Date.now()
+
+      let nextRank = layoutRef.current.size
+      for (const s of [...all].sort((a, b) => lastActivity(b) - lastActivity(a))) {
+        if (!layoutRef.current.has(s.snapshot.id)) {
+          layoutRef.current.set(s.snapshot.id, {
+            rank: nextRank++,
+            stale: nowMs - lastActivity(s) > STALE_MS,
+          })
+        }
       }
-    }
-  }
-  const meta = (s: TrackedShow) => layoutRef.current.get(s.snapshot.id) ?? { rank: 1e9, stale: false }
-  const byRank = (a: TrackedShow, b: TrackedShow) => meta(a).rank - meta(b).rank
+      const meta = (s: TrackedShow) =>
+        layoutRef.current.get(s.snapshot.id) ?? { rank: 1e9, stale: false }
+      const byRank = (a: TrackedShow, b: TrackedShow) => meta(a).rank - meta(b).rank
 
-  const queueable = pool.filter(
-    (s) => !s.paused && (nextEpisode(s) !== null || leavingIds.includes(s.snapshot.id)),
-  )
-  const fresh = queueable.filter((s) => !meta(s).stale).sort(byRank)
-  const stale = queueable.filter((s) => meta(s).stale).sort(byRank)
-  const paused = pool.filter((s) => s.paused).sort(byRank)
-  const notStarted = pool.filter((s) => watchedCount(s) === 0).sort(byRank)
-  const upToDate = pool
-    .filter((s) => !s.paused && watchedCount(s) > 0 && nextEpisode(s) === null)
-    .sort(byRank)
+      const queueable = pool.filter(
+        (s) => !s.paused && (nextEpisode(s) !== null || leavingIds.includes(s.snapshot.id)),
+      )
+      const fresh = queueable.filter((s) => !meta(s).stale).sort(byRank)
+      const stale = queueable.filter((s) => meta(s).stale).sort(byRank)
+      const paused = pool.filter((s) => s.paused).sort(byRank)
+      const notStarted = pool.filter((s) => watchedCount(s) === 0).sort(byRank)
+      const upToDate = pool
+        .filter((s) => !s.paused && watchedCount(s) > 0 && nextEpisode(s) === null)
+        .sort(byRank)
 
-  // Last 10 checks across every show, newest first.
-  const history: { show: TrackedShow; season: number; episode: number; watchedAt: string }[] = []
-  for (const show of pool) {
-    for (const [key, rec] of Object.entries(show.watched)) {
-      const pe = parseEpKey(key)
-      if (pe) history.push({ show, ...pe, watchedAt: rec.watchedAt })
-    }
-  }
-  history.sort((a, b) => b.watchedAt.localeCompare(a.watchedAt))
-  const recent = history.slice(0, 10)
+      // Last 10 checks across every show, newest first.
+      const history: { show: TrackedShow; season: number; episode: number; watchedAt: string }[] =
+        []
+      for (const show of pool) {
+        for (const [key, rec] of Object.entries(show.watched)) {
+          const pe = parseEpKey(key)
+          if (pe) history.push({ show, ...pe, watchedAt: rec.watchedAt })
+        }
+      }
+      history.sort((a, b) => b.watchedAt.localeCompare(a.watchedAt))
+      const recent = history.slice(0, 10)
 
-  const handleCaughtUp = (id: number) => {
+      const totalEps = all.reduce((n, s) => n + watchedCount(s), 0)
+      const gridPool = [...pool].sort(byRank)
+
+      return { all, pool, gridPool, fresh, stale, paused, notStarted, upToDate, recent, totalEps }
+    }, [shows, favOnly, leavingIds])
+
+  const handleCaughtUp = useCallback((id: number) => {
     setLeavingIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
     leaveTimers.current.push(
       window.setTimeout(() => setLeavingIds((ids) => ids.filter((x) => x !== id)), 520),
     )
-  }
-
-  const totalEps = all.reduce((n, s) => n + watchedCount(s), 0)
+  }, [])
   const queueCount = fresh.length + stale.length
 
   const toggleLayout = () =>
@@ -716,7 +739,7 @@ export default function MyShows() {
           </div>
         ) : (
           <div className="poster-grid stagger">
-            {[...pool].sort(byRank).map((s) => {
+            {gridPool.map((s) => {
               const seen = watchedCount(s)
               return (
                 <Link

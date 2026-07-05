@@ -5,7 +5,7 @@ import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getApiKey, isDemoMode, setApiKey } from '../api/tmdb'
 import { useLibrary } from '../store/library'
-import { noteLibraryReplaced } from '../store/sync'
+import { getSyncStatus, noteLibraryReplaced } from '../store/sync'
 import { AccountSyncCard } from '../components/AccountSync'
 import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
@@ -149,9 +149,15 @@ export default function Settings() {
   }
 
   function confirmReset() {
+    // While signed in the reset is deliberately synced: tombstones propagate
+    // to the cloud copy and every other device — say so instead of promising
+    // an "on this device" wipe that actually destroys everything everywhere.
+    const signedIn = getSyncStatus().state === 'synced' || getSyncStatus().state === 'syncing'
     if (
       window.confirm(
-        'Reset everything? This permanently deletes your shows, movies, watchlist, comments and profile on this device.',
+        signedIn
+          ? 'Reset everything? This permanently deletes your shows, movies, watchlist, comments and profile — including your cloud copy and every synced device.'
+          : 'Reset everything? This permanently deletes your shows, movies, watchlist, comments and profile on this device.',
       )
     ) {
       resetAll()
@@ -252,8 +258,9 @@ export default function Settings() {
               <li>TMDB metadata with IMDb links, plus a keyless demo mode</li>
             </ul>
             <p className="settings-note">
-              Your library and comments are stored on this device only in this version — export a
-              backup before switching browsers.
+              Your library and comments are stored on this device, and synced to your account
+              when you sign in — export a backup before switching browsers if you stay signed
+              out.
             </p>
             <p className="settings-version">Raed Tracker · TMDB data · IMDb links</p>
           </section>
@@ -326,9 +333,9 @@ export default function Settings() {
               <div className="settings-card-title">💾 Your data</div>
             </div>
             <p className="settings-card-desc">
-              Everything you track is stored <b>locally in this browser</b> — nothing leaves your
-              device. Export a JSON backup to keep it safe or move it to another browser, and
-              import it back any time.
+              Everything you track is stored <b>locally in this browser</b>, and — when you sign
+              in to sync — mirrored to your cloud account. Export a JSON backup to keep it safe
+              or move it to another browser, and import it back any time.
             </p>
 
             <div className="settings-chips">

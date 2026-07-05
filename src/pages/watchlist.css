@@ -40,6 +40,12 @@
   line-height: 18px;
 }
 
+/* Light theme: the hardcoded dark pill composites to ~#727277, making the
+   inherited dim/accent text unreadable — flip to a light pill instead. */
+:root[data-theme='light'] .watchlist-chip .watchlist-chip-count {
+  background: rgba(255, 255, 255, 0.75);
+}
+
 .watchlist-card {
   position: relative;
   transition: transform 0.15s;
@@ -86,6 +92,16 @@
   }
 }
 
+/* Light theme: keep the over-poster button legible without the dark pill */
+:root[data-theme='light'] .watchlist-remove {
+  background: rgba(255, 255, 255, 0.9);
+  color: #3d3d3a;
+}
+
+:root[data-theme='light'] .watchlist-remove:hover {
+  color: var(--red);
+}
+
 .watchlist-type-badge {
   position: absolute;
   top: 8px;
@@ -100,4 +116,10 @@
   text-transform: uppercase;
   color: var(--text-dim);
   pointer-events: none;
+}
+
+/* Light theme: dark badge + light-theme dim text was ~2.2:1 */
+:root[data-theme='light'] .watchlist-type-badge {
+  background: rgba(255, 255, 255, 0.9);
+  color: #3d3d3a;
 }

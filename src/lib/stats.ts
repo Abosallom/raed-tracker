@@ -44,7 +44,9 @@ export function lastNWeeks(n: number, now: Date = new Date()): WeekBucket[] {
   const cur = isoWeekStart(now)
   const out: WeekBucket[] = []
   for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(cur.getTime() - i * 7 * DAY)
+    // Calendar arithmetic (not fixed 24h*7 ms) so weeks straddling a DST
+    // switch still land on the Monday and match dateKey(isoWeekStart(t)).
+    const d = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() - i * 7)
     out.push({
       key: dateKey(d),
       label: `${d.getDate()}/${d.getMonth() + 1}`,

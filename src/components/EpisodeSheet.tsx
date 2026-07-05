@@ -2,7 +2,7 @@
 // Lets the user react ("How did it feel?"), vote a favorite cast member,
 // pause the show, or jump to the discussion on the show page.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { CastMember, ShowDetail } from '../types'
 import { EMOTIONS, episodeKey } from '../types'
@@ -89,9 +89,53 @@ export default function EpisodeSheet({
     window.setTimeout(onClose, 200)
   }, [onClose])
 
+  // ----- focus management (aria-modal without it strands screen readers on
+  // the background — e.g. the queue check button, which now targets the NEXT
+  // episode, so pressing Enter again would silently mark it watched) -----
+  const sheetRef = useRef<HTMLDivElement>(null)
+  const restoreFocusRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    restoreFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    sheetRef.current?.focus()
+    return () => restoreFocusRef.current?.focus()
+  }, [])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
+      if (e.key === 'Escape') {
+        close()
+        return
+      }
+      // Trap Tab inside the sheet while it is open.
+      if (e.key !== 'Tab') return
+      const sheet = sheetRef.current
+      if (!sheet) return
+      const focusables = Array.from(
+        sheet.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+      if (focusables.length === 0) {
+        e.preventDefault()
+        sheet.focus()
+        return
+      }
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement
+      const inside = active instanceof HTMLElement && sheet.contains(active)
+      if (!inside) {
+        e.preventDefault()
+        first.focus()
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -102,6 +146,8 @@ export default function EpisodeSheet({
   return (
     <div className={`epsheet-backdrop${closing ? ' closing' : ''}`} onClick={close}>
       <div
+        ref={sheetRef}
+        tabIndex={-1}
         className={`epsheet${closing ? ' closing' : ''}`}
         role="dialog"
         aria-modal="true"

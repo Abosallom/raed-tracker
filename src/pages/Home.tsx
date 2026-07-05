@@ -245,7 +245,7 @@ export default function Home() {
   }, [])
 
   const keepWatching = Object.values(shows)
-    .filter((s) => nextEpisode(s) !== null)
+    .filter((s) => !s.paused && nextEpisode(s) !== null)
     .sort((a, b) => lastActivity(b) - lastActivity(a))
     .slice(0, 6)
 

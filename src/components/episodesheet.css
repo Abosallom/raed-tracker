@@ -24,6 +24,10 @@
   }
 }
 
+.epsheet:focus {
+  outline: none; /* programmatically focused on open (focus trap anchor) */
+}
+
 .epsheet {
   width: 100%;
   max-width: 560px;

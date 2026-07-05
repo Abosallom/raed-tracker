@@ -362,6 +362,8 @@ textarea:focus {
   --accent: #d99a06;
   --accent-hover: #b57f02;
   --accent-soft: rgba(217, 154, 6, 0.14);
+  /* Star/favorite text: dark-theme #fbbf24 is ~1.4:1 on light surfaces */
+  --yellow: #b57f02;
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
 }
 
@@ -468,6 +470,11 @@ textarea:focus {
     display: none;
   }
   .main-content {
-    padding: 20px 16px 48px;
+    /* Top safe-area inset: in the installed PWA (black-translucent status
+       bar + viewport-fit=cover) content otherwise starts under the iPhone
+       status bar/notch, burying the brand row and BackBar back button. */
+    padding: calc(20px + env(safe-area-inset-top, 0px)) 16px 48px;
+    padding-left: calc(16px + env(safe-area-inset-left, 0px));
+    padding-right: calc(16px + env(safe-area-inset-right, 0px));
   }
 }

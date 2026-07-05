@@ -34,6 +34,9 @@
     -webkit-backdrop-filter: blur(16px) saturate(1.4);
     border-top: 1px solid var(--border);
     padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* Landscape notch: keep the outermost tabs tappable */
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 
   /* The blur backdrop needs an alpha color, so it can't reuse an opaque
