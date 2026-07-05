@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import type { MediaType, WatchlistItem } from '../types'
 import { useLibrary } from '../store/library'
 import { PosterImage, timeAgo } from '../components/shared'
+import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
 import './watchlist.css'
 
@@ -59,6 +60,7 @@ export default function Watchlist() {
 
   return (
     <div>
+      <BackBar title="Watchlist" />
       <h1 className="page-title">Watchlist</h1>
       <p className="page-subtitle">
         {watchlist.length === 0

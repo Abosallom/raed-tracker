@@ -1,7 +1,7 @@
 // Show detail page — /show/:id
 // Backdrop hero, tracking actions, season/episode checklist, cast, comments.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import type { Emotion, SeasonDetail, ShowDetail } from '../types'
 import { EMOTIONS, episodeKey } from '../types'
@@ -28,6 +28,7 @@ import {
   SkeletonDetail,
 } from '../components/shared'
 import { CommentsSection } from '../components/CommentsSection'
+import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
 import './show-detail.css'
 
@@ -112,10 +113,20 @@ export default function ShowDetailPage() {
       .then((d) => {
         if (cancelled) return
         setDetail(d)
-        setSeason(d.seasons[0]?.season_number ?? null)
         // Keep the tracked snapshot in sync with freshly fetched detail
         // (new seasons/episodes since the show was added).
         refreshShow(d)
+        // Default season: the one holding the next unwatched episode when the
+        // show is followed, else season 1 (fall back to the first listed
+        // season, e.g. Specials-only shows). Episodes load immediately.
+        const show = useLibrary.getState().shows[id]
+        const next = show ? nextEpisode(show) : null
+        const fallback = d.seasons.find((s) => s.season_number === 1) ?? d.seasons[0]
+        setSeason(
+          next && d.seasons.some((s) => s.season_number === next.season)
+            ? next.season
+            : (fallback?.season_number ?? null),
+        )
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load show.')
@@ -149,9 +160,75 @@ export default function ShowDetailPage() {
     }
   }, [id, season])
 
-  if (loading) return <SkeletonDetail />
-  if (error) return <ErrorBox message={error} />
-  if (!detail) return <ErrorBox message="Show not found." />
+  // ----- auto-scroll to the next unwatched episode (once per navigation) -----
+  const seasonBodyRef = useRef<HTMLDivElement | null>(null)
+  const autoScrolledRef = useRef(false)
+  const [highlightKey, setHighlightKey] = useState<string | null>(null)
+  const highlightTimer = useRef<number | undefined>(undefined)
+
+  useEffect(() => {
+    autoScrolledRef.current = false
+  }, [id])
+
+  useEffect(() => () => window.clearTimeout(highlightTimer.current), [])
+
+  useEffect(() => {
+    if (seasonLoading || !seasonDetail || autoScrolledRef.current) return
+    const show = useLibrary.getState().shows[id]
+    if (!show) return // only followed shows scroll to "up next"
+    const next = nextEpisode(show)
+    if (!next || next.season !== seasonDetail.season_number) return
+    const key = episodeKey(next.season, next.episode)
+    const row = seasonBodyRef.current?.querySelector<HTMLElement>(`[data-ep-key="${key}"]`)
+    if (!row) return
+    autoScrolledRef.current = true
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    row.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' })
+    setHighlightKey(key)
+    window.clearTimeout(highlightTimer.current)
+    highlightTimer.current = window.setTimeout(() => setHighlightKey(null), 2000)
+  }, [id, seasonDetail, seasonLoading])
+
+  // ----- mobile quick-log bar: shown while the episode list is on screen -----
+  const [epListVisible, setEpListVisible] = useState(false)
+
+  useEffect(() => {
+    const el = seasonBodyRef.current
+    if (!el || !seasonDetail) {
+      setEpListVisible(false)
+      return
+    }
+    const io = new IntersectionObserver((entries) =>
+      setEpListVisible(entries.some((e) => e.isIntersecting)),
+    )
+    io.observe(el)
+    return () => {
+      io.disconnect()
+      setEpListVisible(false)
+    }
+  }, [seasonDetail, seasonLoading])
+
+  if (loading)
+    return (
+      <div>
+        <BackBar />
+        <SkeletonDetail />
+      </div>
+    )
+  if (error)
+    return (
+      <div>
+        <BackBar />
+        <ErrorBox message={error} />
+      </div>
+    )
+  if (!detail)
+    return (
+      <div>
+        <BackBar />
+        <ErrorBox message="Show not found." />
+      </div>
+    )
 
   const followed = Boolean(tracked)
   const backdrop = backdropUrl(detail.backdrop_path)
@@ -196,6 +273,8 @@ export default function ShowDetailPage() {
 
   return (
     <div>
+      <BackBar />
+
       {/* ---------- hero ---------- */}
       <div className="show-detail-hero">
         {backdrop && (
@@ -360,7 +439,7 @@ export default function ShowDetailPage() {
       {seasonLoading && <SeasonSkeleton />}
       {seasonError && <ErrorBox message={seasonError} />}
       {!seasonLoading && seasonDetail && season != null && (
-        <div key={season} className="show-detail-season-body">
+        <div key={season} ref={seasonBodyRef} className="show-detail-season-body">
           <div className="show-detail-season-head">
             <span style={{ color: 'var(--text-dim)', fontSize: 13.5 }}>
               {seasonWatchedCount}/{seasonDetail.episodes.length} watched
@@ -392,7 +471,13 @@ export default function ShowDetailPage() {
               const isFuture = ep.air_date != null && ep.air_date > todayStr
               const still = stillUrl(ep.still_path)
               return (
-                <div key={ep.id} className={`show-detail-ep${isWatched ? ' watched' : ''}`}>
+                <div
+                  key={ep.id}
+                  data-ep-key={key}
+                  className={`show-detail-ep${isWatched ? ' watched' : ''}${
+                    highlightKey === key ? ' spotlight' : ''
+                  }`}
+                >
                   <span className="show-detail-ep-num">
                     {epCode(ep.season_number, ep.episode_number)}
                   </span>
@@ -474,6 +559,22 @@ export default function ShowDetailPage() {
       <div style={{ marginTop: 28 }}>
         <CommentsSection mediaKey={`tv:${id}`} />
       </div>
+
+      {/* ---------- mobile quick-log bar (fixed above the tab bar) ---------- */}
+      {followed && upNext && (
+        <div
+          className={`show-detail-quickbar${epListVisible ? ' visible' : ''}`}
+          aria-hidden={!epListVisible}
+        >
+          <button
+            className="show-detail-quickbar-btn"
+            tabIndex={epListVisible ? 0 : -1}
+            onClick={() => handleToggleEpisode(upNext.season, upNext.episode)}
+          >
+            ✓ Log {epCode(upNext.season, upNext.episode)}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

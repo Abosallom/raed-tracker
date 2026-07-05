@@ -1,51 +1,101 @@
 /* My Shows page (route /shows) — Watch Next queue, classes prefixed queue- */
 
-/* ---------- header: segmented control + favorites chip ---------- */
+/* ---------- underline top tab bar (shared look with Upcoming) ----------
+   NOTE: .toptabs* rules are duplicated verbatim in upcoming.css — keep in sync. */
 
-.queue-header {
+.toptabs {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 2px;
   flex-wrap: wrap;
-  margin: 4px 0 20px;
+  margin: 2px 0 16px;
+  border-bottom: 1px solid var(--border);
 }
 
-.queue-segmented {
+.toptab {
+  position: relative;
   display: inline-flex;
-  padding: 3px;
-  border-radius: 999px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.6px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  transition: color 0.15s;
 }
 
-.queue-seg {
-  padding: 6px 16px;
-  border-radius: 999px;
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--text-dim);
-  transition: color 0.15s, background 0.15s;
-}
-
-.queue-seg:hover {
+.toptab:hover {
   color: var(--text);
 }
 
-.queue-seg.active {
-  background: var(--accent-soft);
-  color: var(--accent-hover);
+.toptab.active {
+  color: var(--text);
 }
 
-.queue-seg-count {
-  margin-left: 5px;
-  font-size: 11.5px;
-  font-weight: 600;
-  opacity: 0.75;
+.toptab.active::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+}
+
+.toptab-count {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
 
-.queue-header-spacer {
+.toptab.active .toptab-count {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent-hover);
+}
+
+.toptabs-spacer {
   flex: 1;
+}
+
+.toptabs-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+/* ---------- grid/list view toggle ---------- */
+
+.view-toggle {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.view-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+  background: var(--bg-elev-2);
 }
 
 /* ---------- chips (favorites / browse filters) ---------- */
@@ -76,7 +126,7 @@
 }
 
 .queue-fav.active {
-  background: rgba(251, 191, 36, 0.12);
+  background: var(--accent-soft);
   border-color: var(--yellow);
   color: var(--yellow);
 }
@@ -96,39 +146,43 @@
   margin: 22px 0 14px;
 }
 
-/* ---------- sections ---------- */
+/* ---------- sections: small uppercase letter-spaced labels ---------- */
 
 .queue-section {
-  margin-bottom: 26px;
+  margin-bottom: 28px;
 }
 
 .queue-section-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.8px;
+  color: var(--text-dim);
   margin: 0 0 10px;
 }
 
 .queue-collapse-head {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.8px;
+  color: var(--text-dim);
   padding: 2px 0;
   margin-bottom: 6px;
   transition: color 0.15s;
 }
 
 .queue-collapse-head:hover {
-  color: var(--accent-hover);
+  color: var(--text);
 }
 
 .queue-caret {
   display: inline-block;
-  font-size: 12px;
-  color: var(--text-dim);
+  font-size: 11px;
+  color: var(--text-faint);
   transition: transform 0.15s;
 }
 
@@ -152,7 +206,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 14px;
-  max-height: 160px;
+  max-height: 180px;
   transition: border-color 0.15s;
 }
 
@@ -169,8 +223,8 @@
     background: var(--bg-elev);
   }
   22% {
-    background: rgba(52, 211, 153, 0.16);
-    border-color: var(--green);
+    background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev));
+    border-color: var(--accent);
   }
   100% {
     background: var(--bg-elev);
@@ -187,12 +241,12 @@
   0% {
     opacity: 1;
     transform: translateX(0);
-    max-height: 160px;
+    max-height: 180px;
   }
   55% {
     opacity: 0;
     transform: translateX(36px);
-    max-height: 160px;
+    max-height: 180px;
   }
   100% {
     opacity: 0;
@@ -207,20 +261,25 @@
 
 .queue-poster {
   display: block;
-  width: 52px;
+  width: 64px;
   flex-shrink: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   overflow: hidden;
   transition: transform 0.15s;
 }
 
+.queue-poster .poster-img,
+.queue-poster .poster-fallback {
+  border-radius: 8px;
+}
+
 .queue-poster:hover {
-  transform: scale(1.05);
+  transform: scale(1.04);
 }
 
 .queue-poster .poster-fallback {
   font-size: 9px;
-  padding: 4px;
+  padding: 5px;
   line-height: 1.2;
 }
 
@@ -228,6 +287,8 @@
   flex: 1;
   min-width: 0;
 }
+
+/* show-name pill chip */
 
 .queue-showpill {
   display: inline-flex;
@@ -303,35 +364,38 @@
   font-weight: 400;
 }
 
+/* "+N more aired" — tiny solid accent chip */
 .queue-behind {
   padding: 1px 7px;
   border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent-hover);
-  font-size: 11px;
+  background: var(--accent);
+  color: #171717;
+  font-size: 10.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
+/* NEW = yellow chip, PREMIERE = green-tinted chip */
+
 .queue-badge {
-  padding: 1.5px 7px;
-  border-radius: 5px;
+  padding: 1.5px 8px;
+  border-radius: 999px;
   font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 
 .queue-badge.new {
-  background: rgba(52, 211, 153, 0.16);
-  color: var(--green);
-  border: 1px solid rgba(52, 211, 153, 0.4);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .queue-badge.premiere {
-  background: var(--accent-soft);
-  color: var(--accent-hover);
-  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  color: var(--green);
+  border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);
 }
 
 .queue-ep-title {
@@ -344,14 +408,14 @@
   white-space: nowrap;
 }
 
-/* ---------- big circular check ---------- */
+/* ---------- outlined circular check ---------- */
 
 .queue-check {
   width: 44px;
   height: 44px;
   flex-shrink: 0;
   border-radius: 50%;
-  border: 2px solid var(--border);
+  border: 2px solid var(--text-faint);
   background: transparent;
   color: var(--text-dim);
   font-size: 18px;
@@ -364,16 +428,17 @@
 }
 
 .queue-check:hover {
-  border-color: var(--green);
-  color: var(--green);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #171717;
   transform: scale(1.06);
 }
 
 .queue-check.pop {
   animation: queue-pop 0.4s cubic-bezier(0.2, 0.7, 0.3, 1.4);
-  background: var(--green);
-  border-color: var(--green);
-  color: #101010;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #171717;
 }
 
 @keyframes queue-pop {
@@ -441,9 +506,9 @@
   height: 26px;
   flex-shrink: 0;
   border-radius: 50%;
-  border: 1.5px solid var(--green);
-  background: rgba(52, 211, 153, 0.14);
-  color: var(--green);
+  border: 2px solid var(--accent);
+  background: var(--accent);
+  color: #171717;
   font-size: 12px;
   font-weight: 800;
   display: flex;
@@ -477,10 +542,15 @@
 
 .queue-compact-poster {
   display: block;
-  width: 40px;
+  width: 44px;
   flex-shrink: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   overflow: hidden;
+}
+
+.queue-compact-poster .poster-img,
+.queue-compact-poster .poster-fallback {
+  border-radius: 8px;
 }
 
 .queue-compact-poster .poster-fallback {
@@ -530,15 +600,76 @@
   white-space: nowrap;
 }
 
+/* ---------- grid view (poster grid + progress) ---------- */
+
+.queue-grid-card {
+  display: block;
+  min-width: 0;
+  transition: transform 0.15s;
+}
+
+.queue-grid-card:hover {
+  transform: translateY(-3px);
+}
+
+.queue-grid-poster {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-elev-2);
+}
+
+.queue-grid-name {
+  margin-top: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-grid-card:hover .queue-grid-name {
+  color: var(--accent-hover);
+}
+
+.queue-grid-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.queue-grid-progress .progress-track {
+  flex: 1;
+}
+
+.queue-grid-eps {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* ---------- responsive + reduced motion ---------- */
 
 @media (max-width: 560px) {
+  .toptab {
+    padding: 8px 10px 10px;
+    font-size: 12px;
+    letter-spacing: 1.2px;
+  }
+  .toptabs-actions {
+    padding-bottom: 6px;
+  }
   .queue-history-time {
     display: none;
   }
   .queue-check {
     width: 40px;
     height: 40px;
+  }
+  .queue-poster {
+    width: 54px;
   }
 }
 

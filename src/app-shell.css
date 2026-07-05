@@ -1,10 +1,10 @@
 /* App shell chrome (mobile only).
    Desktop (>760px): everything in this file is inert — the sidebar from
-   global.css is untouched. On <=760px we hide the old wrapped top nav and
-   swap in an iOS-style fixed bottom tab bar + a compact secondary strip. */
+   global.css is untouched. On <=760px we hide the sidebar and swap in an
+   iOS-style fixed four-tab bottom bar + a minimal brand row on root pages. */
 
 .tabbar,
-.mobile-topbar {
+.mobile-brand {
   display: none;
 }
 
@@ -29,15 +29,17 @@
     z-index: 80;
     display: flex;
     align-items: stretch;
-    background: rgba(23, 23, 23, 0.92);
+    background: rgba(15, 15, 15, 0.92);
     backdrop-filter: blur(16px) saturate(1.4);
     -webkit-backdrop-filter: blur(16px) saturate(1.4);
     border-top: 1px solid var(--border);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
-  /* The bar background is a hardcoded near-black; give light theme a matching
-     near-white so var(--text-dim)/var(--accent) items stay readable. */
+  /* The blur backdrop needs an alpha color, so it can't reuse an opaque
+     surface variable directly: near-black to match the pure-black theme,
+     with a near-white override in light theme so var(--text-dim)/var(--accent)
+     items stay readable. */
   :root[data-theme='light'] .tabbar {
     background: rgba(246, 246, 244, 0.92);
   }
@@ -94,63 +96,24 @@
     max-width: 100%;
   }
 
-  /* ----- secondary strip (routes not in the tab bar) ----- */
+  /* ----- minimal brand row (root tab pages only; JS gates the routes) ----- */
 
-  .mobile-topbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    margin: -4px -16px 18px;
-    padding: 4px 16px;
-  }
-
-  .mobile-topbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .strip-brand {
-    flex-shrink: 0;
-    font-size: 15px;
+  .mobile-brand {
+    display: block;
+    font-size: 16px;
     font-weight: 800;
     letter-spacing: -0.4px;
-    margin-right: 4px;
+    margin: -4px 0 16px;
   }
 
-  .strip-brand span {
+  .mobile-brand span {
     color: var(--accent);
-  }
-
-  .strip-pill {
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 13px;
-    border-radius: 999px;
-    background: var(--bg-elev);
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    font-size: 13px;
-    font-weight: 500;
-    white-space: nowrap;
-    -webkit-tap-highlight-color: transparent;
-    transition: background 0.15s, color 0.15s;
-  }
-
-  .strip-pill.active {
-    background: var(--accent-soft);
-    border-color: transparent;
-    color: var(--accent-hover);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .tabbar-item,
-  .tabbar-icon,
-  .strip-pill {
+  .tabbar-icon {
     transition: none !important;
   }
   .tabbar-item:active .tabbar-icon {

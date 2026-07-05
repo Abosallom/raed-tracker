@@ -1,0 +1,318 @@
+/* TV Time migration wizard (/migrate) */
+
+.migrate-page {
+  max-width: 760px;
+}
+
+/* ---------- stepper ---------- */
+
+.mig-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 22px;
+  overflow-x: auto;
+}
+
+.mig-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: var(--text-faint);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mig-step:not(:last-child)::after {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 1px;
+  background: var(--border);
+  margin-left: 12px;
+}
+
+.mig-step-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.mig-step.active {
+  color: var(--text);
+}
+
+.mig-step.active .mig-step-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #171717;
+}
+
+.mig-step.done {
+  color: var(--text-dim);
+}
+
+.mig-step.done .mig-step-dot {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ---------- cards ---------- */
+
+.mig-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+}
+
+.mig-card-title {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.mig-desc {
+  color: var(--text-dim);
+  font-size: 14px;
+  margin: 0;
+}
+
+.mig-instructions {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text-dim);
+  font-size: 14.5px;
+}
+
+.mig-instructions b {
+  color: var(--text);
+}
+
+.mig-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.mig-actions .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---------- dropzone ---------- */
+
+.mig-drop {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.mig-drop:hover,
+.mig-drop:focus-visible,
+.mig-drop.drag {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.mig-drop-emoji {
+  font-size: 36px;
+  margin-bottom: 10px;
+}
+
+.mig-drop-main {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.mig-drop-hint {
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+/* ---------- preview ---------- */
+
+.mig-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mig-stat {
+  flex: 1 1 120px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  text-align: center;
+}
+
+.mig-stat-num {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1.2;
+}
+
+.mig-stat-label {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.mig-details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-2);
+}
+
+.mig-details summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.mig-details[open] summary {
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.mig-show-list,
+.mig-diag-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 14px;
+  max-height: 260px;
+  overflow-y: auto;
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+
+.mig-show-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.mig-show-list li:last-child {
+  border-bottom: none;
+}
+
+.mig-show-name {
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mig-show-count {
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.mig-diag-list li {
+  padding: 5px 0;
+}
+
+.mig-diag-list b {
+  color: var(--text);
+}
+
+.mig-warn {
+  background: var(--accent-soft);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.mig-warn a {
+  color: var(--accent-hover);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* ---------- importing ---------- */
+
+.mig-progress-line {
+  font-size: 14px;
+  color: var(--text-dim);
+  min-height: 21px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- done ---------- */
+
+.mig-done-emoji {
+  font-size: 44px;
+  text-align: center;
+  margin-bottom: -6px;
+}
+
+.mig-unmatched {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-2);
+  padding: 12px 14px;
+}
+
+.mig-unmatched-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.mig-unmatched-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 13.5px;
+}
+
+.mig-unmatched-list li {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.mig-unmatched-list li:last-child {
+  border-bottom: none;
+}

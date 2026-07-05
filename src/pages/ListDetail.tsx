@@ -7,6 +7,7 @@ import type { ListItem, SearchResult } from '../types'
 import { useLibrary } from '../store/library'
 import { posterUrl, searchMulti } from '../api/tmdb'
 import { ErrorBox, LoadingSpinner, PosterImage, timeAgo } from '../components/shared'
+import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
 import './list-detail.css'
 
@@ -87,6 +88,7 @@ export default function ListDetail() {
   if (!list) {
     return (
       <div className="fade-in">
+        <BackBar />
         <ErrorBox message="List not found — it may have been deleted." />
         <Link className="btn" to="/profile">
           ← Back to profile
@@ -147,11 +149,9 @@ export default function ListDetail() {
 
   return (
     <div>
+      <BackBar />
       {/* ---------- header ---------- */}
       <div className="fade-in">
-        <Link className="listd-back" to="/profile">
-          ← Profile
-        </Link>
         <div className="listd-title-row">
           {editingName ? (
             <div className="listd-title-edit">

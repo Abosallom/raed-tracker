@@ -1,11 +1,11 @@
 /* Raed Tracker design system — dark grey theme, yellow accent */
 
 :root {
-  --bg: #171717;
-  --bg-elev: #1f1f1f;
-  --bg-elev-2: #2a2a2a;
-  --border: #3a3a3a;
-  --text: #ededed;
+  --bg: #000000;
+  --bg-elev: #141414;
+  --bg-elev-2: #202020;
+  --border: #2e2e2e;
+  --text: #f2f2f2;
   --text-dim: #a5a5a5;
   --text-faint: #737373;
   --accent: #fbbf24;

@@ -1,35 +1,78 @@
 /* Upcoming page — day-grouped episode schedule */
 
-/* ---------- segmented header (mirrors the Watch Next queue) ---------- */
+/* ---------- underline top tab bar (shared look with My Shows) ----------
+   NOTE: .toptabs* rules are duplicated verbatim in myshows.css — keep in sync. */
 
-.upcoming-seg {
+.toptabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  margin: 2px 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.toptab {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
-  margin-bottom: 10px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  gap: 7px;
+  padding: 10px 14px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.6px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  transition: color 0.15s;
 }
 
-.upcoming-seg-item {
-  padding: 7px 20px;
-  border-radius: 999px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-dim);
-  transition: background 0.15s, color 0.15s;
-}
-
-.upcoming-seg-item:hover {
+.toptab:hover {
   color: var(--text);
-  background: var(--bg-elev-2);
 }
 
-.upcoming-seg-item.active {
+.toptab.active {
+  color: var(--text);
+}
+
+.toptab.active::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+}
+
+.toptab-count {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.toptab.active .toptab-count {
   background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   color: var(--accent-hover);
+}
+
+.toptabs-spacer {
+  flex: 1;
+}
+
+.toptabs-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
 }
 
 /* ---------- filter chips ---------- */
@@ -64,21 +107,21 @@
   margin-left: auto;
 }
 
-/* ---------- day headers ---------- */
+/* ---------- day headers: small uppercase letter-spaced labels ---------- */
 
 .upcoming-day-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 24px 0 10px;
+  margin: 26px 0 10px;
 }
 
 .upcoming-day-label {
-  font-size: 13px;
+  font-size: 11.5px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 1.2px;
-  color: var(--accent-hover);
+  letter-spacing: 1.8px;
+  color: var(--text-dim);
   white-space: nowrap;
 }
 
@@ -89,16 +132,17 @@
 }
 
 .upcoming-group-count {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   color: var(--text-dim);
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 1px 9px;
+  padding: 1px 8px;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---------- rows ---------- */
+/* ---------- rows (same anatomy as the Watch Next queue) ---------- */
 
 .upcoming-list {
   display: flex;
@@ -114,25 +158,29 @@
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s;
 }
 
 .upcoming-row:hover {
-  border-color: var(--accent);
-  background: var(--bg-elev-2);
+  border-color: var(--text-faint);
 }
 
 .upcoming-poster {
   display: block;
-  width: 50px;
+  width: 64px;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
+  transition: transform 0.15s;
+}
+
+.upcoming-poster:hover {
+  transform: scale(1.04);
 }
 
 .upcoming-poster .poster-img,
 .upcoming-poster .poster-fallback {
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .upcoming-poster .poster-fallback {
@@ -154,18 +202,21 @@
   min-width: 0;
 }
 
+/* show-name pill chip */
+
 .upcoming-show-pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   max-width: 100%;
-  padding: 2px 11px;
+  min-width: 0;
+  padding: 3px 11px;
   border-radius: 999px;
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   font-weight: 700;
   font-size: 12.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--text);
   transition: border-color 0.15s, color 0.15s;
 }
 
@@ -174,63 +225,85 @@
   color: var(--accent-hover);
 }
 
+.upcoming-pill-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upcoming-pill-arrow {
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.upcoming-show-pill:hover .upcoming-pill-arrow {
+  color: var(--accent);
+}
+
 .upcoming-ep {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--text-dim);
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 7px;
   min-width: 0;
 }
 
 .upcoming-code {
-  font-weight: 700;
-  color: var(--accent-hover);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .upcoming-code-sep {
-  color: var(--text-faint);
+  color: var(--accent);
   font-weight: 400;
   margin: 0 1px;
 }
 
-.upcoming-ep-name {
+.upcoming-ep-title {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* NEW / PREMIERE badges (queue style) */
+/* NEW = yellow chip, PREMIERE = green-tinted chip */
 
 .upcoming-badge {
   flex-shrink: 0;
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.8px;
-  padding: 1px 7px;
-  border-radius: 5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1.5px 8px;
+  border-radius: 999px;
 }
 
 .upcoming-badge.new {
-  color: var(--green);
-  background: rgba(52, 211, 153, 0.12);
-  border: 1px solid rgba(52, 211, 153, 0.35);
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .upcoming-badge.premiere {
-  color: var(--accent-hover);
-  background: var(--accent-soft);
-  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);
 }
 
-/* right side: network + countdown + check */
+/* right side: network + countdown chips, then check */
 
 .upcoming-when {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   flex-shrink: 0;
 }
@@ -246,17 +319,18 @@
 .upcoming-days {
   font-size: 12px;
   padding: 2px 10px;
+  font-weight: 600;
   color: var(--accent-hover);
   background: var(--accent-soft);
-  border-color: rgba(251, 191, 36, 0.35);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
 .upcoming-days.today {
   color: var(--green);
-  background: rgba(52, 211, 153, 0.12);
-  border-color: rgba(52, 211, 153, 0.35);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  border-color: color-mix(in srgb, var(--green) 40%, transparent);
 }
 
 .upcoming-days.past {
@@ -276,27 +350,29 @@
   letter-spacing: 0.5px;
 }
 
-/* mark-watched check button on "Earlier this week" rows */
+/* outlined circular check on "Earlier this week" rows */
 
 .upcoming-check {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 1.5px solid var(--border);
-  background: var(--bg-elev-2);
-  color: var(--text-faint);
+  border: 2px solid var(--text-faint);
+  background: transparent;
+  color: var(--text-dim);
   font-size: 14px;
   font-weight: 800;
+  cursor: pointer;
   transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.1s;
 }
 
 .upcoming-check:hover {
+  background: var(--accent);
   border-color: var(--accent);
-  color: var(--accent-hover);
+  color: #171717;
 }
 
 .upcoming-check:active {
@@ -331,7 +407,7 @@
   font-weight: 700;
   padding: 2px 8px;
   gap: 4px;
-  background: rgba(14, 15, 23, 0.85);
+  background: rgba(0, 0, 0, 0.82);
   border-color: transparent;
   color: var(--accent-hover);
 }
@@ -344,8 +420,8 @@
 
 .upcoming-skel-header {
   width: 160px;
-  height: 14px;
-  margin: 24px 0 12px;
+  height: 12px;
+  margin: 26px 0 12px;
   border-radius: 4px;
 }
 
@@ -359,10 +435,10 @@
 }
 
 .upcoming-skel-poster {
-  width: 50px;
+  width: 64px;
   aspect-ratio: 2 / 3;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .upcoming-skel-chip {
@@ -378,11 +454,21 @@
   .upcoming-network {
     display: none;
   }
-  .upcoming-seg-item {
-    padding: 6px 14px;
-    font-size: 13px;
-  }
   .upcoming-filter-tba {
     margin-left: 0;
+  }
+  .upcoming-poster {
+    width: 54px;
+  }
+}
+
+@media (max-width: 560px) {
+  .toptab {
+    padding: 8px 10px 10px;
+    font-size: 12px;
+    letter-spacing: 1.2px;
+  }
+  .toptabs-actions {
+    padding-bottom: 6px;
   }
 }

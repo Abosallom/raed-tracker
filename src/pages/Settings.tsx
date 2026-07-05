@@ -7,6 +7,7 @@ import { getApiKey, isDemoMode, setApiKey } from '../api/tmdb'
 import { useLibrary } from '../store/library'
 import { noteLibraryReplaced } from '../store/sync'
 import { AccountSyncCard } from '../components/AccountSync'
+import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
 import { getThemePref, setThemePref } from '../lib/theme'
 import type { ThemePref } from '../lib/theme'
@@ -161,6 +162,7 @@ export default function Settings() {
 
   return (
     <div>
+      <BackBar title="Settings" />
       <h1 className="page-title">Settings</h1>
       <p className="page-subtitle">Data source, backups and app info.</p>
 
@@ -363,6 +365,21 @@ export default function Settings() {
                 {dataMessage.text}
               </p>
             )}
+          </section>
+
+          <section className="card">
+            <div className="settings-card-head">
+              <div className="settings-card-title">📥 Import from TV Time</div>
+            </div>
+            <p className="settings-card-desc">
+              Moving from another tracker? Import your shows, watched episodes and movies from a
+              TV Time data export.
+            </p>
+            <div className="settings-actions">
+              <Link to="/migrate" className="btn primary">
+                📥 Import from TV Time
+              </Link>
+            </div>
           </section>
 
           <section className="card settings-danger">

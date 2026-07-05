@@ -190,7 +190,7 @@
   gap: 14px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  transition: background 0.25s ease;
+  transition: background 0.25s ease, box-shadow 0.6s ease;
 }
 
 .show-detail-ep:last-child {
@@ -198,7 +198,13 @@
 }
 
 .show-detail-ep.watched {
-  background: rgba(52, 211, 153, 0.05);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+/* brief accent ring on the auto-scrolled "up next" episode */
+.show-detail-ep.spotlight {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .show-detail-ep-num {
@@ -221,8 +227,20 @@
   border: 1px solid var(--border);
 }
 
+/* demo mode / missing still: intentional theme-aware placeholder */
 .show-detail-ep-still-fallback {
-  background: linear-gradient(135deg, #4c3a8f 0%, #2b2350 55%, #171232 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(80% 130% at 18% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 62%),
+    linear-gradient(135deg, var(--bg-elev-2) 0%, var(--bg-elev) 100%);
+}
+
+.show-detail-ep-still-fallback::after {
+  content: '🎞️';
+  font-size: 15px;
+  opacity: 0.45;
 }
 
 .show-detail-ep-main {
@@ -249,24 +267,27 @@
   height: 32px;
   border-radius: 50%;
   border: 2px solid var(--border);
+  background: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 800;
   color: transparent;
-  transition: all 0.15s;
+  transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.12s;
 }
 
 .show-detail-ep-toggle:hover {
   border-color: var(--accent);
-  color: var(--text-faint);
+  color: var(--accent);
+  transform: scale(1.06);
 }
 
+/* matches the Watch Next queue check: outlined circle -> accent fill */
 .show-detail-ep-toggle.on {
-  background: var(--green);
-  border-color: var(--green);
-  color: #0b2f22;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #101010;
   animation: show-detail-watch-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -359,6 +380,62 @@ a.show-detail-imdb-btn:hover {
   line-height: 1.3;
 }
 
+/* ---------- mobile quick-log bar ---------- */
+
+/* Hidden on desktop; on mobile it floats above the fixed bottom tab bar
+   (safe-area aware) while the episode list is on screen. */
+.show-detail-quickbar {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .show-detail-quickbar {
+    display: flex;
+    justify-content: center;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+    z-index: 70; /* below the tab bar (80), above page content */
+    padding: 0 16px;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity 0.22s ease, transform 0.22s ease;
+  }
+
+  .show-detail-quickbar.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .show-detail-quickbar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    padding: 12px 26px;
+    border-radius: 999px;
+    border: none;
+    background: var(--accent);
+    color: #101010;
+    font-weight: 800;
+    font-size: 14.5px;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: var(--shadow);
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.12s;
+  }
+
+  .show-detail-quickbar-btn:active {
+    transform: scale(0.96);
+  }
+}
+
 @media (max-width: 760px) {
   .show-detail-hero-content {
     flex-direction: column;
@@ -376,15 +453,34 @@ a.show-detail-imdb-btn:hover {
     width: 72px;
     height: 40px;
   }
+  /* The six emoji reaction buttons don't shrink, so on narrow screens they
+     crush the episode title and push the unwatch toggle off-screen — wrap the
+     picker onto its own line inside the row instead. */
+  .show-detail-ep {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .show-detail-ep .reaction-picker {
+    order: 1;
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .show-detail-hero-bg,
   .show-detail-season-body,
   .show-detail-ep-toggle.on,
-  .show-detail-ep {
+  .show-detail-ep,
+  .show-detail-ep-toggle,
+  .show-detail-quickbar,
+  .show-detail-quickbar-btn {
     animation: none !important;
     transition: none !important;
+  }
+  .show-detail-ep-toggle:hover,
+  .show-detail-quickbar-btn:active {
+    transform: none;
   }
   .show-detail-progress-card .progress-fill {
     transition: none !important;

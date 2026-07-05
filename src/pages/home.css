@@ -39,7 +39,8 @@
   filter: none;
 }
 
-/* gradient overlay blending the image into the page background */
+/* gradient overlay blending the image into the page background —
+   theme-aware so var(--text) content stays readable in light theme too */
 .home-hero-scrim {
   position: absolute;
   inset: 0;
@@ -47,13 +48,13 @@
     linear-gradient(
       to top,
       var(--bg) 0%,
-      rgba(23, 23, 23, 0.45) 42%,
-      rgba(23, 23, 23, 0.12) 100%
+      color-mix(in srgb, var(--bg) 45%, transparent) 42%,
+      color-mix(in srgb, var(--bg) 12%, transparent) 100%
     ),
     linear-gradient(
       100deg,
-      rgba(23, 23, 23, 0.82) 0%,
-      rgba(23, 23, 23, 0.28) 55%,
+      color-mix(in srgb, var(--bg) 82%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 28%, transparent) 55%,
       transparent 82%
     );
 }
@@ -75,7 +76,7 @@
   font-weight: 800;
   letter-spacing: -0.5px;
   line-height: 1.1;
-  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 2px 18px color-mix(in srgb, var(--bg) 60%, transparent);
 }
 
 .home-hero-meta {
@@ -92,8 +93,8 @@
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text);
-  background: rgba(23, 23, 23, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
   backdrop-filter: blur(6px);
 }
 
@@ -103,8 +104,8 @@
 
 .home-hero-overview {
   font-size: 14px;
-  color: rgba(237, 237, 237, 0.88);
-  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.5);
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+  text-shadow: 0 1px 12px color-mix(in srgb, var(--bg) 50%, transparent);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -119,13 +120,13 @@
 }
 
 .home-hero-actions .btn:not(.primary) {
-  background: rgba(23, 23, 23, 0.6);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
   backdrop-filter: blur(6px);
 }
 
 .home-hero-actions .btn:not(.primary):hover:not(:disabled) {
-  background: rgba(42, 42, 42, 0.75);
+  background: color-mix(in srgb, var(--bg-elev-2) 75%, transparent);
 }
 
 .home-hero-actions .btn:disabled {

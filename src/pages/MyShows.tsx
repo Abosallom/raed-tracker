@@ -238,6 +238,39 @@ function CompactRow({ show, action }: { show: TrackedShow; action?: ReactNode })
 // ---------- page ----------
 
 type View = 'queue' | 'notstarted' | 'uptodate'
+type Layout = 'list' | 'grid'
+
+const LAYOUT_KEY = 'raedtracker_shows_view'
+
+function loadLayout(): Layout {
+  try {
+    return localStorage.getItem(LAYOUT_KEY) === 'grid' ? 'grid' : 'list'
+  } catch {
+    return 'list'
+  }
+}
+
+function GridIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="1.5" y="1.5" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="9.5" y="1.5" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="1.5" y="9.5" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="9.5" y="9.5" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+function ListIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="1.5" y="2" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8.5 4h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="1.5" y="10" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8.5 12h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
 
 export default function MyShows() {
   const shows = useLibrary((s) => s.shows)
@@ -245,6 +278,7 @@ export default function MyShows() {
   const togglePauseShow = useLibrary((s) => s.togglePauseShow)
 
   const [view, setView] = useState<View>('queue')
+  const [layout, setLayout] = useState<Layout>(loadLayout)
   const [favOnly, setFavOnly] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [sheet, setSheet] = useState<SheetInfo | null>(null)
@@ -310,6 +344,17 @@ export default function MyShows() {
   const totalEps = all.reduce((n, s) => n + watchedCount(s), 0)
   const queueCount = fresh.length + stale.length
 
+  const toggleLayout = () =>
+    setLayout((l) => {
+      const next: Layout = l === 'list' ? 'grid' : 'list'
+      try {
+        localStorage.setItem(LAYOUT_KEY, next)
+      } catch {
+        /* view preference just won't persist */
+      }
+      return next
+    })
+
   const browseChips = (
     <div className="queue-browse">
       <button
@@ -334,7 +379,34 @@ export default function MyShows() {
 
   return (
     <div>
-      <h1 className="page-title">My Shows</h1>
+      <div className="toptabs" role="tablist" aria-label="My Shows sections">
+        <span className="toptab active" role="tab" aria-selected="true">
+          Watch List
+          {queueCount > 0 && <span className="toptab-count">{queueCount}</span>}
+        </span>
+        <Link to="/upcoming" className="toptab" role="tab" aria-selected="false">
+          Upcoming
+        </Link>
+        <span className="toptabs-spacer" />
+        <div className="toptabs-actions">
+          <button
+            className={`queue-chip queue-fav${favOnly ? ' active' : ''}`}
+            onClick={() => setFavOnly((v) => !v)}
+            title="Only favorite shows"
+          >
+            ★ Favorites
+          </button>
+          <button
+            className="view-toggle"
+            onClick={toggleLayout}
+            title={layout === 'list' ? 'Switch to grid view' : 'Switch to list view'}
+            aria-label={layout === 'list' ? 'Switch to grid view' : 'Switch to list view'}
+          >
+            {layout === 'list' ? <GridIcon /> : <ListIcon />}
+          </button>
+        </div>
+      </div>
+
       <p className="page-subtitle">
         {all.length === 0
           ? 'Your watch-next queue lives here.'
@@ -342,25 +414,6 @@ export default function MyShows() {
               totalEps === 1 ? 'episode' : 'episodes'
             } watched`}
       </p>
-
-      <div className="queue-header">
-        <div className="queue-segmented" role="tablist" aria-label="My Shows sections">
-          <button className="queue-seg active" role="tab" aria-selected="true">
-            Watch Next <span className="queue-seg-count">{queueCount}</span>
-          </button>
-          <Link to="/upcoming" className="queue-seg" role="tab" aria-selected="false">
-            Upcoming
-          </Link>
-        </div>
-        <span className="queue-header-spacer" />
-        <button
-          className={`queue-chip queue-fav${favOnly ? ' active' : ''}`}
-          onClick={() => setFavOnly((v) => !v)}
-          title="Only favorite shows"
-        >
-          ★ Favorites
-        </button>
-      </div>
 
       {all.length === 0 ? (
         <div className="empty-state fade-in">
@@ -399,6 +452,38 @@ export default function MyShows() {
             </div>
           )}
         </>
+      ) : layout === 'grid' ? (
+        pool.length === 0 ? (
+          <div className="empty-state fade-in">
+            <div className="big">☆</div>
+            <p>No favorites yet — hit the ★ star on any show.</p>
+          </div>
+        ) : (
+          <div className="poster-grid stagger">
+            {[...pool].sort(byRank).map((s) => {
+              const seen = watchedCount(s)
+              return (
+                <Link
+                  key={s.snapshot.id}
+                  to={`/show/${s.snapshot.id}`}
+                  className="queue-grid-card"
+                  title={s.snapshot.name}
+                >
+                  <div className="queue-grid-poster">
+                    <PosterImage path={s.snapshot.poster_path} title={s.snapshot.name} />
+                  </div>
+                  <div className="queue-grid-name">{s.snapshot.name}</div>
+                  <div className="queue-grid-progress">
+                    <ProgressBar value={showProgress(s)} />
+                    <span className="queue-grid-eps">
+                      {seen}/{s.snapshot.totalEpisodes}
+                    </span>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        )
       ) : (
         <>
           {recent.length > 0 && (

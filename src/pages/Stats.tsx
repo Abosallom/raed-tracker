@@ -15,6 +15,7 @@ import {
   fmtDayKey,
   splitDuration,
 } from '../lib/stats'
+import { BackBar } from '../components/BackBar'
 import './stats.css'
 
 const BAR_COLORS = [
@@ -583,6 +584,7 @@ export default function Stats() {
   if (libraryEmpty) {
     return (
       <div>
+        <BackBar title="Stats" />
         <h1 className="page-title">Stats</h1>
         <p className="page-subtitle">Your watching, quantified.</p>
         <div className="empty-state">
@@ -603,6 +605,7 @@ export default function Stats() {
 
   return (
     <div>
+      <BackBar title="Stats" />
       <h1 className="page-title">Stats</h1>
       <p className="page-subtitle">Your watching, quantified.</p>
 

@@ -1,5 +1,45 @@
 /* Profile page — scoped styles (prefix: profile-) */
 
+/* ---------- page top row: title + icon shortcuts ---------- */
+
+.profile-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profile-top-titles {
+  min-width: 0;
+}
+
+.profile-shortcuts {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.profile-shortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
+  line-height: 1;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.profile-shortcut:hover {
+  border-color: var(--accent);
+  background: var(--bg-elev-2);
+  transform: translateY(-1px);
+}
+
 /* ---------- header card with accent banner ---------- */
 
 .profile-header {

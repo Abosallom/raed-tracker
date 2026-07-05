@@ -203,6 +203,24 @@ export async function getGenres(type: 'tv' | 'movie'): Promise<Genre[]> {
   }
 }
 
+/**
+ * Resolve an external id (TVDB or IMDb) to a TMDB entry. Used by the
+ * TV Time importer. Returns null when nothing matches or in demo mode.
+ */
+export async function findByExternalId(
+  externalId: string,
+  source: 'tvdb_id' | 'imdb_id',
+): Promise<SearchResult | null> {
+  if (isDemoMode()) return null
+  const data = await fetchTmdb<{
+    tv_results: RawResult[]
+    movie_results: RawResult[]
+  }>(`/find/${externalId}`, { external_source: source })
+  if (data.tv_results.length > 0) return normalize(data.tv_results[0], 'tv')
+  if (data.movie_results.length > 0) return normalize(data.movie_results[0], 'movie')
+  return null
+}
+
 /** Browse by genre, sorted by popularity. */
 export async function discoverByGenre(
   type: 'tv' | 'movie',

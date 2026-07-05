@@ -170,7 +170,10 @@ function EpisodeRow({ entry }: { entry: UpcomingEntry }) {
       <div className="upcoming-info">
         <div className="upcoming-toprow">
           <Link className="upcoming-show-pill" to={`/show/${entry.showId}`}>
-            {entry.showName}
+            <span className="upcoming-pill-name">{entry.showName}</span>
+            <span className="upcoming-pill-arrow" aria-hidden="true">
+              ›
+            </span>
           </Link>
           {entry.sample && <span className="upcoming-sample">sample</span>}
         </div>
@@ -178,13 +181,13 @@ function EpisodeRow({ entry }: { entry: UpcomingEntry }) {
           <span className="upcoming-code">
             S{pad2(entry.season)} <span className="upcoming-code-sep">|</span> E{pad2(entry.episode)}
           </span>
-          <span className="upcoming-ep-name">— {isTba(entry) ? 'TBA' : entry.epName}</span>
           {badge && (
             <span className={`upcoming-badge ${badge === 'NEW' ? 'new' : 'premiere'}`}>
               {badge}
             </span>
           )}
         </div>
+        <div className="upcoming-ep-title">{isTba(entry) ? 'TBA' : entry.epName}</div>
       </div>
       <div className="upcoming-when">
         {entry.network && <span className="chip upcoming-network">{entry.network}</span>}
@@ -436,11 +439,11 @@ export default function Upcoming() {
 
   return (
     <div>
-      <div className="upcoming-seg" aria-label="Schedule view">
-        <Link className="upcoming-seg-item" to="/shows">
-          Watch Next
+      <div className="toptabs" role="tablist" aria-label="Schedule view">
+        <Link className="toptab" to="/shows" role="tab" aria-selected="false">
+          Watch List
         </Link>
-        <span className="upcoming-seg-item active" aria-current="page">
+        <span className="toptab active" role="tab" aria-selected="true">
           Upcoming
         </span>
       </div>

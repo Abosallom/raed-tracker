@@ -95,6 +95,16 @@ interface LibraryState {
     cast: { id: number; name: string } | undefined,
   ) => void
 
+  /**
+   * Merge a migration payload (e.g. a TV Time export) into the library in one
+   * state update. Existing shows/movies keep their data; only missing watch
+   * records are added. Returns counts for the summary screen.
+   */
+  bulkImport: (payload: {
+    shows: { detail: ShowDetail; watched: { season: number; episode: number; watchedAt?: string }[] }[]
+    movies: { detail: MovieDetail; watchedAt?: string | null }[]
+  }) => { showsAdded: number; episodesMarked: number; moviesAdded: number }
+
   // ----- custom lists -----
   createList: (name: string) => string
   renameList: (id: string, name: string) => void
@@ -279,6 +289,57 @@ export const useLibrary = create<LibraryState>()(
             },
           }
         }),
+
+      bulkImport: (payload) => {
+        const st = get()
+        const shows = { ...st.shows }
+        const movies = { ...st.movies }
+        let showsAdded = 0
+        let episodesMarked = 0
+        let moviesAdded = 0
+
+        for (const item of payload.shows) {
+          const existing = shows[item.detail.id]
+          const base: TrackedShow = existing ?? {
+            snapshot: showToSnapshot(item.detail),
+            addedAt: now(),
+            watched: {},
+            favorite: false,
+          }
+          if (!existing) showsAdded++
+          const watched = { ...base.watched }
+          for (const ep of item.watched) {
+            const key = episodeKey(ep.season, ep.episode)
+            if (!watched[key]) {
+              watched[key] = { watchedAt: ep.watchedAt ?? now() }
+              episodesMarked++
+            }
+          }
+          shows[item.detail.id] = { ...base, watched }
+        }
+
+        for (const m of payload.movies) {
+          if (movies[m.detail.id]) {
+            if (m.watchedAt !== undefined && !movies[m.detail.id].watched && m.watchedAt) {
+              movies[m.detail.id] = {
+                ...movies[m.detail.id],
+                watched: { watchedAt: m.watchedAt },
+              }
+            }
+            continue
+          }
+          moviesAdded++
+          movies[m.detail.id] = {
+            snapshot: movieToSnapshot(m.detail),
+            addedAt: now(),
+            watched: m.watchedAt ? { watchedAt: m.watchedAt } : null,
+            favorite: false,
+          }
+        }
+
+        set({ shows, movies })
+        return { showsAdded, episodesMarked, moviesAdded }
+      },
 
       createList: (name) => {
         const id = `l_${Date.now()}_${Math.floor(Math.random() * 1e6)}`

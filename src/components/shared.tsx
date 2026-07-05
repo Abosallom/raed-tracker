@@ -207,7 +207,10 @@ export function ReactionPicker({
   compact?: boolean
 }) {
   return (
-    <div style={{ display: 'flex', gap: 4 }}>
+    <div
+      className={`reaction-picker${compact ? ' reaction-picker-compact' : ''}`}
+      style={{ display: 'flex', gap: 4 }}
+    >
       {EMOTIONS.map((e) => (
         <button
           key={e.key}

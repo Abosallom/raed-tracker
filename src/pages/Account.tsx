@@ -16,6 +16,7 @@ import {
 import { getSyncStatus, onSyncStatus, signIn, signOut, signUp, syncNow, type SyncStatus } from '../store/sync'
 import { showToast } from '../components/toast'
 import { timeAgo } from '../components/shared'
+import { BackBar } from '../components/BackBar'
 import './account.css'
 
 // ---------- signed-out: OTP-first sign in ----------
@@ -343,6 +344,7 @@ export default function Account() {
   if (!isSyncAvailable()) {
     return (
       <div>
+        <BackBar title="Account" />
         <h1 className="page-title">Account</h1>
         <div className="empty-state">
           <div className="big">🔌</div>
@@ -359,6 +361,7 @@ export default function Account() {
 
   return (
     <div>
+      <BackBar title="Account" />
       <h1 className="page-title">Account</h1>
       <p className="page-subtitle">Sign-in, security and your cloud library.</p>
       <div className="account-stack">

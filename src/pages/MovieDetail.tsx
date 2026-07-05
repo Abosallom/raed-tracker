@@ -17,6 +17,7 @@ import {
   formatMinutes,
 } from '../components/shared'
 import { CommentsSection } from '../components/CommentsSection'
+import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
 import './moviedetail.css'
 
@@ -93,8 +94,20 @@ export default function MovieDetail() {
     }
   }, [movieId])
 
-  if (error) return <ErrorBox message={error} />
-  if (!detail) return <SkeletonDetail />
+  if (error)
+    return (
+      <div>
+        <BackBar />
+        <ErrorBox message={error} />
+      </div>
+    )
+  if (!detail)
+    return (
+      <div>
+        <BackBar />
+        <SkeletonDetail />
+      </div>
+    )
 
   const year = detail.release_date ? detail.release_date.slice(0, 4) : null
   const watched = tracked?.watched ?? null
@@ -103,9 +116,6 @@ export default function MovieDetail() {
     : undefined
 
   const backdrop = backdropUrl(detail.backdrop_path)
-  const heroBg = backdrop
-    ? `linear-gradient(100deg, rgba(14,15,23,.94) 0%, rgba(14,15,23,.82) 45%, rgba(14,15,23,.55) 100%), url(${backdrop})`
-    : 'linear-gradient(140deg, #241c4d 0%, #171825 60%, #0e0f17 100%)'
 
   const handleWatchedToggle = () => {
     const wasWatched = Boolean(tracked?.watched)
@@ -141,8 +151,11 @@ export default function MovieDetail() {
 
   return (
     <div>
+      <BackBar title={detail.title} />
       <div className="moviedetail-hero">
-        <div className="moviedetail-hero-bg" style={{ backgroundImage: heroBg }} />
+        {backdrop && (
+          <div className="moviedetail-hero-bg" style={{ backgroundImage: `url(${backdrop})` }} />
+        )}
         <div className="moviedetail-hero-inner">
           <div className="moviedetail-poster">
             <PosterImage path={detail.poster_path} title={detail.title} />

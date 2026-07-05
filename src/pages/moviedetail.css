@@ -10,14 +10,29 @@
   margin-bottom: 26px;
 }
 
-/* Backdrop lives on its own layer so it can slowly zoom without moving content. */
+/* Backdrop lives on its own layer so it can slowly zoom without moving content.
+   Like the show-detail hero, it is faded into var(--bg-elev) so the themed
+   title/tagline text stays readable in both light and dark themes. */
 .moviedetail-hero-bg {
   position: absolute;
   inset: 0;
   background-size: cover;
   background-position: center 25%;
+  opacity: 0.35;
   animation: moviedetail-hero-zoom 20s ease-out both;
   will-change: transform;
+}
+
+.moviedetail-hero-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(14, 15, 23, 0.15) 0%,
+    rgba(14, 15, 23, 0.75) 70%,
+    var(--bg-elev) 100%
+  );
 }
 
 @keyframes moviedetail-hero-zoom {
@@ -131,7 +146,7 @@ a.moviedetail-imdb-btn:hover {
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-  background: rgba(23, 24, 37, 0.75);
+  background: var(--bg-elev-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 10px 16px;

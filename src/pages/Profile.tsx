@@ -123,8 +123,28 @@ export default function Profile() {
 
   return (
     <div>
-      <h1 className="page-title">Profile</h1>
-      <p className="page-subtitle">Your identity, stats, lists, favorites and comments.</p>
+      <div className="profile-top">
+        <div className="profile-top-titles">
+          <h1 className="page-title">Profile</h1>
+          <p className="page-subtitle">Your identity, stats, lists, favorites and comments.</p>
+        </div>
+        <div className="profile-shortcuts" aria-label="Profile shortcuts">
+          <Link className="profile-shortcut" to="/settings" aria-label="Settings" title="Settings">
+            ⚙️
+          </Link>
+          <Link className="profile-shortcut" to="/account" aria-label="Account" title="Account">
+            🔐
+          </Link>
+          <Link
+            className="profile-shortcut"
+            to="/watchlist"
+            aria-label="Watchlist"
+            title="Watchlist"
+          >
+            🔖
+          </Link>
+        </div>
+      </div>
 
       {/* ---------- header card ---------- */}
       <div className="card profile-header fade-in">
