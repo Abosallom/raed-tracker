@@ -4,12 +4,26 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import type { CastMember, Emotion, MovieDetail as MovieDetailData } from '../types'
+import type {
+  CastMember,
+  Emotion,
+  MovieDetail as MovieDetailData,
+  SearchResult,
+} from '../types'
 import { EMOTIONS } from '../types'
-import { backdropUrl, getMovieDetail, imdbTitleUrl, profileUrl } from '../api/tmdb'
+import {
+  backdropUrl,
+  getMovieDetail,
+  getRecommendations,
+  getTrailerKey,
+  imdbTitleUrl,
+  profileUrl,
+  youtubeUrl,
+} from '../api/tmdb'
 import { useLibrary } from '../store/library'
 import {
   ErrorBox,
+  MediaRow,
   PosterImage,
   Rating,
   ReactionPicker,
@@ -19,6 +33,7 @@ import {
 import { CommentsSection } from '../components/CommentsSection'
 import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
+import { ConfettiHost, fireConfetti } from '../components/Confetti'
 import './moviedetail.css'
 
 function initials(name: string): string {
@@ -61,6 +76,8 @@ export default function MovieDetail() {
 
   const [detail, setDetail] = useState<MovieDetailData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [trailerKey, setTrailerKey] = useState<string | null>(null)
+  const [recs, setRecs] = useState<SearchResult[]>([])
 
   const tracked = useLibrary((s) => s.movies[movieId])
   const onWatchlist = useLibrary((s) =>
@@ -94,6 +111,28 @@ export default function MovieDetail() {
     }
   }, [movieId])
 
+  // Trailer + "More like this" load alongside the main detail (best-effort:
+  // failures/demo mode just hide those bits).
+  useEffect(() => {
+    let cancelled = false
+    setTrailerKey(null)
+    setRecs([])
+    if (!Number.isFinite(movieId)) return
+    getTrailerKey('movie', movieId).then((key) => {
+      if (!cancelled) setTrailerKey(key)
+    })
+    getRecommendations('movie', movieId)
+      .then((items) => {
+        if (!cancelled) setRecs(items.slice(0, 12))
+      })
+      .catch(() => {
+        if (!cancelled) setRecs([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [movieId])
+
   if (error)
     return (
       <div>
@@ -121,10 +160,12 @@ export default function MovieDetail() {
     const wasWatched = Boolean(tracked?.watched)
     if (!tracked) addMovie(detail)
     toggleMovieWatched(movieId)
-    showToast(
-      wasWatched ? `${detail.title} unmarked` : `${detail.title} marked watched ✓`,
-      wasWatched ? '↩️' : '🎬',
-    )
+    if (wasWatched) {
+      showToast(`${detail.title} unmarked`, '↩️')
+    } else {
+      fireConfetti()
+      showToast(`${detail.title} watched — enjoy the credits! 🎉`, '🎬')
+    }
   }
 
   const handleWatchlistToggle = () => {
@@ -152,6 +193,7 @@ export default function MovieDetail() {
   return (
     <div>
       <BackBar title={detail.title} />
+      <ConfettiHost />
       <div className="moviedetail-hero">
         {backdrop && (
           <div className="moviedetail-hero-bg" style={{ backgroundImage: `url(${backdrop})` }} />
@@ -207,6 +249,16 @@ export default function MovieDetail() {
                 </button>
               )}
 
+              {trailerKey && (
+                <a
+                  className="btn moviedetail-trailer-btn"
+                  href={youtubeUrl(trailerKey)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  ▶ Trailer
+                </a>
+              )}
               {detail.imdb_id && (
                 <a
                   className="btn moviedetail-imdb-btn"
@@ -262,6 +314,15 @@ export default function MovieDetail() {
       <div style={{ marginTop: 32 }}>
         <CommentsSection mediaKey={`movie:${movieId}`} />
       </div>
+
+      {recs.length > 0 && (
+        <>
+          <div className="section-title" style={{ marginTop: 32 }}>
+            More like this
+          </div>
+          <MediaRow items={recs} />
+        </>
+      )}
     </div>
   )
 }

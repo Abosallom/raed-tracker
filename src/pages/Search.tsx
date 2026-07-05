@@ -1,14 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
+import { Link } from 'react-router-dom'
 import type { Genre, MediaType, SearchResult } from '../types'
 import {
+  backdropUrl,
   discoverByGenre,
   getGenres,
+  getTrailerKey,
   isDemoMode,
+  popularShows,
   searchMulti,
   topRatedMovies,
   topRatedShows,
   trendingMovies,
   trendingShows,
+  youtubeUrl,
 } from '../api/tmdb'
 import { useLibrary } from '../store/library'
 import { showToast } from '../components/toast'
@@ -16,7 +22,7 @@ import { ErrorBox, PosterCard, SkeletonGrid, SkeletonRow } from '../components/s
 import './search.css'
 
 type Filter = 'all' | MediaType
-type Tab = 'discover' | 'foryou' | 'genres'
+type Tab = 'feed' | 'discover' | 'foryou' | 'genres'
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -25,10 +31,32 @@ const FILTERS: { key: Filter; label: string }[] = [
 ]
 
 const TABS: { key: Tab; label: string; emoji: string }[] = [
+  { key: 'feed', label: 'Feed', emoji: '📡' },
   { key: 'discover', label: 'Discover', emoji: '🧭' },
   { key: 'foryou', label: 'For you', emoji: '✨' },
   { key: 'genres', label: 'Genres', emoji: '🎭' },
 ]
+
+// ---------- last active tab (sessionStorage, best-effort) ----------
+
+const TAB_KEY = 'showtrackr_explore_tab'
+
+function loadTab(): Tab {
+  try {
+    const t = sessionStorage.getItem(TAB_KEY)
+    return t === 'feed' || t === 'discover' || t === 'foryou' || t === 'genres' ? t : 'feed'
+  } catch {
+    return 'feed'
+  }
+}
+
+function saveTab(t: Tab) {
+  try {
+    sessionStorage.setItem(TAB_KEY, t)
+  } catch {
+    /* storage is best-effort */
+  }
+}
 
 // ---------- module-level cache (bounds real-API fetching) ----------
 
@@ -160,10 +188,10 @@ function saveRecent(list: string[]) {
   }
 }
 
-// ---------- quick-add poster card ----------
+// ---------- quick-add (shared by poster cards and feed cards) ----------
 
-/** PosterCard plus a corner quick-add button that never triggers navigation. */
-function QuickAddCard({ item }: { item: SearchResult }) {
+/** Watchlist quick-action state + toggle for one search result. */
+function useQuickAdd(item: SearchResult) {
   const onList = useLibrary((s) =>
     s.watchlist.some((w) => w.type === item.media_type && w.id === item.id),
   )
@@ -172,6 +200,30 @@ function QuickAddCard({ item }: { item: SearchResult }) {
   )
   const addToWatchlist = useLibrary((s) => s.addToWatchlist)
   const removeFromWatchlist = useLibrary((s) => s.removeFromWatchlist)
+
+  const toggle = () => {
+    if (onList) {
+      removeFromWatchlist(item.media_type, item.id)
+      showToast(`Removed “${item.name}” from watchlist`, '➖')
+    } else if (tracked) {
+      showToast(`“${item.name}” is already in your library`, '✔️')
+    } else {
+      addToWatchlist({
+        type: item.media_type,
+        id: item.id,
+        name: item.name,
+        poster_path: item.poster_path,
+      })
+      showToast(`Added “${item.name}” to watchlist`, '🔖')
+    }
+  }
+
+  return { onList, tracked, toggle }
+}
+
+/** PosterCard plus a corner quick-add button that never triggers navigation. */
+function QuickAddCard({ item }: { item: SearchResult }) {
+  const { onList, tracked, toggle } = useQuickAdd(item)
   const done = onList || tracked
   const label = onList
     ? 'Remove from watchlist'
@@ -189,24 +241,293 @@ function QuickAddCard({ item }: { item: SearchResult }) {
         onClick={(e) => {
           e.preventDefault()
           e.stopPropagation()
-          if (onList) {
-            removeFromWatchlist(item.media_type, item.id)
-            showToast(`Removed “${item.name}” from watchlist`, '➖')
-          } else if (tracked) {
-            showToast(`“${item.name}” is already in your library`, '✔️')
-          } else {
-            addToWatchlist({
-              type: item.media_type,
-              id: item.id,
-              name: item.name,
-              poster_path: item.poster_path,
-            })
-            showToast(`Added “${item.name}” to watchlist`, '🔖')
-          }
+          toggle()
         }}
       >
         {done ? '✓' : '+'}
       </button>
+    </div>
+  )
+}
+
+// ---------- Feed tab ----------
+
+const FEED_PAGES = 3
+
+/** Alternate shows and movies: [tv, movie, tv, movie, …] then leftovers. */
+function interleave(a: SearchResult[], b: SearchResult[]): SearchResult[] {
+  const out: SearchResult[] = []
+  const n = Math.max(a.length, b.length)
+  for (let i = 0; i < n; i++) {
+    if (i < a.length) out.push(a[i])
+    if (i < b.length) out.push(b[i])
+  }
+  return out
+}
+
+/**
+ * Feed pages. Trending has no pagination in our API layer, so page 2 reuses
+ * top-rated and page 3 popular shows; ids are deduped by the caller.
+ */
+async function fetchFeedPage(page: number): Promise<SearchResult[]> {
+  const key = `feed:${page}`
+  const hit = memCache.get(key)
+  if (hit !== undefined) return hit as SearchResult[]
+  let r: SearchResult[]
+  if (page === 1) {
+    const [tv, mv] = await Promise.all([trendingShows(), trendingMovies()])
+    r = interleave(tv, mv)
+  } else if (page === 2) {
+    const [tv, mv] = await Promise.all([topRatedShows(), topRatedMovies()])
+    r = interleave(tv, mv)
+  } else {
+    r = await popularShows()
+  }
+  memCache.set(key, r)
+  return r
+}
+
+const compactNumber = new Intl.NumberFormat('en', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+})
+
+/** Resolved trailer keys so a second click never refetches. */
+const trailerKeyCache = new Map<string, string | null>()
+
+function FeedCard({
+  item,
+  genreNames,
+  delay,
+}: {
+  item: SearchResult
+  genreNames: Map<number, string>
+  delay: number
+}) {
+  const [loaded, setLoaded] = useState(false)
+  const [trailerBusy, setTrailerBusy] = useState(false)
+  const { onList, tracked, toggle } = useQuickAdd(item)
+  const done = onList || tracked
+
+  const url = backdropUrl(item.backdrop_path, 'w780')
+  const year = (item.first_air_date ?? item.release_date ?? '').slice(0, 4)
+  const genres = (item.genre_ids ?? [])
+    .map((id) => genreNames.get(id))
+    .filter((n): n is string => Boolean(n))
+    .slice(0, 3)
+  const meta = [year, ...genres].filter(Boolean).join(' · ')
+  const votes = item.vote_count ?? 0
+
+  const openTrailer = (key: string | null) => {
+    if (key) window.open(youtubeUrl(key), '_blank', 'noopener')
+    else showToast('No trailer found', '🎬')
+  }
+
+  const onTrailer = (e: ReactMouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (trailerBusy) return
+    const cacheKey = `${item.media_type}:${item.id}`
+    if (trailerKeyCache.has(cacheKey)) {
+      openTrailer(trailerKeyCache.get(cacheKey) ?? null)
+      return
+    }
+    setTrailerBusy(true)
+    getTrailerKey(item.media_type, item.id)
+      .then((key) => {
+        trailerKeyCache.set(cacheKey, key)
+        openTrailer(key)
+      })
+      .finally(() => setTrailerBusy(false))
+  }
+
+  return (
+    <Link
+      className="feed-card"
+      to={item.media_type === 'tv' ? `/show/${item.id}` : `/movie/${item.id}`}
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      {url ? (
+        <img
+          ref={(img) => {
+            // Cached images can complete before onLoad is attached.
+            if (img && img.complete && img.naturalWidth > 0) setLoaded(true)
+          }}
+          className="feed-backdrop"
+          src={url}
+          alt=""
+          loading="lazy"
+          onLoad={() => setLoaded(true)}
+          style={{ opacity: loaded ? 1 : 0 }}
+        />
+      ) : (
+        <span className="feed-fallback-name" aria-hidden="true">
+          {item.name}
+        </span>
+      )}
+      <span className="feed-type-chip">
+        {item.media_type === 'tv' ? '📺 Show' : '🎬 Movie'}
+      </span>
+      <div className="feed-scrim" aria-hidden="true" />
+      <div className="feed-info">
+        <h3 className="feed-title">{item.name}</h3>
+        {meta && <p className="feed-meta">{meta}</p>}
+        {item.vote_average > 0 && (
+          <p className="feed-rating">
+            <span className="feed-star" aria-hidden="true">
+              ★
+            </span>{' '}
+            {item.vote_average.toFixed(1)}
+            {votes > 0 && (
+              <span className="feed-votes"> · {compactNumber.format(votes)} ratings</span>
+            )}
+          </p>
+        )}
+        <div className="feed-actions">
+          <button
+            className={`feed-action${done ? ' done' : ''}`}
+            title={
+              onList
+                ? 'Remove from watchlist'
+                : tracked
+                  ? 'Already in your library'
+                  : 'Add to watchlist'
+            }
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              toggle()
+            }}
+          >
+            {onList ? '✓ Watchlisted' : tracked ? '✓ In library' : '＋ Watchlist'}
+          </button>
+          <button
+            className="feed-action feed-trailer"
+            aria-busy={trailerBusy}
+            disabled={trailerBusy}
+            onClick={onTrailer}
+          >
+            {trailerBusy ? (
+              <span className="feed-chip-spinner" aria-hidden="true" />
+            ) : (
+              <span aria-hidden="true">▶</span>
+            )}{' '}
+            Trailer
+          </button>
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+function FeedTab() {
+  const [items, setItems] = useState<SearchResult[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [busy, setBusy] = useState(false)
+  // Demo mode serves the same sample lists for every page — hide "Show more".
+  const [ended, setEnded] = useState(isDemoMode())
+  // First index of the most recently appended page, so only new cards stagger.
+  const [batchStart, setBatchStart] = useState(0)
+
+  // Genre id -> name lookup for the "year · genres" line (best-effort).
+  const tvGenres = useCached<Genre[]>('genres:tv', () => getGenres('tv'))
+  const mvGenres = useCached<Genre[]>('genres:movie', () => getGenres('movie'))
+  const genreNames = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const g of mvGenres.data ?? []) m.set(g.id, g.name)
+    for (const g of tvGenres.data ?? []) m.set(g.id, g.name) // tv wins ties
+    return m
+  }, [tvGenres.data, mvGenres.data])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchFeedPage(1)
+      .then((r) => {
+        if (cancelled) return
+        const seen = new Set<string>()
+        const uniq = r.filter((i) => {
+          const k = `${i.media_type}:${i.id}`
+          if (seen.has(k)) return false
+          seen.add(k)
+          return true
+        })
+        setItems(uniq)
+        if (uniq.length === 0) setEnded(true)
+      })
+      .catch((e: unknown) => {
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : 'Could not load the feed — try again.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const loadMore = () => {
+    const next = page + 1
+    setBusy(true)
+    fetchFeedPage(next)
+      .then((r) => {
+        const prev = items ?? []
+        const seen = new Set(prev.map((i) => `${i.media_type}:${i.id}`))
+        const fresh = r.filter((i) => {
+          const k = `${i.media_type}:${i.id}`
+          if (seen.has(k)) return false
+          seen.add(k)
+          return true
+        })
+        setBatchStart(prev.length)
+        setItems([...prev, ...fresh])
+        setPage(next)
+        if (fresh.length === 0 || next >= FEED_PAGES) setEnded(true)
+      })
+      .catch(() => {
+        showToast('Could not load more — try again.', '⚠️')
+      })
+      .finally(() => setBusy(false))
+  }
+
+  if (error) return <ErrorBox message={error} />
+
+  if (!items) {
+    return (
+      <div className="feed-list" aria-hidden="true">
+        {Array.from({ length: 3 }, (_, i) => (
+          <div key={i} className="skeleton feed-skel" />
+        ))}
+      </div>
+    )
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="empty-state">
+        <div className="big">📡</div>
+        <p>The feed is quiet right now — check back soon.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="fade-in">
+      <div className="feed-list">
+        {items.map((it, i) => (
+          <FeedCard
+            key={`${it.media_type}:${it.id}`}
+            item={it}
+            genreNames={genreNames}
+            delay={Math.min(Math.max(i - batchStart, 0), 5) * 70}
+          />
+        ))}
+      </div>
+      {!ended && (
+        <div className="explore-load-more">
+          <button className="btn" disabled={busy} onClick={loadMore}>
+            {busy ? 'Loading…' : 'Show more'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -520,10 +841,15 @@ export default function Search() {
   const [recent, setRecent] = useState<string[]>(loadRecent)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Explore hub state
-  const [tab, setTab] = useState<Tab>('discover')
+  // Explore hub state — the active tab survives back-navigation via sessionStorage.
+  const [tab, setTabState] = useState<Tab>(loadTab)
   const [genreType, setGenreType] = useState<MediaType>('tv')
   const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null)
+
+  const setTab = (t: Tab) => {
+    setTabState(t)
+    saveTab(t)
+  }
 
   const shows = useLibrary((s) => s.shows)
   const movies = useLibrary((s) => s.movies)
@@ -686,6 +1012,7 @@ export default function Search() {
             ))}
           </div>
 
+          {tab === 'feed' && <FeedTab />}
           {tab === 'discover' && <DiscoverTab onBrowse={goBrowse} />}
           {tab === 'foryou' && <ForYouTab topGenres={topGenres} />}
           {tab === 'genres' && (

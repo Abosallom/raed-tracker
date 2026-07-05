@@ -15,6 +15,8 @@ export interface SearchResult {
   backdrop_path: string | null
   overview: string
   vote_average: number
+  /** Number of TMDB ratings — real community-size signal for feed cards. */
+  vote_count?: number
   first_air_date?: string // tv
   release_date?: string // movie
   genre_ids?: number[]

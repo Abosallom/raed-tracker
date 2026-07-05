@@ -103,6 +103,7 @@ interface RawResult {
   backdrop_path: string | null
   overview: string
   vote_average: number
+  vote_count?: number
   first_air_date?: string
   release_date?: string
   genre_ids?: number[]
@@ -118,6 +119,7 @@ function normalize(r: RawResult, fallbackType: 'tv' | 'movie'): SearchResult {
     backdrop_path: r.backdrop_path,
     overview: r.overview,
     vote_average: r.vote_average,
+    vote_count: r.vote_count,
     first_air_date: r.first_air_date,
     release_date: r.release_date,
     genre_ids: r.genre_ids,
@@ -219,6 +221,40 @@ export async function findByExternalId(
   if (data.tv_results.length > 0) return normalize(data.tv_results[0], 'tv')
   if (data.movie_results.length > 0) return normalize(data.movie_results[0], 'movie')
   return null
+}
+
+/** YouTube key of the best official trailer, or null. */
+export async function getTrailerKey(type: 'tv' | 'movie', id: number): Promise<string | null> {
+  if (isDemoMode()) return null
+  try {
+    const data = await fetchTmdb<{
+      results: { key: string; site: string; type: string; official: boolean }[]
+    }>(`/${type}/${id}/videos`)
+    const yt = data.results.filter((v) => v.site === 'YouTube')
+    const pick =
+      yt.find((v) => v.type === 'Trailer' && v.official) ??
+      yt.find((v) => v.type === 'Trailer') ??
+      yt.find((v) => v.type === 'Teaser')
+    return pick?.key ?? null
+  } catch {
+    return null
+  }
+}
+
+export function youtubeUrl(key: string): string {
+  return `https://www.youtube.com/watch?v=${key}`
+}
+
+/** "More like this" recommendations for a title. */
+export async function getRecommendations(
+  type: 'tv' | 'movie',
+  id: number,
+): Promise<SearchResult[]> {
+  if (isDemoMode()) {
+    return (type === 'tv' ? MOCK_TRENDING_TV : MOCK_TRENDING_MOVIES).filter((r) => r.id !== id)
+  }
+  const data = await fetchTmdb<{ results: RawResult[] }>(`/${type}/${id}/recommendations`)
+  return data.results.map((r) => normalize(r, type))
 }
 
 /** Browse by genre, sorted by popularity. */

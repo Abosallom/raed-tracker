@@ -529,6 +529,16 @@ export function nextEpisode(show: TrackedShow): { season: number; episode: numbe
   return null
 }
 
+/** Every aired episode of season `season` is watched (used for completion celebrations). */
+export function seasonComplete(show: TrackedShow, season: number): boolean {
+  const aired = airedEpisodeCount(show, season)
+  if (aired === 0) return false
+  for (let e = 1; e <= aired; e++) {
+    if (!show.watched[episodeKey(season, e)]) return false
+  }
+  return true
+}
+
 /** Total minutes watched across the whole library. */
 export function totalMinutesWatched(
   shows: Record<number, TrackedShow>,

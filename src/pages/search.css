@@ -425,3 +425,246 @@
   justify-content: center;
   margin: 24px 0 8px;
 }
+
+/* ---------- Feed tab: living vertical feed of backdrop cards ---------- */
+
+.feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 720px;
+  margin: 18px auto 0;
+}
+
+@keyframes feed-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.feed-card {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  /* Poster-fallback gradient shows while the backdrop loads or when null.
+     Kept dark in both themes so the overlay text stays readable. */
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--accent) 32%, #191922),
+      #101015 70%
+    );
+  animation: feed-card-in 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.feed-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.45);
+}
+
+.feed-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.35s ease, transform 0.4s ease;
+}
+
+.feed-card:hover .feed-backdrop {
+  transform: scale(1.03);
+}
+
+.feed-fallback-name {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  max-width: 55%;
+  text-align: right;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  line-height: 1.15;
+  color: rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+}
+
+.feed-type-chip {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: rgba(14, 15, 23, 0.72);
+  color: #ededed;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(4px);
+}
+
+.feed-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    to top,
+    rgba(6, 6, 10, 0.92) 0%,
+    rgba(6, 6, 10, 0.55) 34%,
+    transparent 62%
+  );
+}
+
+.feed-info {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 16px 18px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.feed-title {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  line-height: 1.15;
+  color: #ffffff;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+}
+
+.feed-meta {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.feed-rating {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.feed-star {
+  color: var(--accent);
+}
+
+.feed-votes {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.feed-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.feed-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  background: rgba(14, 15, 23, 0.66);
+  color: #f2f2f2;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(4px);
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
+}
+
+.feed-action:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.feed-action.done {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #171717;
+}
+
+.feed-action.done:hover {
+  color: #171717;
+}
+
+.feed-action:disabled {
+  opacity: 0.75;
+  cursor: default;
+  transform: none;
+}
+
+.feed-trailer span[aria-hidden] {
+  font-size: 10px;
+}
+
+@keyframes feed-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.feed-chip-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  animation: feed-spin 0.7s linear infinite;
+}
+
+.feed-skel {
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+}
+
+@media (max-width: 560px) {
+  .feed-list {
+    gap: 14px;
+  }
+  .feed-title {
+    font-size: 17px;
+  }
+  .feed-info {
+    padding: 12px 14px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed-card,
+  .feed-backdrop,
+  .feed-action {
+    animation: none !important;
+    transition: none !important;
+  }
+  .feed-card:hover,
+  .feed-card:hover .feed-backdrop,
+  .feed-action:hover {
+    transform: none;
+  }
+  .feed-chip-spinner {
+    animation: none;
+    opacity: 0.6;
+  }
+}

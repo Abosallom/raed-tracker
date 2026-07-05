@@ -2,20 +2,28 @@
 // episode of each show, react in the EpisodeSheet, and keep momentum.
 // Rendered from the store; episode titles are fetched lazily and cached.
 
-import { useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import { Link } from 'react-router-dom'
 import {
   airedEpisodeCount,
   nextEpisode,
+  seasonComplete,
   showProgress,
   useLibrary,
   watchedCount,
 } from '../store/library'
 import type { SeasonDetail, TrackedShow } from '../types'
-import { getSeasonDetail } from '../api/tmdb'
+import { getSeasonDetail, stillUrl } from '../api/tmdb'
+import {
+  getFreshnessSnapshot,
+  markSeen,
+  refreshFollowedShows,
+  subscribeFreshness,
+} from '../lib/freshness'
 import { PosterImage, ProgressBar, timeAgo } from '../components/shared'
 import { showToast } from '../components/toast'
+import { ConfettiHost, fireConfetti } from '../components/Confetti'
 import EpisodeSheet from '../components/EpisodeSheet'
 import './myshows.css'
 
@@ -75,6 +83,135 @@ interface SheetInfo {
   episodeTitle?: string
 }
 
+// ---------- pull-to-refresh (touch) ----------
+
+const PULL_THRESHOLD = 64 // px of indicator height that arms the release
+const PULL_MAX = 110 // elastic cap
+const PULL_HOLD = 48 // indicator height while refreshing
+const PULL_MIN_SPIN_MS = 600 // keep the spinner visible at least this long
+
+type PtrPhase = 'idle' | 'pulling' | 'refreshing'
+
+const prefersReducedMotion = () =>
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+/**
+ * Elastic pull-to-refresh on `targetRef` (fires only when the document is
+ * scrolled to the top). The indicator element (`spacerRef`) has its height
+ * driven imperatively so touchmove never re-renders the page; React state
+ * only tracks the coarse phase + "armed past threshold" flag.
+ */
+function usePullToRefresh(
+  targetRef: RefObject<HTMLDivElement | null>,
+  spacerRef: RefObject<HTMLDivElement | null>,
+) {
+  // React state is presentational only; the gesture logic below runs on
+  // plain locals so it never lags behind batched renders.
+  const [phase, setPhase] = useState<PtrPhase>('idle')
+  const [armed, setArmed] = useState(false)
+
+  // Suppress the browser's native overscroll/pull-to-reload while mounted.
+  useEffect(() => {
+    const root = document.documentElement
+    const prev = root.style.overscrollBehaviorY
+    root.style.overscrollBehaviorY = 'contain'
+    return () => {
+      root.style.overscrollBehaviorY = prev
+    }
+  }, [])
+
+  useEffect(() => {
+    const el = targetRef.current
+    if (!el) return
+
+    let startY = 0
+    let dist = 0
+    let tracking = false
+    let busy = false // a triggered refresh is still settling
+
+    const setHeight = (px: number, animate: boolean) => {
+      const sp = spacerRef.current
+      if (!sp) return
+      sp.style.transition = animate && !prefersReducedMotion() ? 'height 0.25s ease' : 'none'
+      sp.style.height = `${px}px`
+    }
+
+    const reset = (animate: boolean) => {
+      setPhase('idle')
+      setArmed(false)
+      setHeight(0, animate)
+    }
+
+    const onStart = (e: TouchEvent) => {
+      if (busy) return
+      const top = document.scrollingElement?.scrollTop ?? window.scrollY
+      if (top > 0) return
+      startY = e.touches[0].clientY
+      dist = 0
+      tracking = true
+    }
+
+    const onMove = (e: TouchEvent) => {
+      if (!tracking || busy) return
+      const dy = e.touches[0].clientY - startY
+      if (dy <= 0) {
+        // Scrolling up — bail out of the gesture.
+        if (dist > 0) reset(false)
+        dist = 0
+        return
+      }
+      const top = document.scrollingElement?.scrollTop ?? window.scrollY
+      if (top > 0) {
+        tracking = false
+        if (dist > 0) reset(false)
+        dist = 0
+        return
+      }
+      if (e.cancelable) e.preventDefault() // we own the gesture now
+      dist = Math.min(PULL_MAX, dy * 0.45) // elastic resistance
+      setHeight(dist, false)
+      setPhase('pulling')
+      setArmed(dist >= PULL_THRESHOLD)
+    }
+
+    const onEnd = () => {
+      if (!tracking || busy) return
+      tracking = false
+      if (dist >= PULL_THRESHOLD) {
+        busy = true
+        setPhase('refreshing')
+        setArmed(false)
+        setHeight(PULL_HOLD, true)
+        const started = Date.now()
+        void refreshFollowedShows({ force: true }).finally(() => {
+          // Hold the spinner briefly so instant runs don't flicker.
+          const wait = Math.max(0, PULL_MIN_SPIN_MS - (Date.now() - started))
+          window.setTimeout(() => {
+            busy = false
+            reset(true)
+          }, wait)
+        })
+      } else if (dist > 0) {
+        reset(true)
+      }
+      dist = 0
+    }
+
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd)
+    el.addEventListener('touchcancel', onEnd)
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+      el.removeEventListener('touchcancel', onEnd)
+    }
+  }, [targetRef, spacerRef])
+
+  return { phase, armed }
+}
+
 // ---------- queue row ----------
 
 function QueueRow({
@@ -100,8 +237,14 @@ function QueueRow({
 
   const [pop, setPop] = useState(false)
   const [flash, setFlash] = useState(false)
-  const [epInfo, setEpInfo] = useState<{ title: string; airDate: string | null } | null>(null)
+  const [epInfo, setEpInfo] = useState<{
+    title: string
+    airDate: string | null
+    still: string | null
+  } | null>(null)
   const [epLoading, setEpLoading] = useState(index < PREFETCH_CAP)
+  // Which still src has finished loading — drives the crossfade + widening.
+  const [stillLoadedSrc, setStillLoadedSrc] = useState<string | null>(null)
 
   const season = shown?.season
   const episode = shown?.episode
@@ -115,7 +258,7 @@ function QueueRow({
       .then((d) => {
         if (!alive) return
         const ep = d.episodes.find((e) => e.episode_number === episode)
-        setEpInfo(ep ? { title: ep.name, airDate: ep.air_date } : null)
+        setEpInfo(ep ? { title: ep.name, airDate: ep.air_date, still: ep.still_path } : null)
       })
       .catch(() => {
         /* row still renders without a title */
@@ -129,6 +272,10 @@ function QueueRow({
   }, [snap.id, season, episode, index])
 
   if (!shown) return null
+
+  // Episode still (16:9) crossfades over the poster once it has loaded.
+  const stillSrc = stillUrl(epInfo?.still ?? null)
+  const stillOn = stillSrc !== null && stillLoadedSrc === stillSrc
 
   const behind = behindCount(show)
   const isNew = (() => {
@@ -150,8 +297,12 @@ function QueueRow({
     showToast(`${snap.name} · ${epCode(s, e)} watched ✓`, '📺')
     const updated = useLibrary.getState().shows[snap.id]
     if (updated && nextEpisode(updated) === null) {
+      fireConfetti()
       showToast(`All caught up on ${snap.name} 🎉`)
       onCaughtUp(snap.id)
+    } else if (updated && seasonComplete(updated, s)) {
+      fireConfetti()
+      showToast(`Season ${s} complete! 🎉`, '🏆')
     }
     onOpenSheet({
       showId: snap.id,
@@ -164,8 +315,25 @@ function QueueRow({
 
   return (
     <div className={`queue-row${flash ? ' flash' : ''}${leaving ? ' leaving' : ''}`}>
-      <Link to={`/show/${snap.id}`} className="queue-poster" title={snap.name}>
+      <Link
+        to={`/show/${snap.id}`}
+        className={`queue-poster${stillOn ? ' has-still' : ''}`}
+        title={snap.name}
+      >
         <PosterImage path={snap.poster_path} title={snap.name} />
+        {stillSrc && (
+          <img
+            className={`queue-still${stillOn ? ' on' : ''}`}
+            src={stillSrc}
+            alt=""
+            loading="lazy"
+            ref={(img) => {
+              // Cached stills can complete before onLoad is attached.
+              if (img && img.complete && img.naturalWidth > 0) setStillLoadedSrc(stillSrc)
+            }}
+            onLoad={() => setStillLoadedSrc(stillSrc)}
+          />
+        )}
       </Link>
 
       <div className="queue-main">
@@ -272,6 +440,27 @@ function ListIcon() {
   )
 }
 
+function RefreshIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <polyline
+        points="23 4 23 10 17 10"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export default function MyShows() {
   const shows = useLibrary((s) => s.shows)
   const toggleEpisode = useLibrary((s) => s.toggleEpisode)
@@ -283,6 +472,13 @@ export default function MyShows() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [sheet, setSheet] = useState<SheetInfo | null>(null)
   const [leavingIds, setLeavingIds] = useState<number[]>([])
+
+  // Freshness engine: refreshing flag (spinner) + newly-aired ribbon.
+  const freshness = useSyncExternalStore(subscribeFreshness, getFreshnessSnapshot)
+  const pageRef = useRef<HTMLDivElement>(null)
+  const ptrRef = useRef<HTMLDivElement>(null)
+  const { phase: ptrPhase, armed: ptrArmed } = usePullToRefresh(pageRef, ptrRef)
+
   const leaveTimers = useRef<number[]>([])
   useEffect(
     () => () => {
@@ -378,7 +574,32 @@ export default function MyShows() {
   )
 
   return (
-    <div>
+    <div ref={pageRef}>
+      <ConfettiHost />
+      {/* Elastic pull-to-refresh indicator (height driven by usePullToRefresh) */}
+      <div
+        ref={ptrRef}
+        className={`ptr${ptrArmed ? ' armed' : ''}${ptrPhase === 'refreshing' ? ' refreshing' : ''}`}
+        aria-hidden={ptrPhase === 'idle'}
+      >
+        <div className="ptr-inner">
+          {ptrPhase === 'refreshing' ? (
+            <span className="ptr-spinner" aria-hidden="true" />
+          ) : (
+            <span className="ptr-arrow" aria-hidden="true">
+              ↓
+            </span>
+          )}
+          <span className="ptr-label">
+            {ptrPhase === 'refreshing'
+              ? 'Checking for new episodes…'
+              : ptrArmed
+                ? 'Release to refresh'
+                : 'Pull to refresh'}
+          </span>
+        </div>
+      </div>
+
       <div className="toptabs" role="tablist" aria-label="My Shows sections">
         <span className="toptab active" role="tab" aria-selected="true">
           Watch List
@@ -395,6 +616,15 @@ export default function MyShows() {
             title="Only favorite shows"
           >
             ★ Favorites
+          </button>
+          <button
+            className={`view-toggle queue-refresh-btn${freshness.refreshing ? ' spinning' : ''}`}
+            onClick={() => void refreshFollowedShows({ force: true })}
+            disabled={freshness.refreshing}
+            title="Check for new episodes"
+            aria-label="Check for new episodes"
+          >
+            <RefreshIcon />
           </button>
           <button
             className="view-toggle"
@@ -414,6 +644,32 @@ export default function MyShows() {
               totalEps === 1 ? 'episode' : 'episodes'
             } watched`}
       </p>
+
+      {freshness.newlyAired.length > 0 && (
+        <div className="queue-ribbon" role="status">
+          <span className="queue-ribbon-icon" aria-hidden="true">
+            📡
+          </span>
+          <span className="queue-ribbon-text">
+            New episodes:{' '}
+            {freshness.newlyAired.map((g, i) => (
+              <span key={g.showId} className="queue-ribbon-item">
+                {i > 0 && ', '}
+                <Link to={`/show/${g.showId}`}>{g.name}</Link>{' '}
+                <span className="queue-ribbon-count">+{g.count}</span>
+              </span>
+            ))}
+          </span>
+          <button
+            className="queue-ribbon-dismiss"
+            onClick={markSeen}
+            title="Dismiss"
+            aria-label="Dismiss new episodes notice"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {all.length === 0 ? (
         <div className="empty-state fade-in">

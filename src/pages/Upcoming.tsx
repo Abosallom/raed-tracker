@@ -6,9 +6,10 @@ import type { SearchResult, ShowDetail } from '../types'
 import { episodeKey } from '../types'
 import { getShowDetail, isDemoMode, upcomingMovies } from '../api/tmdb'
 import { MOCK_SHOWS } from '../api/mockData'
-import { useLibrary } from '../store/library'
+import { nextEpisode, seasonComplete, useLibrary } from '../store/library'
 import { ErrorBox, PosterCard, PosterImage, SkeletonRow } from '../components/shared'
 import { showToast } from '../components/toast'
+import { ConfettiHost, fireConfetti } from '../components/Confetti'
 import './upcoming.css'
 
 // ---------- module-level cache (survives remounts, caps refetching) ----------
@@ -153,6 +154,16 @@ function CheckButton({ entry }: { entry: UpcomingEntry }) {
           nowWatched ? `${epCode(entry)} marked watched ✓` : `${epCode(entry)} marked unwatched`,
           nowWatched ? '✅' : '↩️',
         )
+        if (nowWatched) {
+          const updated = useLibrary.getState().shows[entry.showId]
+          if (updated && nextEpisode(updated) === null) {
+            fireConfetti()
+            showToast(`All caught up on ${entry.showName} 🎉`, '🏆')
+          } else if (updated && seasonComplete(updated, entry.season)) {
+            fireConfetti()
+            showToast(`Season ${entry.season} complete! 🎉`, '🏆')
+          }
+        }
       }}
     >
       ✓
@@ -439,6 +450,7 @@ export default function Upcoming() {
 
   return (
     <div>
+      <ConfettiHost />
       <div className="toptabs" role="tablist" aria-label="Schedule view">
         <Link className="toptab" to="/shows" role="tab" aria-selected="false">
           Watch List

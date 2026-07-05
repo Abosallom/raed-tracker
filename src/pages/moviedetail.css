@@ -111,6 +111,19 @@
   background: #4ade9d;
 }
 
+/* trailer pill */
+
+a.moviedetail-trailer-btn {
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+a.moviedetail-trailer-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
 /* IMDb pill — brand yellow on dark */
 
 a.moviedetail-imdb-btn {

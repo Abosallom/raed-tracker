@@ -111,6 +111,99 @@
   }
 }
 
+/* ---------- freshness badges (both themes via variables) ---------- */
+
+/* Sidebar (desktop): count bubble sits after the label. */
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+/* Sidebar: small "new trending" dot after the Explore label. */
+.nav-dot {
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: 0 0 auto;
+}
+
+/* The sidebar nav-item is a flex row in global.css; margin-left:auto pushes
+   the badge/dot to the right edge. Fallback alignment if it is not flex: */
+.nav-item .nav-badge,
+.nav-item .nav-dot {
+  vertical-align: middle;
+}
+
+/* Tab bar (mobile): bubble/dot pinned to the icon's top-right corner. */
+.tabbar-icon {
+  position: relative;
+}
+
+.tab-badge {
+  position: absolute;
+  top: -4px;
+  right: -12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  border: 2px solid var(--bg);
+  box-sizing: content-box;
+}
+
+.tab-dot {
+  position: absolute;
+  top: -2px;
+  right: -8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+}
+
+/* ---------- route transitions ---------- */
+
+.page-enter {
+  /* fill-mode backwards (not both/forwards): a persistent transform would make
+     this wrapper the containing block for position:fixed descendants
+     (show-detail quickbar, episode sheet, profile emoji backdrop). */
+  animation: page-enter 180ms ease-out backwards;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tabbar-item,
   .tabbar-icon {
@@ -118,5 +211,8 @@
   }
   .tabbar-item:active .tabbar-icon {
     transform: none;
+  }
+  .page-enter {
+    animation: none !important;
   }
 }

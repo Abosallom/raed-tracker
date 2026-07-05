@@ -15,6 +15,8 @@ import {
   fmtDayKey,
   splitDuration,
 } from '../lib/stats'
+import type { StreakInfo } from '../lib/streaks'
+import { computeStreaks, localDayKey, watchDaySet } from '../lib/streaks'
 import { BackBar } from '../components/BackBar'
 import './stats.css'
 
@@ -126,6 +128,55 @@ function MiniStat({
       <div className="stats-mini-label">{label}</div>
       {sub && <div className="stats-mini-sub">{sub}</div>}
     </div>
+  )
+}
+
+/** "🔥 Streak" card: current-streak count, longest, and a 14-day dot strip. */
+function StreakCard({ streaks, activeDays }: { streaks: StreakInfo; activeDays: Set<string> }) {
+  const now = new Date()
+  const strip: { key: string; active: boolean; today: boolean }[] = []
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+    const key = localDayKey(d)
+    strip.push({ key, active: activeDays.has(key), today: i === 0 })
+  }
+  return (
+    <section className="card stats-hero" style={{ marginBottom: 18 }}>
+      <h2 className="stats-section-h">🔥 Streak</h2>
+      {streaks.lastActiveDay === null ? (
+        <p className="stats-empty-note">Watch something to start a streak.</p>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
+          <div>
+            <div className="stats-hero-value" style={{ color: 'var(--accent)' }}>
+              {num(streaks.current)} {streaks.current === 1 ? 'day' : 'days'}
+            </div>
+            <div className="stats-hero-sub">Longest: {num(streaks.longest)}</div>
+          </div>
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 2px' }}
+            aria-label="Watch activity, last 14 days"
+          >
+            {strip.map((d) => (
+              <span
+                key={d.key}
+                title={`${fmtDayKey(d.key)}${d.today ? ' (today)' : ''}${d.active ? ' — watched' : ''}`}
+                style={{
+                  width: 11,
+                  height: 11,
+                  borderRadius: '50%',
+                  boxSizing: 'border-box',
+                  background: d.active ? 'var(--accent)' : 'var(--bg-elev-2)',
+                  border: `1px solid ${d.active ? 'var(--accent)' : 'var(--border)'}`,
+                  outline: d.today ? '2px solid var(--accent)' : 'none',
+                  outlineOffset: 2,
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -263,7 +314,15 @@ function BadgeSection({ badges }: { badges: Badge[] }) {
 
 // ---------- shows tab ----------
 
-function ShowsTab({ stats }: { stats: ShowStats }) {
+function ShowsTab({
+  stats,
+  streaks,
+  activeDays,
+}: {
+  stats: ShowStats
+  streaks: StreakInfo
+  activeDays: Set<string>
+}) {
   return (
     <div className="fade-in">
       <div className="stats-hero-row">
@@ -284,6 +343,8 @@ function ShowsTab({ stats }: { stats: ShowStats }) {
           }
         />
       </div>
+
+      <StreakCard streaks={streaks} activeDays={activeDays} />
 
       <div className="stats-grid">
         <section className="card">
@@ -561,6 +622,8 @@ export default function Stats() {
 
   const showStats = useMemo(() => computeShowStats(shows), [shows])
   const movieStats = useMemo(() => computeMovieStats(movies, watchlist), [movies, watchlist])
+  const streaks = useMemo(() => computeStreaks(shows, movies), [shows, movies])
+  const activeDays = useMemo(() => watchDaySet(shows, movies), [shows, movies])
   const badges = useMemo(
     () =>
       computeBadges({
@@ -630,7 +693,11 @@ export default function Stats() {
         </button>
       </div>
 
-      {tab === 'shows' ? <ShowsTab stats={showStats} /> : <MoviesTab stats={movieStats} />}
+      {tab === 'shows' ? (
+        <ShowsTab stats={showStats} streaks={streaks} activeDays={activeDays} />
+      ) : (
+        <MoviesTab stats={movieStats} />
+      )}
 
       <BadgeSection badges={badges} />
     </div>

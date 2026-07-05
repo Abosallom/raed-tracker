@@ -259,17 +259,32 @@
   }
 }
 
+/* Leading media: show poster (2:3) that morphs into a wider 16:9 episode
+   still once the still image has loaded (crossfade + width/height tween). */
+
 .queue-poster {
+  position: relative;
   display: block;
   width: 64px;
+  height: 96px;
   flex-shrink: 0;
   border-radius: 8px;
   overflow: hidden;
-  transition: transform 0.15s;
+  transition: transform 0.15s, width 0.35s ease, height 0.35s ease;
+}
+
+.queue-poster.has-still {
+  width: 108px;
+  height: 61px;
 }
 
 .queue-poster .poster-img,
 .queue-poster .poster-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   border-radius: 8px;
 }
 
@@ -281,6 +296,21 @@
   font-size: 9px;
   padding: 5px;
   line-height: 1.2;
+}
+
+.queue-still {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.queue-still.on {
+  opacity: 1;
 }
 
 .queue-main {
@@ -650,6 +680,149 @@
   white-space: nowrap;
 }
 
+/* ---------- pull-to-refresh indicator ---------- */
+
+/* Height is driven imperatively (px) by the touch handlers; overflow:hidden
+   reveals the label as the spacer grows, so it feels attached to the pull. */
+.ptr {
+  height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.ptr-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 12px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ptr-arrow {
+  display: inline-flex;
+  color: var(--accent);
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+/* Past the threshold the arrow flips to point up: "release to refresh". */
+.ptr.armed .ptr-arrow {
+  transform: rotate(180deg);
+}
+
+.ptr-spinner {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: ptr-spin 0.8s linear infinite;
+}
+
+@keyframes ptr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- desktop refresh button (hidden on touch-size screens) ---------- */
+
+.queue-refresh-btn:disabled {
+  cursor: default;
+  color: var(--text-faint);
+}
+
+.queue-refresh-btn.spinning svg {
+  animation: ptr-spin 0.9s linear infinite;
+}
+
+/* ---------- "newly aired" ribbon ---------- */
+
+.queue-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -4px 0 16px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--text);
+  font-size: 12.5px;
+  animation: ribbon-in 0.3s ease;
+}
+
+@keyframes ribbon-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.queue-ribbon-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.queue-ribbon-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-ribbon-item {
+  white-space: nowrap;
+}
+
+.queue-ribbon-text a {
+  font-weight: 700;
+  color: var(--text);
+  transition: color 0.15s;
+}
+
+.queue-ribbon-text a:hover {
+  color: var(--accent-hover);
+}
+
+.queue-ribbon-count {
+  font-weight: 800;
+  color: var(--accent-hover);
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-ribbon-dismiss {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.queue-ribbon-dismiss:hover {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text);
+}
+
 /* ---------- responsive + reduced motion ---------- */
 
 @media (max-width: 560px) {
@@ -670,6 +843,15 @@
   }
   .queue-poster {
     width: 54px;
+    height: 81px;
+  }
+  .queue-poster.has-still {
+    width: 96px;
+    height: 54px;
+  }
+  /* Small screens pull to refresh instead. */
+  .queue-refresh-btn {
+    display: none;
   }
 }
 
@@ -682,5 +864,18 @@
   }
   .queue-row.leaving {
     opacity: 0;
+  }
+  .queue-poster,
+  .queue-still,
+  .ptr-arrow {
+    transition: none;
+  }
+  .ptr-spinner,
+  .queue-refresh-btn.spinning svg,
+  .queue-ribbon {
+    animation: none;
+  }
+  .queue-refresh-btn.spinning {
+    opacity: 0.55;
   }
 }

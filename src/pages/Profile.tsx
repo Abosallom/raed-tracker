@@ -1,10 +1,11 @@
 // Profile page — identity hub: avatar + name, stats summary, custom lists,
 // favorites, full library grids and the user's own comments.
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { Comment, TrackedMovie, TrackedShow } from '../types'
 import { useLibrary, watchedCount } from '../store/library'
+import { computeStreaks } from '../lib/streaks'
 import { posterUrl } from '../api/tmdb'
 import { PosterImage, formatMinutes, timeAgo } from '../components/shared'
 import { showToast } from '../components/toast'
@@ -82,6 +83,7 @@ export default function Profile() {
   const tvMinutes = showList.reduce((n, s) => n + watchedCount(s) * s.snapshot.runtime, 0)
   const movieMinutes = movieList.reduce((n, m) => n + (m.watched ? m.snapshot.runtime : 0), 0)
 
+  const streaks = useMemo(() => computeStreaks(shows, movies), [shows, movies])
   const favShows = showList.filter((s) => s.favorite)
   const favMovies = movieList.filter((m) => m.favorite)
   const myComments = comments.filter((c) => c.isMine)
@@ -221,6 +223,19 @@ export default function Profile() {
               <span className="chip">
                 💬 <b>{myComments.length}</b> comments
               </span>
+              {streaks.current >= 2 && (
+                <span
+                  className="chip"
+                  title={`Longest streak: ${streaks.longest} days`}
+                  style={{
+                    borderColor: 'var(--accent)',
+                    background: 'var(--accent-soft)',
+                    color: 'var(--accent)',
+                  }}
+                >
+                  🔥 <b style={{ color: 'var(--accent)' }}>{streaks.current}</b>-day streak
+                </span>
+              )}
             </div>
           </div>
         </div>

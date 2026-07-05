@@ -110,7 +110,80 @@
   margin-bottom: 8px;
 }
 
+/* trailer pill */
+
+a.show-detail-trailer-btn {
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+a.show-detail-trailer-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+/* next-episode countdown card */
+
+.show-detail-countdown {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+
+.show-detail-countdown-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: show-detail-dot-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes show-detail-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 6px transparent;
+    opacity: 0.65;
+  }
+}
+
 /* season tabs */
+
+.show-detail-season-tabs-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.show-detail-season-tabs-row .show-detail-season-tabs {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+/* season progress ring (watched/aired for the selected season) */
+
+.show-detail-season-ring {
+  flex-shrink: 0;
+  display: inline-flex;
+  padding-bottom: 8px; /* optically aligns with the tabs' scrollbar padding */
+}
+
+.show-detail-season-ring-fill {
+  transition: stroke-dasharray 0.5s cubic-bezier(0.22, 1, 0.36, 1), stroke 0.3s ease;
+}
 
 .show-detail-season-tabs {
   display: flex;
@@ -259,6 +332,19 @@
 .show-detail-ep-meta {
   font-size: 12px;
   color: var(--text-dim);
+}
+
+/* tiny community rating chip on episode rows */
+
+.show-detail-ep-rating {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 12%, transparent);
 }
 
 .show-detail-ep-toggle {
@@ -474,7 +560,9 @@ a.show-detail-imdb-btn:hover {
   .show-detail-ep,
   .show-detail-ep-toggle,
   .show-detail-quickbar,
-  .show-detail-quickbar-btn {
+  .show-detail-quickbar-btn,
+  .show-detail-countdown-dot,
+  .show-detail-season-ring-fill {
     animation: none !important;
     transition: none !important;
   }

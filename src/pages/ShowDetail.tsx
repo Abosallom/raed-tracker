@@ -3,17 +3,21 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import type { Emotion, SeasonDetail, ShowDetail } from '../types'
+import type { Emotion, SearchResult, SeasonDetail, ShowDetail } from '../types'
 import { EMOTIONS, episodeKey } from '../types'
 import {
   backdropUrl,
+  getRecommendations,
   getSeasonDetail,
   getShowDetail,
+  getTrailerKey,
   imdbTitleUrl,
   profileUrl,
   stillUrl,
+  youtubeUrl,
 } from '../api/tmdb'
 import {
+  airedEpisodeCount,
   nextEpisode,
   showProgress,
   useLibrary,
@@ -21,6 +25,7 @@ import {
 } from '../store/library'
 import {
   ErrorBox,
+  MediaRow,
   PosterImage,
   ProgressBar,
   Rating,
@@ -30,6 +35,7 @@ import {
 import { CommentsSection } from '../components/CommentsSection'
 import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
+import { ConfettiHost, fireConfetti } from '../components/Confetti'
 import './show-detail.css'
 
 function epCode(season: number, episode: number): string {
@@ -46,15 +52,56 @@ function initials(name: string): string {
     .toUpperCase()
 }
 
+/** Whole days from today's local midnight (0 = airs today; past dates clamp to 0). */
 function daysUntil(airDate: string): number {
-  const ms = new Date(`${airDate}T00:00:00`).getTime() - Date.now()
-  return Math.max(1, Math.ceil(ms / 86_400_000))
+  const target = new Date(`${airDate}T00:00:00`).getTime()
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.round((target - today.getTime()) / 86_400_000))
+}
+
+/** "today" / "tomorrow" / "in N days" for a daysUntil() value. */
+function inDaysLabel(days: number): string {
+  if (days === 0) return 'today'
+  if (days === 1) return 'tomorrow'
+  return `in ${days} days`
 }
 
 function toastEmotion(emo: Emotion | undefined) {
   const meta = emo ? EMOTIONS.find((m) => m.key === emo) : undefined
   if (meta) showToast(`Feeling ${meta.emoji} about it!`)
   else showToast('Reaction cleared', '↩️')
+}
+
+/** Small circular progress ring (watched/aired) shown beside the season tabs. */
+function SeasonRing({ watched, aired }: { watched: number; aired: number }) {
+  const r = 12
+  const c = 2 * Math.PI * r
+  const value = aired > 0 ? Math.min(1, watched / aired) : 0
+  return (
+    <div
+      className="show-detail-season-ring"
+      role="img"
+      aria-label={`${watched} of ${aired} aired episodes watched this season`}
+      title={`${watched}/${aired} aired watched`}
+    >
+      <svg width={32} height={32} viewBox="0 0 32 32">
+        <circle cx={16} cy={16} r={r} fill="none" stroke="var(--border)" strokeWidth={3.5} />
+        <circle
+          className="show-detail-season-ring-fill"
+          cx={16}
+          cy={16}
+          r={r}
+          fill="none"
+          stroke={value >= 1 ? 'var(--green)' : 'var(--accent)'}
+          strokeWidth={3.5}
+          strokeLinecap="round"
+          strokeDasharray={`${c * value} ${c}`}
+          transform="rotate(-90 16 16)"
+        />
+      </svg>
+    </div>
+  )
 }
 
 /** Placeholder rows shown while a season's episodes are loading. */
@@ -87,6 +134,9 @@ export default function ShowDetailPage() {
   const [seasonDetail, setSeasonDetail] = useState<SeasonDetail | null>(null)
   const [seasonLoading, setSeasonLoading] = useState(false)
   const [seasonError, setSeasonError] = useState<string | null>(null)
+
+  const [trailerKey, setTrailerKey] = useState<string | null>(null)
+  const [recs, setRecs] = useState<SearchResult[]>([])
 
   const tracked = useLibrary((s) => s.shows[id])
   const onWatchlist = useLibrary((s) => s.watchlist.some((w) => w.type === 'tv' && w.id === id))
@@ -138,6 +188,27 @@ export default function ShowDetailPage() {
       cancelled = true
     }
   }, [id, refreshShow])
+
+  // Trailer + "More like this" load alongside the main detail (best-effort:
+  // failures/demo mode just hide those bits).
+  useEffect(() => {
+    let cancelled = false
+    setTrailerKey(null)
+    setRecs([])
+    getTrailerKey('tv', id).then((key) => {
+      if (!cancelled) setTrailerKey(key)
+    })
+    getRecommendations('tv', id)
+      .then((items) => {
+        if (!cancelled) setRecs(items.slice(0, 12))
+      })
+      .catch(() => {
+        if (!cancelled) setRecs([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
 
   useEffect(() => {
     if (season == null) return
@@ -243,20 +314,41 @@ export default function ShowDetailPage() {
     if (!tracked) addShow(detail)
   }
 
+  /** After marking, celebrate if season `s` (aired eps) or the whole show is now done. */
+  const celebrateIfComplete = (s: number) => {
+    const show = useLibrary.getState().shows[id]
+    if (!show) return
+    if (nextEpisode(show) === null) {
+      fireConfetti()
+      showToast(`${detail.name} complete — you've seen it all! 🎉`, '🏆')
+      return
+    }
+    const aired = airedEpisodeCount(show, s)
+    if (aired === 0) return
+    for (let e = 1; e <= aired; e++) {
+      if (!show.watched[episodeKey(s, e)]) return
+    }
+    fireConfetti()
+    showToast(`Season ${s} complete! 🎉`, '🏆')
+  }
+
   const handleToggleEpisode = (s: number, e: number) => {
     const wasWatched = Boolean(tracked?.watched[episodeKey(s, e)])
     ensureFollowed()
     toggleEpisode(id, s, e)
-    showToast(
-      wasWatched ? `${epCode(s, e)} unmarked` : `${epCode(s, e)} marked watched ✓`,
-      wasWatched ? '↩️' : '🎬',
-    )
+    if (wasWatched) {
+      showToast(`${epCode(s, e)} unmarked`, '↩️')
+    } else {
+      showToast(`${epCode(s, e)} marked watched ✓`, '🎬')
+      celebrateIfComplete(s)
+    }
   }
 
   const handleMarkSeason = (s: number) => {
     ensureFollowed()
     markSeasonWatched(id, s)
     showToast(`Season ${s} marked watched ✓`, '📺')
+    celebrateIfComplete(s)
   }
 
   const seasonWatchedCount =
@@ -271,9 +363,13 @@ export default function ShowDetailPage() {
     ? seasonDetail.episodes.filter((ep) => !(ep.air_date != null && ep.air_date > todayStr)).length
     : 0
 
+  const nextAir = detail.next_episode_to_air
+  const nextAirDays = nextAir?.air_date ? daysUntil(nextAir.air_date) : null
+
   return (
     <div>
       <BackBar />
+      <ConfettiHost />
 
       {/* ---------- hero ---------- */}
       <div className="show-detail-hero">
@@ -370,6 +466,16 @@ export default function ShowDetailPage() {
                   {tracked.favorite ? '★ Favorite' : '☆ Favorite'}
                 </button>
               )}
+              {trailerKey && (
+                <a
+                  className="btn show-detail-trailer-btn"
+                  href={youtubeUrl(trailerKey)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  ▶ Trailer
+                </a>
+              )}
               {detail.imdb_id && (
                 <a
                   className="btn show-detail-imdb-btn"
@@ -384,6 +490,21 @@ export default function ShowDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ---------- next-episode countdown ---------- */}
+      {nextAir && nextAir.air_date && nextAirDays != null && (
+        <div className="show-detail-countdown">
+          <span className="show-detail-countdown-dot" aria-hidden="true" />
+          <span>
+            Next episode <strong>{inDaysLabel(nextAirDays)}</strong> —{' '}
+            {epCode(nextAir.season_number, nextAir.episode_number)} ·{' '}
+            {new Date(`${nextAir.air_date}T00:00:00`).toLocaleDateString(undefined, {
+              month: 'short',
+              day: 'numeric',
+            })}
+          </span>
+        </div>
+      )}
 
       {/* ---------- progress ---------- */}
       {followed && tracked && (
@@ -409,6 +530,7 @@ export default function ShowDetailPage() {
                 className="btn small"
                 onClick={() => {
                   markShowWatched(id)
+                  fireConfetti()
                   showToast(`${detail.name} — all episodes watched ✓`, '🎉')
                 }}
               >
@@ -424,16 +546,21 @@ export default function ShowDetailPage() {
 
       {/* ---------- seasons ---------- */}
       <div className="section-title">Episodes</div>
-      <div className="show-detail-season-tabs">
-        {detail.seasons.map((s) => (
-          <button
-            key={s.id}
-            className={`show-detail-season-tab${season === s.season_number ? ' active' : ''}`}
-            onClick={() => setSeason(s.season_number)}
-          >
-            {s.name || `Season ${s.season_number}`}
-          </button>
-        ))}
+      <div className="show-detail-season-tabs-row">
+        <div className="show-detail-season-tabs">
+          {detail.seasons.map((s) => (
+            <button
+              key={s.id}
+              className={`show-detail-season-tab${season === s.season_number ? ' active' : ''}`}
+              onClick={() => setSeason(s.season_number)}
+            >
+              {s.name || `Season ${s.season_number}`}
+            </button>
+          ))}
+        </div>
+        {!seasonLoading && seasonDetail && seasonAiredCount > 0 && (
+          <SeasonRing watched={seasonWatchedCount} aired={seasonAiredCount} />
+        )}
       </div>
 
       {seasonLoading && <SeasonSkeleton />}
@@ -500,6 +627,11 @@ export default function ShowDetailPage() {
                       {[ep.air_date, ep.runtime ? `${ep.runtime} min` : null]
                         .filter(Boolean)
                         .join(' · ')}
+                      {ep.vote_average > 0 && (
+                        <span className="show-detail-ep-rating">
+                          ★ {ep.vote_average.toFixed(1)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   {isWatched && (
@@ -514,7 +646,7 @@ export default function ShowDetailPage() {
                   )}
                   {isFuture && ep.air_date ? (
                     <span className="show-detail-future-chip">
-                      in {daysUntil(ep.air_date)} day{daysUntil(ep.air_date) === 1 ? '' : 's'}
+                      {inDaysLabel(daysUntil(ep.air_date))}
                     </span>
                   ) : (
                     <button
@@ -559,6 +691,16 @@ export default function ShowDetailPage() {
       <div style={{ marginTop: 28 }}>
         <CommentsSection mediaKey={`tv:${id}`} />
       </div>
+
+      {/* ---------- recommendations ---------- */}
+      {recs.length > 0 && (
+        <>
+          <div className="section-title" style={{ marginTop: 28 }}>
+            More like this
+          </div>
+          <MediaRow items={recs} />
+        </>
+      )}
 
       {/* ---------- mobile quick-log bar (fixed above the tab bar) ---------- */}
       {followed && upNext && (
