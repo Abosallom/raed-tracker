@@ -57,8 +57,36 @@ export function lastNWeeks(n: number, now: Date = new Date()): WeekBucket[] {
   return out
 }
 
+export interface DayBucket {
+  key: string // dateKey
+  label: string // "d/m"
+  count: number
+  current: boolean // today
+}
+
+/** The last `n` local calendar days ending today, oldest first. */
+export function lastNDays(n: number, now: Date = new Date()): DayBucket[] {
+  const today = startOfDay(now)
+  const out: DayBucket[] = []
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i)
+    out.push({
+      key: dateKey(d),
+      label: `${d.getDate()}/${d.getMonth() + 1}`,
+      count: 0,
+      current: i === 0,
+    })
+  }
+  return out
+}
+
 export function fmtDate(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+/** "Dec 2027" — coarse month+year, for uncertain projection ranges. */
+export function fmtMonthYear(d: Date): string {
+  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 }
 
 /** Format a `yyyy-mm-dd` day key for display. */
@@ -125,6 +153,10 @@ export interface ShowStats {
   episodesLast7: number
   episodesLast60: number
   weeks: WeekBucket[]
+  /** Daily buckets (last 14 days); shown instead of `weeks` on young accounts. */
+  days: DayBucket[]
+  /** True when >80% of activity is in the newest week — use daily buckets. */
+  youngAccount: boolean
   marathons: MarathonRow[]
   maxDayEpisodes: number
   addedShows: number
@@ -139,11 +171,18 @@ export interface ShowStats {
   remainingEpisodes: number
   startedShows: number
   remainingMinutes: number
-  ratePerDay: number // episodes/day over the last 60 days
+  ratePerDay: number // episodes/day over the pace window (floored at 4 weeks)
   catchUpDate: Date | null
+  /** True when history spans <4 weeks — render a *range* not a point date. */
+  catchUpUncertain: boolean
+  catchUpRange: [Date, Date] | null
   upcoming: UpcomingBucket[] // next 4 weeks of nextEpisodeToAir
   premieres: number // episode-1s watched
   completedShows: number
+  /** Derived: busiest weekday overall (name + count), or null if no activity. */
+  busiestWeekday: { name: string; count: number } | null
+  /** Derived: average episodes/day across days watched this calendar month. */
+  avgEpisodesPerDayThisMonth: number
 }
 
 export function computeShowStats(
@@ -153,9 +192,20 @@ export function computeShowStats(
   const list = Object.values(shows)
   const weeks = lastNWeeks(12, now)
   const weekByKey = new Map(weeks.map((w) => [w.key, w]))
+  const days = lastNDays(14, now)
+  const dayByKey = new Map(days.map((d) => [d.key, d]))
   const cutoff7 = now.getTime() - 7 * DAY
   const cutoff60 = now.getTime() - 60 * DAY
   const today = startOfDay(now)
+
+  // Derived-stat accumulators.
+  const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const weekdayCounts = [0, 0, 0, 0, 0, 0, 0]
+  const monthDaySet = new Set<string>()
+  let monthEpisodes = 0
+  let earliestWatch = Infinity // ms of the first watch record, for account age
+  const curMonth = now.getMonth()
+  const curYear = now.getFullYear()
 
   let totalMinutes = 0
   let episodes = 0
@@ -203,10 +253,18 @@ export function computeShowStats(
       if (!Number.isNaN(ms)) {
         if (ms >= cutoff7) episodesLast7++
         if (ms >= cutoff60) episodesLast60++
+        if (ms < earliestWatch) earliestWatch = ms
         const day = dateKey(t)
         byDay.set(day, (byDay.get(day) ?? 0) + 1)
         const bucket = weekByKey.get(dateKey(isoWeekStart(t)))
         if (bucket) bucket.count++
+        const dayBucket = dayByKey.get(day)
+        if (dayBucket) dayBucket.count++
+        weekdayCounts[t.getDay()]++
+        if (t.getMonth() === curMonth && t.getFullYear() === curYear) {
+          monthEpisodes++
+          monthDaySet.add(day)
+        }
       }
       if (rec.emotion) reactions[rec.emotion]++
       if (rec.favoriteCast) {
@@ -277,11 +335,52 @@ export function computeShowStats(
   marathons.sort((a, b) => b.episodes - a.episodes || b.date.localeCompare(a.date))
   showTopCharacters.sort((a, b) => b.votes - a.votes)
 
-  const ratePerDay = episodesLast60 / 60
-  const catchUpDate =
-    ratePerDay > 0 && remainingEpisodes > 0
-      ? new Date(now.getTime() + Math.ceil(remainingEpisodes / ratePerDay) * DAY)
-      : null
+  // Young-account detection: if >80% of all charted week activity falls in the
+  // newest (current) week, the 12-week chart is 11 empty gridlines — switch the
+  // UI to the last-14-days daily view instead.
+  const totalWeekActivity = weeks.reduce((a, w) => a + w.count, 0)
+  const currentWeekActivity = weeks.find((w) => w.current)?.count ?? 0
+  const youngAccount = totalWeekActivity > 0 && currentWeekActivity / totalWeekActivity > 0.8
+
+  // Steadier catch-up projection: floor the pace window at 4 weeks (28 days) so
+  // a single checkbox can't swing the rate wildly. When history spans <4 weeks
+  // we can't project confidently, so render a RANGE (fast/slow pace) instead of
+  // a single point date that would jump ~35 days per check.
+  const historyDays =
+    earliestWatch === Infinity ? 0 : Math.max(1, (now.getTime() - earliestWatch) / DAY)
+  const paceWindowDays = Math.max(28, Math.min(60, historyDays))
+  // Count episodes within the pace window (reuse the 60-day tally when the
+  // window is the full 60; otherwise fall back to it — episodesLast60 is the
+  // available recent-activity signal and is conservative for a wider window).
+  const ratePerDay = episodesLast60 / paceWindowDays
+  const catchUpUncertain = historyDays > 0 && historyDays < 28
+  let catchUpDate: Date | null = null
+  let catchUpRange: [Date, Date] | null = null
+  if (ratePerDay > 0 && remainingEpisodes > 0) {
+    const daysToFinish = Math.ceil(remainingEpisodes / ratePerDay)
+    catchUpDate = new Date(now.getTime() + daysToFinish * DAY)
+    if (catchUpUncertain) {
+      // ±50% band around the point estimate for the wide-uncertainty case.
+      catchUpRange = [
+        new Date(now.getTime() + Math.ceil(daysToFinish * 0.7) * DAY),
+        new Date(now.getTime() + Math.ceil(daysToFinish * 1.4) * DAY),
+      ]
+    }
+  }
+
+  // Derived stat: busiest weekday overall + avg episodes/day this month.
+  let busiestIdx = -1
+  for (let i = 0; i < 7; i++) {
+    if (weekdayCounts[i] > 0 && (busiestIdx === -1 || weekdayCounts[i] > weekdayCounts[busiestIdx])) {
+      busiestIdx = i
+    }
+  }
+  const busiestWeekday =
+    busiestIdx === -1
+      ? null
+      : { name: WEEKDAY_NAMES[busiestIdx], count: weekdayCounts[busiestIdx] }
+  const avgEpisodesPerDayThisMonth =
+    monthDaySet.size > 0 ? monthEpisodes / monthDaySet.size : 0
 
   return {
     totalMinutes,
@@ -289,6 +388,8 @@ export function computeShowStats(
     episodesLast7,
     episodesLast60,
     weeks,
+    days,
+    youngAccount,
     marathons: marathons.slice(0, 5),
     maxDayEpisodes,
     addedShows: list.length,
@@ -308,9 +409,13 @@ export function computeShowStats(
     remainingMinutes,
     ratePerDay,
     catchUpDate,
+    catchUpUncertain,
+    catchUpRange,
     upcoming,
     premieres,
     completedShows,
+    busiestWeekday,
+    avgEpisodesPerDayThisMonth,
   }
 }
 

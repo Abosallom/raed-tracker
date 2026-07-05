@@ -15,26 +15,14 @@ export function PosterImage({
   path: string | null
   title: string
 }) {
-  // Track which src has finished loading so the real image fades in
-  // (and re-fades if the src ever changes for a reused component).
-  const [loadedSrc, setLoadedSrc] = useState<string | null>(null)
   const url = posterUrl(path)
   if (!url) return <div className="poster-fallback">{title}</div>
-  const loaded = loadedSrc === url
-  return (
-    <img
-      ref={(img) => {
-        // Cached images can complete before onLoad is attached.
-        if (img && img.complete && img.naturalWidth > 0) setLoadedSrc(url)
-      }}
-      className="poster-img"
-      src={url}
-      alt={title}
-      loading="lazy"
-      onLoad={() => setLoadedSrc(url)}
-      style={{ opacity: loaded ? 1 : 0, transition: 'opacity 0.35s ease' }}
-    />
-  )
+  // CSS-only fade-in: the image defaults to fully visible (opacity: 1) and only
+  // eases up FROM opacity 0 via @starting-style on first paint (see global.css).
+  // No JS load gating means a missed onLoad (lazy-load + bfcache/hydration
+  // timing) can never strand the poster invisible — browsers without
+  // @starting-style just show it immediately.
+  return <img className="poster-img" src={url} alt={title} loading="lazy" />
 }
 
 export function PosterCard({
@@ -61,13 +49,11 @@ export function PosterCard({
       }}
     >
       <div
+        className="poster-frame"
         style={{
-          position: 'relative',
-          borderRadius: 'var(--radius-sm)',
           boxShadow: hover
             ? '0 14px 28px rgba(0, 0, 0, 0.5)'
             : '0 0 0 rgba(0, 0, 0, 0)',
-          transition: 'box-shadow 0.18s ease',
         }}
       >
         <PosterImage path={item.poster_path} title={item.name} />
@@ -206,34 +192,63 @@ export function ReactionPicker({
   onChange: (e: Emotion | undefined) => void
   compact?: boolean
 }) {
+  // Which emoji just got selected — drives a one-shot ~150ms spring "pop".
+  // Re-keying the button (key includes a nonce) restarts the animation.
+  const [popped, setPopped] = useState<{ key: Emotion; nonce: number } | null>(null)
   return (
     <div
       className={`reaction-picker${compact ? ' reaction-picker-compact' : ''}`}
-      style={{ display: 'flex', gap: 4 }}
+      style={{ display: 'flex', gap: 8 }}
     >
-      {EMOTIONS.map((e) => (
-        <button
-          key={e.key}
-          title={e.label}
-          aria-pressed={value === e.key}
-          onClick={(ev) => {
-            ev.preventDefault()
-            ev.stopPropagation()
-            onChange(value === e.key ? undefined : e.key)
-          }}
-          style={{
-            fontSize: compact ? 15 : 20,
-            padding: compact ? '2px 4px' : '4px 6px',
-            borderRadius: 8,
-            background: value === e.key ? 'var(--accent-soft)' : 'transparent',
-            border: value === e.key ? '1px solid var(--accent)' : '1px solid transparent',
-            opacity: value && value !== e.key ? 0.45 : 1,
-            transition: 'all .12s',
-          }}
-        >
-          {e.emoji}
-        </button>
-      ))}
+      <style>{`
+        @keyframes rt-reaction-pop {
+          0% { transform: scale(1); }
+          45% { transform: scale(1.32); }
+          100% { transform: scale(1); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .rt-reaction-btn { animation: none !important; }
+        }
+      `}</style>
+      {EMOTIONS.map((e) => {
+        const isPopping = popped?.key === e.key
+        return (
+          <button
+            key={isPopping ? `${e.key}-${popped.nonce}` : e.key}
+            className="rt-reaction-btn"
+            title={e.label}
+            aria-pressed={value === e.key}
+            onClick={(ev) => {
+              ev.preventDefault()
+              ev.stopPropagation()
+              const next = value === e.key ? undefined : e.key
+              onChange(next)
+              if (next) setPopped({ key: e.key, nonce: Date.now() })
+            }}
+            style={{
+              fontSize: compact ? 18 : 20,
+              padding: compact ? '2px 4px' : '4px 6px',
+              // 44x44 minimum tap target regardless of variant — the compact
+              // inline picker was measuring ~25x26px, far too small for thumbs.
+              minWidth: 44,
+              minHeight: 44,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 8,
+              background: value === e.key ? 'var(--accent-soft)' : 'transparent',
+              border: value === e.key ? '1px solid var(--accent)' : '1px solid transparent',
+              opacity: value && value !== e.key ? 0.45 : 1,
+              transition: 'background .12s, border-color .12s, opacity .12s',
+              animation: isPopping
+                ? 'rt-reaction-pop 150ms cubic-bezier(0.34, 1.56, 0.64, 1)'
+                : undefined,
+            }}
+          >
+            {e.emoji}
+          </button>
+        )
+      })}
     </div>
   )
 }

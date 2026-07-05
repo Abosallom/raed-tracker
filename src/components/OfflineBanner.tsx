@@ -21,6 +21,15 @@ export default function OfflineBanner() {
     }
   }, [])
 
+  // Toggle a body class so the fixed banner (pointer-events:none, can wrap to
+  // two lines at 375px) shifts .main-content down instead of overlapping the
+  // BackBar. Class on <body> because the banner lives in its own body-level
+  // root, outside the app tree.
+  useEffect(() => {
+    document.body.classList.toggle('offline-banner-on', offline)
+    return () => document.body.classList.remove('offline-banner-on')
+  }, [offline])
+
   // Kept mounted so the slide-out transition can play; visibility is toggled
   // in CSS (with a matching delay) so the hidden banner leaves the a11y tree.
   return (

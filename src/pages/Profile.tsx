@@ -116,6 +116,7 @@ export default function Profile() {
   const profile = useLibrary((s) => s.profile)
   const shows = useLibrary((s) => s.shows)
   const movies = useLibrary((s) => s.movies)
+  const watchlist = useLibrary((s) => s.watchlist)
   const comments = useLibrary((s) => s.comments)
   const lists = useLibrary((s) => s.lists)
   const updateProfile = useLibrary((s) => s.updateProfile)
@@ -336,6 +337,23 @@ export default function Profile() {
           <span className="profile-stat-cell">
             <span className="profile-stat-value">{moviesWatched}</span>
             <span className="profile-stat-label">Movies watched</span>
+          </span>
+          <span className="profile-stat-arrow" aria-hidden="true">
+            →
+          </span>
+        </Link>
+        {/* Watchlist is otherwise orphaned on mobile — give it a visible card. */}
+        <Link className="card profile-stat-card" to="/watchlist">
+          <span className="profile-stat-emoji" aria-hidden="true">
+            🔖
+          </span>
+          <span className="profile-stat-cell">
+            <span className="profile-stat-value">{watchlist.length}</span>
+            <span className="profile-stat-label">On your watchlist</span>
+          </span>
+          <span className="profile-stat-cell">
+            <span className="profile-stat-value">{streaks.current}</span>
+            <span className="profile-stat-label">Day streak</span>
           </span>
           <span className="profile-stat-arrow" aria-hidden="true">
             →

@@ -1,5 +1,74 @@
 /* Home (Discover) page — scoped styles, all classes prefixed with home- */
 
+/* ---------- quick links (Watchlist / Upcoming / Stats) ---------- */
+
+.home-quicklinks {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 4px 0 18px;
+}
+
+.home-quicklink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  color: var(--text);
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+}
+
+.home-quicklink:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.home-quicklink-icon {
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.home-quicklink-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.home-quicklink-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.home-quicklink-sub {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 560px) {
+  .home-quicklinks {
+    gap: 8px;
+  }
+  .home-quicklink {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 11px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-quicklink:hover {
+    transform: none;
+  }
+}
+
 /* ---------- hero carousel ---------- */
 
 .home-hero {

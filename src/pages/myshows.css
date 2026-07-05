@@ -855,9 +855,36 @@
   }
 }
 
+/* Re-insertion: a resumed show slots back into Watch Next with a height+fade
+   grow so it's clear where it landed (mirrors the .leaving exit). */
+.queue-row.resuming {
+  animation: queue-resume 0.42s cubic-bezier(0.2, 0.7, 0.3, 1.05) both;
+  overflow: hidden;
+}
+
+@keyframes queue-resume {
+  0% {
+    opacity: 0;
+    max-height: 0;
+    transform: translateX(-24px);
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  45% {
+    opacity: 1;
+    max-height: 180px;
+  }
+  100% {
+    opacity: 1;
+    max-height: 180px;
+    transform: translateX(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .queue-row.flash,
   .queue-row.leaving,
+  .queue-row.resuming,
   .queue-ep,
   .queue-check.pop {
     animation: none;

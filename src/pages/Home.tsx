@@ -1,6 +1,6 @@
 // Discover feed — the "/" landing page.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { SearchResult, TrackedShow } from '../types'
 import {
@@ -12,6 +12,7 @@ import {
   trendingShows,
 } from '../api/tmdb'
 import { nextEpisode, showProgress, useLibrary, watchedCount } from '../store/library'
+import { computeStreaks } from '../lib/streaks'
 import {
   ErrorBox,
   MediaRow,
@@ -216,11 +217,84 @@ function DiscoverSection({ title, items }: { title: string; items: SearchResult[
   )
 }
 
+/** Compact "jump to" cards under the greeting: Watchlist / Upcoming / Stats. */
+function QuickLinks({
+  watchlistCount,
+  nextAirLabel,
+  streak,
+}: {
+  watchlistCount: number
+  nextAirLabel: string
+  streak: number
+}) {
+  return (
+    <div className="home-quicklinks">
+      <Link className="home-quicklink" to="/watchlist">
+        <span className="home-quicklink-icon" aria-hidden="true">
+          🔖
+        </span>
+        <span className="home-quicklink-text">
+          <span className="home-quicklink-title">Watchlist</span>
+          <span className="home-quicklink-sub">
+            {watchlistCount} {watchlistCount === 1 ? 'item' : 'items'}
+          </span>
+        </span>
+      </Link>
+      <Link className="home-quicklink" to="/upcoming">
+        <span className="home-quicklink-icon" aria-hidden="true">
+          🗓️
+        </span>
+        <span className="home-quicklink-text">
+          <span className="home-quicklink-title">Upcoming</span>
+          <span className="home-quicklink-sub">{nextAirLabel}</span>
+        </span>
+      </Link>
+      <Link className="home-quicklink" to="/stats">
+        <span className="home-quicklink-icon" aria-hidden="true">
+          📊
+        </span>
+        <span className="home-quicklink-text">
+          <span className="home-quicklink-title">Stats</span>
+          <span className="home-quicklink-sub">
+            {streak > 0 ? `🔥 ${streak}-day streak` : 'See your numbers'}
+          </span>
+        </span>
+      </Link>
+    </div>
+  )
+}
+
+/** "in N days" / "Today" / "Tomorrow" for the soonest followed-show air date. */
+function nextAirLabelFor(shows: Record<number, TrackedShow>): string {
+  let soonest: string | null = null
+  for (const s of Object.values(shows)) {
+    if (s.paused) continue
+    const air = s.snapshot.nextEpisodeToAir?.airDate
+    if (!air) continue
+    if (soonest === null || air < soonest) soonest = air
+  }
+  if (!soonest) return 'Nothing scheduled'
+  const [y, m, d] = soonest.split('-').map(Number)
+  const target = new Date(y, (m || 1) - 1, d || 1)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const days = Math.round((target.getTime() - today.getTime()) / 86_400_000)
+  if (days < 0) return 'New episode out'
+  if (days === 0) return 'Airs today'
+  if (days === 1) return 'Airs tomorrow'
+  return `Next in ${days} days`
+}
+
 export default function Home() {
   const shows = useLibrary((st) => st.shows)
+  const movies = useLibrary((st) => st.movies)
+  const watchlist = useLibrary((st) => st.watchlist)
   const profile = useLibrary((st) => st.profile)
   const [rows, setRows] = useState<DiscoverRows | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const streak = useMemo(() => computeStreaks(shows, movies).current, [shows, movies])
+  const nextAirLabel = useMemo(() => nextAirLabelFor(shows), [shows])
 
   useEffect(() => {
     let cancelled = false
@@ -265,6 +339,12 @@ export default function Home() {
       <p className="page-subtitle">
         Pick up where you left off, or find your next obsession below.
       </p>
+
+      <QuickLinks
+        watchlistCount={watchlist.length}
+        nextAirLabel={nextAirLabel}
+        streak={streak}
+      />
 
       {!error &&
         (rows ? (

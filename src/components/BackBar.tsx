@@ -1,40 +1,51 @@
-// Back-navigation bar for sub-pages: ‹ chevron + optional title.
+// Back-navigation bar for sub-pages: a single ≥44x44 tap target wrapping the
+// ‹ chevron and the (previously dead) title text — the whole row is tappable.
 
 import { useNavigate } from 'react-router-dom'
 
 export function BackBar({ title }: { title?: string }) {
   const navigate = useNavigate()
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        marginBottom: 14,
-        minHeight: 34,
-      }}
-    >
+    <div style={{ marginBottom: 14 }}>
       <button
-        aria-label="Go back"
+        aria-label={title ? `Go back — ${title}` : 'Go back'}
         onClick={() => {
           if (window.history.length > 1) navigate(-1)
           else navigate('/shows')
         }}
         style={{
-          fontSize: 22,
-          lineHeight: 1,
-          padding: '4px 10px',
-          borderRadius: 8,
+          // Grow the hit area to ≥44px tall (padding), keep the glyph small.
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          minHeight: 44,
+          padding: '6px 14px 6px 10px',
+          borderRadius: 10,
           color: 'var(--text)',
           background: 'var(--bg-elev)',
           border: '1px solid var(--border)',
+          cursor: 'pointer',
+          maxWidth: '100%',
         }}
       >
-        ‹
+        <span style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }} aria-hidden="true">
+          ‹
+        </span>
+        {title && (
+          <span
+            style={{
+              fontWeight: 700,
+              fontSize: 15,
+              color: 'var(--text-dim)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {title}
+          </span>
+        )}
       </button>
-      {title && (
-        <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-dim)' }}>{title}</span>
-      )}
     </div>
   )
 }

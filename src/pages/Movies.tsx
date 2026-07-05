@@ -310,8 +310,19 @@ export default function Movies() {
 
   return (
     <div>
-      <h1 className="page-title">Movies</h1>
-      <p className="page-subtitle">Your movie hub — what to watch, what you've seen, what's next.</p>
+      <div className="movies-head">
+        <div>
+          <h1 className="page-title">Movies</h1>
+          <p className="page-subtitle">
+            Your movie hub — what to watch, what you've seen, what's next.
+          </p>
+        </div>
+        {/* Direct entry point to the full (shows + movies) watchlist page,
+            which is otherwise orphaned on mobile. */}
+        <Link className="movies-watchlist-link" to="/watchlist">
+          🔖 Watchlist →
+        </Link>
+      </div>
 
       <div className="movies-toolbar">
         <div className="movies-seg" role="tablist" aria-label="Movie views">

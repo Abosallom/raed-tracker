@@ -48,6 +48,7 @@
   }
 
   .tabbar-item {
+    /* Five equal tabs; min-width:0 lets them shrink to fit 375px. */
     flex: 1 1 0;
     min-width: 0;
     position: relative;
@@ -56,7 +57,7 @@
     align-items: center;
     justify-content: center;
     gap: 3px;
-    padding: 7px 2px 6px;
+    padding: 7px 1px 6px;
     color: var(--text-dim);
     -webkit-tap-highlight-color: transparent;
     transition: color 0.15s;
@@ -84,7 +85,7 @@
   }
 
   .tabbar-icon {
-    font-size: 21px;
+    font-size: 20px;
     line-height: 1.1;
     transition: transform 0.15s;
   }
@@ -92,11 +93,17 @@
   .tabbar-label {
     font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.2px;
+    letter-spacing: 0.1px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+  }
+
+  /* Five tabs at 375px: shave the active-indicator width and letter spacing
+     so no label truncates mid-word. */
+  .tabbar-item.active::before {
+    width: 26px;
   }
 
   /* ----- minimal brand row (root tab pages only; JS gates the routes) ----- */
@@ -189,11 +196,29 @@
 
 /* ---------- route transitions ---------- */
 
+/* In-app navigations (the common case): a near-instant fade that never dips
+   below fully-legible. Starting at opacity 0.6 with NO translateY means any
+   mid-animation frame is already readable — no more "ghost frame" where the
+   whole page renders at low opacity. fill-mode backwards (not both/forwards):
+   a persistent transform would make this wrapper the containing block for
+   position:fixed descendants (show-detail quickbar, episode sheet, profile
+   emoji backdrop). */
 .page-enter {
-  /* fill-mode backwards (not both/forwards): a persistent transform would make
-     this wrapper the containing block for position:fixed descendants
-     (show-detail quickbar, episode sheet, profile emoji backdrop). */
+  animation: page-enter-fast 80ms ease-out backwards;
+}
+
+/* First app mount only: the fuller, more deliberate fade-up. */
+.page-enter[data-first] {
   animation: page-enter 180ms ease-out backwards;
+}
+
+@keyframes page-enter-fast {
+  from {
+    opacity: 0.6;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes page-enter {
@@ -215,7 +240,8 @@
   .tabbar-item:active .tabbar-icon {
     transform: none;
   }
-  .page-enter {
+  .page-enter,
+  .page-enter[data-first] {
     animation: none !important;
   }
 }

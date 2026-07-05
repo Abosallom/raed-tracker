@@ -6,10 +6,17 @@ import type { SearchResult, ShowDetail, TrackedShow } from '../types'
 import { episodeKey } from '../types'
 import { getShowDetail, isDemoMode, upcomingMovies } from '../api/tmdb'
 import { MOCK_SHOWS } from '../api/mockData'
-import { nextEpisode, seasonComplete, useLibrary } from '../store/library'
+import {
+  isSeasonFinale,
+  isSeasonPremiere,
+  isSeriesPremiere,
+  nextEpisode,
+  seasonComplete,
+  useLibrary,
+} from '../store/library'
 import { ErrorBox, PosterCard, PosterImage, SkeletonRow } from '../components/shared'
 import { showToast } from '../components/toast'
-import { ConfettiHost, fireConfetti } from '../components/Confetti'
+import { fireConfetti } from '../components/Confetti'
 import './upcoming.css'
 
 // ---------- module-level cache (survives remounts, caps refetching) ----------
@@ -33,7 +40,8 @@ function cachedShowDetail(id: number): Promise<ShowDetail> {
 const FILTERS_KEY = 'raedtracker_upcoming_filters'
 
 interface FilterPrefs {
-  networks: string[]
+  /** Single selected network; null = "All". */
+  network: string | null
   hideTba: boolean
 }
 
@@ -41,18 +49,21 @@ function loadFilters(): FilterPrefs {
   try {
     const raw = localStorage.getItem(FILTERS_KEY)
     if (raw) {
-      const parsed = JSON.parse(raw) as Partial<FilterPrefs>
-      return {
-        networks: Array.isArray(parsed.networks)
-          ? parsed.networks.filter((n): n is string => typeof n === 'string')
-          : [],
-        hideTba: parsed.hideTba === true,
+      const parsed = JSON.parse(raw) as Partial<FilterPrefs> & { networks?: unknown }
+      // Migrate the legacy multi-select shape ({ networks: string[] }) to the
+      // single-select one by keeping the first entry.
+      let network: string | null = null
+      if (typeof parsed.network === 'string') network = parsed.network
+      else if (Array.isArray(parsed.networks)) {
+        const first = parsed.networks.find((n): n is string => typeof n === 'string')
+        network = first ?? null
       }
+      return { network, hideTba: parsed.hideTba === true }
     }
   } catch {
     /* corrupted prefs — fall through to defaults */
   }
-  return { networks: [], hideTba: false }
+  return { network: null, hideTba: false }
 }
 
 function saveFilters(prefs: FilterPrefs) {
@@ -162,6 +173,15 @@ function CheckButton({ entry }: { entry: UpcomingEntry }) {
           } else if (updated && seasonComplete(updated, entry.season)) {
             fireConfetti()
             showToast(`Season ${entry.season} complete! 🎉`, '🏆')
+          } else if (updated && isSeasonFinale(updated, entry.season, entry.episode)) {
+            fireConfetti({ intensity: 'micro' })
+            showToast(`Season ${entry.season} finale watched 🎬`, '🏁')
+          } else if (updated && isSeriesPremiere(updated, entry.season, entry.episode)) {
+            fireConfetti({ intensity: 'micro' })
+            showToast(`${entry.showName} — series premiere! 🎉`, '🎬')
+          } else if (updated && isSeasonPremiere(updated, entry.season, entry.episode)) {
+            fireConfetti({ intensity: 'micro' })
+            showToast(`Season ${entry.season} premiere 🎬`, '🎬')
           }
         }
       }}
@@ -435,18 +455,20 @@ export default function Upcoming() {
     return [...set].sort((a, b) => a.localeCompare(b))
   }, [entries])
 
-  // Only apply persisted network selections that still exist on this page.
-  const activeNetworks = useMemo(
-    () => filters.networks.filter((n) => networks.includes(n)),
-    [filters.networks, networks],
+  // The selected network only *filters* once it actually exists in the loaded
+  // entries (so a persisted pick for a network with nothing scheduled doesn't
+  // blank the list). Chip styling, below, uses filters.network directly so the
+  // tap sticks visibly even before entries resolve.
+  const activeNetwork = useMemo(
+    () => (filters.network && networks.includes(filters.network) ? filters.network : null),
+    [filters.network, networks],
   )
 
   const groups = useMemo(() => {
     if (!entries) return []
     const visible = entries.filter((e) => {
       if (filters.hideTba && isTba(e)) return false
-      if (activeNetworks.length > 0 && (!e.network || !activeNetworks.includes(e.network)))
-        return false
+      if (activeNetwork && e.network !== activeNetwork) return false
       return true
     })
     const out: { label: string; items: UpcomingEntry[] }[] = []
@@ -457,21 +479,16 @@ export default function Upcoming() {
       else out.push({ label, items: [e] })
     }
     return out
-  }, [entries, filters.hideTba, activeNetworks])
+  }, [entries, filters.hideTba, activeNetwork])
 
-  const toggleNetwork = (n: string) =>
-    setFilters((f) => ({
-      ...f,
-      networks: f.networks.includes(n)
-        ? f.networks.filter((x) => x !== n)
-        : [...f.networks, n],
-    }))
+  // Single-select: tapping the active network clears it back to "All".
+  const selectNetwork = (n: string) =>
+    setFilters((f) => ({ ...f, network: f.network === n ? null : n }))
 
   const showEmptyState = !demo && followedCount === 0
 
   return (
     <div>
-      <ConfettiHost />
       <div className="toptabs" role="tablist" aria-label="Schedule view">
         <Link className="toptab" to="/shows" role="tab" aria-selected="false">
           Watch List
@@ -511,17 +528,22 @@ export default function Upcoming() {
         <>
           {entries.length > 0 && (
             <div className="upcoming-filters" role="group" aria-label="Filters">
+              {/* Single-select: exactly one of All / a network carries `.on`.
+                  Styling reads filters.network directly so the tap sticks even
+                  while entries are still loading. */}
               <button
-                className={`chip upcoming-filter${activeNetworks.length === 0 ? ' on' : ''}`}
-                onClick={() => setFilters((f) => ({ ...f, networks: [] }))}
+                className={`chip upcoming-filter${filters.network === null ? ' on' : ''}`}
+                aria-pressed={filters.network === null}
+                onClick={() => setFilters((f) => ({ ...f, network: null }))}
               >
                 All
               </button>
               {networks.map((n) => (
                 <button
                   key={n}
-                  className={`chip upcoming-filter${activeNetworks.includes(n) ? ' on' : ''}`}
-                  onClick={() => toggleNetwork(n)}
+                  className={`chip upcoming-filter${filters.network === n ? ' on' : ''}`}
+                  aria-pressed={filters.network === n}
+                  onClick={() => selectNetwork(n)}
                 >
                   {n}
                 </button>

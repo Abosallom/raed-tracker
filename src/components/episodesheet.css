@@ -71,7 +71,16 @@
   height: 4px;
   border-radius: 999px;
   background: var(--border);
-  margin: 0 auto 14px;
+  margin: 0 auto 6px;
+}
+
+/* "Tap outside to skip" — makes the always-available dismiss affordance
+   explicit (paired with the ✕ close button in the header). */
+.epsheet-skiphint {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-bottom: 12px;
 }
 
 .epsheet-header {
@@ -80,6 +89,32 @@
   gap: 12px;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--border);
+}
+
+/* Explicit close button — a visible dismiss affordance so the sheet never
+   feels like a trap. 44x44 tap target with a smaller visual glyph. */
+.epsheet-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.epsheet-close:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+  background: var(--bg-elev-2);
 }
 
 .epsheet-check {
@@ -126,6 +161,29 @@
 
 .epsheet-section {
   padding: 14px 0 2px;
+}
+
+/* Reaction emoji in the sheet: real ≥44x44 tap targets with breathing room,
+   so they don't sit as cramped 36px hits right above "Done". The picker sets
+   font-size/padding inline; width/height/gap are unset there, so no !important
+   is needed to enforce the minimum size. */
+.epsheet-section .reaction-picker {
+  gap: 10px !important;
+  flex-wrap: wrap;
+}
+
+.epsheet-section .reaction-picker button {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Extra vertical space before the actions row so the emoji targets and the
+   "Done" button never overlap in the thumb zone. */
+.epsheet-section:last-of-type {
+  padding-bottom: 8px;
 }
 
 .epsheet-label {
@@ -216,8 +274,8 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 18px;
-  padding-top: 14px;
+  margin-top: 22px;
+  padding-top: 16px;
   border-top: 1px solid var(--border);
 }
 

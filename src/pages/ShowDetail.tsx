@@ -18,6 +18,9 @@ import {
 } from '../api/tmdb'
 import {
   airedEpisodeCount,
+  isSeasonFinale,
+  isSeasonPremiere,
+  isSeriesPremiere,
   nextEpisode,
   showProgress,
   useLibrary,
@@ -35,7 +38,7 @@ import {
 import { CommentsSection } from '../components/CommentsSection'
 import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
-import { ConfettiHost, fireConfetti } from '../components/Confetti'
+import { fireConfetti } from '../components/Confetti'
 import './show-detail.css'
 
 function epCode(season: number, episode: number): string {
@@ -73,11 +76,14 @@ function toastEmotion(emo: Emotion | undefined) {
   else showToast('Reaction cleared', '↩️')
 }
 
-/** Small circular progress ring (watched/aired) shown beside the season tabs. */
+/** Small circular progress ring + fraction shown beside the season tabs.
+    The fraction label (and a ✓ glyph at 100%) makes it read as progress, not
+    as a stuck loading spinner. */
 function SeasonRing({ watched, aired }: { watched: number; aired: number }) {
   const r = 12
   const c = 2 * Math.PI * r
   const value = aired > 0 ? Math.min(1, watched / aired) : 0
+  const complete = value >= 1
   return (
     <div
       className="show-detail-season-ring"
@@ -93,13 +99,28 @@ function SeasonRing({ watched, aired }: { watched: number; aired: number }) {
           cy={16}
           r={r}
           fill="none"
-          stroke={value >= 1 ? 'var(--green)' : 'var(--accent)'}
+          stroke={complete ? 'var(--green)' : 'var(--accent)'}
           strokeWidth={3.5}
           strokeLinecap="round"
           strokeDasharray={`${c * value} ${c}`}
           transform="rotate(-90 16 16)"
         />
+        {complete && (
+          <text
+            x={16}
+            y={16}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={13}
+            fill="var(--green)"
+          >
+            ✓
+          </text>
+        )}
       </svg>
+      <span className="show-detail-season-ring-frac" aria-hidden="true">
+        {watched}/{aired}
+      </span>
     </div>
   )
 }
@@ -144,6 +165,7 @@ export default function ShowDetailPage() {
   const refreshShow = useLibrary((s) => s.refreshShow)
   const removeShow = useLibrary((s) => s.removeShow)
   const toggleFavoriteShow = useLibrary((s) => s.toggleFavoriteShow)
+  const togglePauseShow = useLibrary((s) => s.togglePauseShow)
   const toggleEpisode = useLibrary((s) => s.toggleEpisode)
   const setEpisodeEmotion = useLibrary((s) => s.setEpisodeEmotion)
   const markSeasonWatched = useLibrary((s) => s.markSeasonWatched)
@@ -318,22 +340,27 @@ export default function ShowDetailPage() {
     if (!tracked) addShow(detail)
   }
 
-  /** After marking, celebrate if season `s` (aired eps) or the whole show is now done. */
-  const celebrateIfComplete = (s: number) => {
+  /**
+   * After marking, celebrate. Returns true if a "big" completion (season/show)
+   * already fired the full burst, so a single-episode caller can skip its own
+   * premiere/finale micro-burst.
+   */
+  const celebrateIfComplete = (s: number): boolean => {
     const show = useLibrary.getState().shows[id]
-    if (!show) return
+    if (!show) return false
     if (nextEpisode(show) === null) {
       fireConfetti()
       showToast(`${detail.name} complete — you've seen it all! 🎉`, '🏆')
-      return
+      return true
     }
     const aired = airedEpisodeCount(show, s)
-    if (aired === 0) return
+    if (aired === 0) return false
     for (let e = 1; e <= aired; e++) {
-      if (!show.watched[episodeKey(s, e)]) return
+      if (!show.watched[episodeKey(s, e)]) return false
     }
     fireConfetti()
     showToast(`Season ${s} complete! 🎉`, '🏆')
+    return true
   }
 
   const handleToggleEpisode = (s: number, e: number) => {
@@ -342,9 +369,23 @@ export default function ShowDetailPage() {
     toggleEpisode(id, s, e)
     if (wasWatched) {
       showToast(`${epCode(s, e)} unmarked`, '↩️')
-    } else {
-      showToast(`${epCode(s, e)} marked watched ✓`, '🎬')
-      celebrateIfComplete(s)
+      return
+    }
+    showToast(`${epCode(s, e)} marked watched ✓`, '🎬')
+    const big = celebrateIfComplete(s)
+    if (big) return
+    // Micro-burst on the premieres/finales users actually reach.
+    const show = useLibrary.getState().shows[id]
+    if (!show) return
+    if (isSeasonFinale(show, s, e)) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`Season ${s} finale watched 🎬`, '🏁')
+    } else if (isSeriesPremiere(show, s, e)) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${detail.name} — series premiere! 🎉`, '🎬')
+    } else if (isSeasonPremiere(show, s, e)) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`Season ${s} premiere 🎬`, '🎬')
     }
   }
 
@@ -381,7 +422,6 @@ export default function ShowDetailPage() {
   return (
     <div>
       <BackBar />
-      <ConfettiHost />
 
       {/* ---------- hero ---------- */}
       <div className="show-detail-hero">
@@ -398,6 +438,7 @@ export default function ShowDetailPage() {
               {detail.tagline && <div className="show-detail-tagline">{detail.tagline}</div>}
             </div>
             <div className="show-detail-chips">
+              {tracked?.paused && <span className="chip show-detail-paused-chip">⏸ Paused</span>}
               {year && <span className="chip">{year}</span>}
               {detail.status && <span className="chip">{detail.status}</span>}
               <Rating value={detail.vote_average} />
@@ -478,6 +519,20 @@ export default function ShowDetailPage() {
                   {tracked.favorite ? '★ Favorite' : '☆ Favorite'}
                 </button>
               )}
+              {followed && tracked && (
+                <button
+                  className="btn"
+                  onClick={() => {
+                    const wasPaused = tracked.paused
+                    togglePauseShow(id)
+                    if (wasPaused) showToast('Resumed ▶', '▶️')
+                    else showToast('Paused — hidden from Watch Next', '⏸️')
+                  }}
+                  title={tracked.paused ? 'Resume this show' : 'Pause — hide from Watch Next'}
+                >
+                  {tracked.paused ? '▶ Resume' : '⏸ Pause'}
+                </button>
+              )}
               {trailerKey && (
                 <a
                   className="btn show-detail-trailer-btn"
@@ -520,7 +575,7 @@ export default function ShowDetailPage() {
 
       {/* ---------- progress ---------- */}
       {followed && tracked && (
-        <div className="card show-detail-progress-card">
+        <div className={`card show-detail-progress-card${tracked.paused ? ' paused' : ''}`}>
           <div className="show-detail-progress-top">
             <div>
               <strong>{watched}</strong>{' '}
@@ -602,7 +657,11 @@ export default function ShowDetailPage() {
               )}
             </div>
           </div>
-          <div className="show-detail-episodes">
+          <div
+            className={`show-detail-episodes${
+              followed && upNext && epListVisible ? ' has-quickbar' : ''
+            }`}
+          >
             {seasonDetail.episodes.map((ep) => {
               const key = episodeKey(ep.season_number, ep.episode_number)
               const record = tracked?.watched[key]
@@ -725,7 +784,12 @@ export default function ShowDetailPage() {
             tabIndex={epListVisible ? 0 : -1}
             onClick={() => handleToggleEpisode(upNext.season, upNext.episode)}
           >
-            ✓ Log {epCode(upNext.season, upNext.episode)}
+            {/* When viewing the up-next season the button logs the row you're
+                looking at ("Log …"); on any other season it reads as a shortcut
+                back to the queue ("Continue … →") so it never looks like a bug. */}
+            {season === upNext.season
+              ? `✓ Log ${epCode(upNext.season, upNext.episode)}`
+              : `Continue ${epCode(upNext.season, upNext.episode)} →`}
           </button>
         </div>
       )}

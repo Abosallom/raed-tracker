@@ -558,7 +558,9 @@ export default function Migrate() {
 
   return (
     <div className="migrate-page">
-      <BackBar title="Import" />
+      {/* Mid-flow the back target is an unmissable escape hatch (same
+          navigate(-1) fallback); on the first step it's just "Import". */}
+      <BackBar title={step > 0 && step < 4 ? 'Cancel import' : 'Import'} />
       <h1 className="page-title">Move in from TV Time 🚚</h1>
       <p className="page-subtitle">
         Bring your whole watch history — shows, episodes, movies, reactions and your watchlist —

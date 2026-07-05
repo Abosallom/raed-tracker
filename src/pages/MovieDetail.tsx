@@ -33,7 +33,7 @@ import {
 import { CommentsSection } from '../components/CommentsSection'
 import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
-import { ConfettiHost, fireConfetti } from '../components/Confetti'
+import { fireConfetti } from '../components/Confetti'
 import './moviedetail.css'
 
 function initials(name: string): string {
@@ -163,7 +163,9 @@ export default function MovieDetail() {
     if (wasWatched) {
       showToast(`${detail.title} unmarked`, '↩️')
     } else {
-      fireConfetti()
+      // Micro-burst: a quick, frequent celebration for the everyday "watched"
+      // tap (full bursts stay reserved for big show completions).
+      fireConfetti({ intensity: 'micro' })
       showToast(`${detail.title} watched — enjoy the credits! 🎉`, '🎬')
     }
   }
@@ -193,7 +195,6 @@ export default function MovieDetail() {
   return (
     <div>
       <BackBar title={detail.title} />
-      <ConfettiHost />
       <div className="moviedetail-hero">
         {backdrop && (
           <div className="moviedetail-hero-bg" style={{ backgroundImage: `url(${backdrop})` }} />

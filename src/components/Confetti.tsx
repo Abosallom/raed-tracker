@@ -1,26 +1,40 @@
 // Lightweight CSS-only confetti burst — same module pattern as toast.tsx:
-// call fireConfetti() from anywhere; <ConfettiHost /> (mounted on detail
-// pages) renders a ~1.6s burst of falling particles, then unmounts itself.
+// call fireConfetti() from anywhere; <ConfettiHost /> (mounted once at the app
+// root) renders a burst of falling particles, then unmounts itself.
 // Skipped entirely when the user prefers reduced motion.
 
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 
-type Listener = (burstId: number) => void
+export type ConfettiIntensity = 'full' | 'micro'
+
+interface BurstSpec {
+  id: number
+  intensity: ConfettiIntensity
+}
+
+type Listener = (spec: BurstSpec) => void
 
 let listener: Listener | null = null
 let nextBurstId = 1
 
-/** Fire a confetti burst (no-op if no host is mounted or reduced motion is on). */
-export function fireConfetti() {
+/**
+ * Fire a confetti burst (no-op if no host is mounted or reduced motion is on).
+ * `intensity: 'micro'` is a smaller, faster celebration (~900ms) for the many
+ * everyday check-off moments (premieres, finales, every-10th milestone); the
+ * default 'full' burst stays reserved for big completions.
+ */
+export function fireConfetti(opts?: { intensity?: ConfettiIntensity }) {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  listener?.(nextBurstId++)
+  listener?.({ id: nextBurstId++, intensity: opts?.intensity ?? 'full' })
 }
 
 const COLORS = ['var(--accent)', 'var(--green)', '#f472b6'] // accent / green / pink
 
-const PARTICLE_COUNT = 36
-const BURST_MS = 1600
+const FULL_PARTICLE_COUNT = 36
+const MICRO_PARTICLE_COUNT = 16
+const FULL_BURST_MS = 1600
+const MICRO_BURST_MS = 900
 
 interface Particle {
   left: number // vw-ish percent across the viewport
@@ -32,25 +46,28 @@ interface Particle {
   rot: number // total degrees of rotation
 }
 
-function makeParticles(): Particle[] {
-  return Array.from({ length: PARTICLE_COUNT }, (_, i) => ({
+function makeParticles(intensity: ConfettiIntensity): Particle[] {
+  const micro = intensity === 'micro'
+  const count = micro ? MICRO_PARTICLE_COUNT : FULL_PARTICLE_COUNT
+  return Array.from({ length: count }, (_, i) => ({
     left: Math.random() * 100,
     size: 6 + Math.random() * 6,
     color: COLORS[i % COLORS.length]!,
-    delay: Math.random() * 0.25,
-    duration: 1.0 + Math.random() * 0.35, // delay + duration stays within ~1.6s
-    drift: (Math.random() - 0.5) * 160,
+    delay: Math.random() * (micro ? 0.12 : 0.25),
+    // delay + duration stays within the burst window for each intensity.
+    duration: micro ? 0.6 + Math.random() * 0.2 : 1.0 + Math.random() * 0.35,
+    drift: (Math.random() - 0.5) * (micro ? 110 : 160),
     rot: (Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 540),
   }))
 }
 
-function Burst({ onDone }: { onDone: () => void }) {
-  const particles = useMemo(makeParticles, [])
+function Burst({ intensity, onDone }: { intensity: ConfettiIntensity; onDone: () => void }) {
+  const particles = useMemo(() => makeParticles(intensity), [intensity])
 
   useEffect(() => {
-    const t = window.setTimeout(onDone, BURST_MS)
+    const t = window.setTimeout(onDone, intensity === 'micro' ? MICRO_BURST_MS : FULL_BURST_MS)
     return () => window.clearTimeout(t)
-  }, [onDone])
+  }, [onDone, intensity])
 
   return (
     <div className="rt-confetti" aria-hidden="true">
@@ -111,18 +128,18 @@ function Burst({ onDone }: { onDone: () => void }) {
   )
 }
 
-/** Mount once per page that wants confetti (ShowDetail / MovieDetail). */
+/** Mounted once at the app root (App.tsx) so every check-off path is covered. */
 export function ConfettiHost() {
-  const [burstId, setBurstId] = useState<number | null>(null)
+  const [burst, setBurst] = useState<BurstSpec | null>(null)
 
   useEffect(() => {
-    const l: Listener = (id) => setBurstId(id)
+    const l: Listener = (spec) => setBurst(spec)
     listener = l
     return () => {
       if (listener === l) listener = null
     }
   }, [])
 
-  if (burstId == null) return null
-  return <Burst key={burstId} onDone={() => setBurstId(null)} />
+  if (burst == null) return null
+  return <Burst key={burst.id} intensity={burst.intensity} onDone={() => setBurst(null)} />
 }

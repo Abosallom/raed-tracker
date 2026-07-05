@@ -6,15 +6,16 @@ import { Link } from 'react-router-dom'
 import type { Emotion } from '../types'
 import { EMOTIONS } from '../types'
 import { useLibrary } from '../store/library'
-import type { Badge, MovieStats, ShowStats, WeekBucket } from '../lib/stats'
+import type { Badge, MovieStats, ShowStats } from '../lib/stats'
 import {
   computeBadges,
   computeMovieStats,
   computeShowStats,
   fmtDate,
   fmtDayKey,
-  splitDuration,
+  fmtMonthYear,
 } from '../lib/stats'
+import { formatMinutes } from '../components/shared'
 import type { StreakInfo } from '../lib/streaks'
 import { computeStreaks, localDayKey, watchDaySet } from '../lib/streaks'
 import { BackBar } from '../components/BackBar'
@@ -46,7 +47,19 @@ function num(n: number): string {
   return n.toLocaleString('en-US')
 }
 
-/** Hero card: N MONTHS N DAYS N HOURS. */
+/** Unit labels for the segments formatMinutes emits ("3d 4h", "11h 20m"…). */
+const DURATION_UNIT_LABEL: Record<string, [string, string]> = {
+  d: ['day', 'days'],
+  h: ['hour', 'hours'],
+  m: ['minute', 'minutes'],
+}
+
+/**
+ * Hero card. Uses shared formatMinutes as the single source of truth for
+ * watch-time formatting (same as Profile), then splits its output into styled
+ * unit segments. Leading zero units are already collapsed by formatMinutes, so
+ * "11h 20m" never renders as "0 months 0 days 11 hours".
+ */
 function DurationHero({
   icon,
   title,
@@ -58,28 +71,32 @@ function DurationHero({
   minutes: number
   emptyNote: string
 }) {
-  const d = splitDuration(minutes)
+  // e.g. "3d 4h" -> [{ n: '3', unit: 'd' }, { n: '4', unit: 'h' }]
+  const segments = formatMinutes(minutes)
+    .split(' ')
+    .map((tok) => {
+      const m = /^(\d+)([dhm])$/.exec(tok)
+      return m ? { n: m[1], unit: m[2] } : null
+    })
+    .filter((s): s is { n: string; unit: string } => s !== null)
   return (
     <section className="card stats-hero">
       <h2 className="stats-section-h">
         {icon} {title}
       </h2>
-      {minutes <= 0 ? (
+      {minutes <= 0 || segments.length === 0 ? (
         <p className="stats-empty-note">{emptyNote}</p>
       ) : (
         <div className="stats-duration">
-          <div className="stats-duration-unit">
-            <span className="stats-duration-n">{num(d.months)}</span>
-            <span className="stats-duration-l">{d.months === 1 ? 'month' : 'months'}</span>
-          </div>
-          <div className="stats-duration-unit">
-            <span className="stats-duration-n">{num(d.days)}</span>
-            <span className="stats-duration-l">{d.days === 1 ? 'day' : 'days'}</span>
-          </div>
-          <div className="stats-duration-unit">
-            <span className="stats-duration-n">{num(d.hours)}</span>
-            <span className="stats-duration-l">{d.hours === 1 ? 'hour' : 'hours'}</span>
-          </div>
+          {segments.map((seg) => {
+            const [singular, plural] = DURATION_UNIT_LABEL[seg.unit] ?? ['', '']
+            return (
+              <div className="stats-duration-unit" key={seg.unit}>
+                <span className="stats-duration-n">{num(Number(seg.n))}</span>
+                <span className="stats-duration-l">{seg.n === '1' ? singular : plural}</span>
+              </div>
+            )
+          })}
         </div>
       )}
     </section>
@@ -180,12 +197,25 @@ function StreakCard({ streaks, activeDays }: { streaks: StreakInfo; activeDays: 
   )
 }
 
-/** Vertical per-week bar chart (last 12 ISO weeks, current in accent). */
-function WeekChart({ weeks, emptyNote }: { weeks: WeekBucket[]; emptyNote: string }) {
+/** Vertical bar chart over week OR day buckets (same {key,label,count,current}
+    shape). `nowLabel` marks the current bucket; `caption` explains a non-default
+    (daily) view. */
+function WeekChart({
+  weeks,
+  emptyNote,
+  nowLabel = 'now',
+  caption,
+}: {
+  weeks: { key: string; label: string; count: number; current: boolean }[]
+  emptyNote: string
+  nowLabel?: string
+  caption?: string
+}) {
   const max = Math.max(1, ...weeks.map((w) => w.count))
   const empty = weeks.every((w) => w.count === 0)
   return (
     <>
+      {caption && <p className="stats-chart-caption">{caption}</p>}
       <div className="stats-weeks">
         {weeks.map((w, i) => (
           <div className="stats-weeks-col" key={w.key}>
@@ -201,7 +231,7 @@ function WeekChart({ weeks, emptyNote }: { weeks: WeekBucket[]; emptyNote: strin
               }
             />
             <span className="stats-weeks-label">
-              {w.current ? 'now' : i % 2 === 0 ? w.label : ' '}
+              {w.current ? nowLabel : i % 2 === 0 ? w.label : ' '}
             </span>
           </div>
         ))}
@@ -348,11 +378,22 @@ function ShowsTab({
 
       <div className="stats-grid">
         <section className="card">
-          <h2 className="stats-section-h">📅 Episodes per week</h2>
-          <WeekChart
-            weeks={stats.weeks}
-            emptyNote="Episodes you watch will chart here, week by week."
-          />
+          <h2 className="stats-section-h">
+            {stats.youngAccount ? '📅 Episodes per day' : '📅 Episodes per week'}
+          </h2>
+          {stats.youngAccount ? (
+            <WeekChart
+              weeks={stats.days}
+              nowLabel="today"
+              caption="Daily view — young account. Switches to a 12-week view as your history grows."
+              emptyNote="Episodes you watch will chart here, day by day."
+            />
+          ) : (
+            <WeekChart
+              weeks={stats.weeks}
+              emptyNote="Episodes you watch will chart here, week by week."
+            />
+          )}
         </section>
 
         <section className="card">
@@ -476,16 +517,46 @@ function ShowsTab({
           value={
             stats.remainingEpisodes === 0 && stats.startedShows > 0
               ? 'Caught up!'
-              : stats.catchUpDate
-                ? fmtDate(stats.catchUpDate)
-                : '—'
+              : stats.catchUpUncertain && stats.catchUpRange
+                ? `${fmtMonthYear(stats.catchUpRange[0])} – ${fmtMonthYear(stats.catchUpRange[1])}`
+                : stats.catchUpDate
+                  ? fmtDate(stats.catchUpDate)
+                  : '—'
           }
           label="When will you catch up"
           sub={
-            stats.ratePerDay > 0
-              ? `at ${(stats.ratePerDay * 7).toFixed(1)} eps/week`
-              : 'watch something to project a date'
+            stats.ratePerDay <= 0
+              ? 'watch something to project a date'
+              : stats.catchUpUncertain
+                ? `rough — only ${'<'}4 weeks of history`
+                : `at ${(stats.ratePerDay * 7).toFixed(1)} eps/week`
           }
+        />
+      </div>
+
+      {/* Derived stats computed from the same watched map. */}
+      <div className="stats-mini-row">
+        <MiniStat
+          icon="📆"
+          value={stats.busiestWeekday ? stats.busiestWeekday.name : '—'}
+          label="Busiest weekday"
+          sub={
+            stats.busiestWeekday
+              ? `${num(stats.busiestWeekday.count)} ${
+                  stats.busiestWeekday.count === 1 ? 'episode' : 'episodes'
+                } all-time`
+              : 'watch something to find your rhythm'
+          }
+        />
+        <MiniStat
+          icon="📈"
+          value={
+            stats.avgEpisodesPerDayThisMonth > 0
+              ? stats.avgEpisodesPerDayThisMonth.toFixed(1)
+              : '—'
+          }
+          label="Avg episodes/day"
+          sub="on days you watched this month"
         />
       </div>
 

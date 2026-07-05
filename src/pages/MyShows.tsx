@@ -7,6 +7,9 @@ import type { ReactNode, RefObject } from 'react'
 import { Link } from 'react-router-dom'
 import {
   airedEpisodeCount,
+  isSeasonFinale,
+  isSeasonPremiere,
+  isSeriesPremiere,
   nextEpisode,
   seasonComplete,
   showProgress,
@@ -24,7 +27,7 @@ import {
 } from '../lib/freshness'
 import { PosterImage, ProgressBar, timeAgo } from '../components/shared'
 import { showToast } from '../components/toast'
-import { ConfettiHost, fireConfetti } from '../components/Confetti'
+import { fireConfetti } from '../components/Confetti'
 import EpisodeSheet from '../components/EpisodeSheet'
 import './myshows.css'
 
@@ -230,15 +233,18 @@ function usePullToRefresh(
 const QueueRow = memo(function QueueRow({
   show,
   index,
+  resuming,
   onCaughtUp,
   onOpenSheet,
 }: {
   show: TrackedShow
   index: number
+  resuming?: boolean
   onCaughtUp: (id: number) => void
   onOpenSheet: (s: SheetInfo) => void
 }) {
   const toggleEpisode = useLibrary((s) => s.toggleEpisode)
+  const reactionPrompt = useLibrary((s) => s.reactionPrompt)
   const snap = show.snapshot
 
   // While the row animates out (fully caught up) keep showing the last episode.
@@ -316,25 +322,66 @@ const QueueRow = memo(function QueueRow({
     toggleEpisode(snap.id, s, e)
     showToast(`${snap.name} · ${epCode(s, e)} watched ✓`, '📺')
     const updated = useLibrary.getState().shows[snap.id]
+
+    // Milestone detection on the check-offs users actually reach: series/season
+    // premieres, season finales, and every 10th lifetime episode. Big
+    // completions keep the full burst; the rest get a quick micro-burst.
+    const lifetimeEps = updated ? watchedCount(updated) : 0
+    const seriesPremiere = updated ? isSeriesPremiere(updated, s, e) : false
+    const seasonPremiere = updated ? isSeasonPremiere(updated, s, e) : false
+    const seasonFinale = updated ? isSeasonFinale(updated, s, e) : false
+    const tenth = lifetimeEps > 0 && lifetimeEps % 10 === 0
+    let milestone = false
+
     if (updated && nextEpisode(updated) === null) {
       fireConfetti()
       showToast(`All caught up on ${snap.name} 🎉`)
       onCaughtUp(snap.id)
+      milestone = true
     } else if (updated && seasonComplete(updated, s)) {
       fireConfetti()
       showToast(`Season ${s} complete! 🎉`, '🏆')
+      milestone = true
+    } else if (seasonFinale) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`Season ${s} finale watched 🎬`, '🏁')
+      milestone = true
+    } else if (seriesPremiere) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${snap.name} — series premiere! 🎉`, '🎬')
+      milestone = true
+    } else if (seasonPremiere) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`Season ${s} premiere 🎬`, '🎬')
+      milestone = true
+    } else if (tenth) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${lifetimeEps} episodes watched! 🎉`, '🔟')
+      milestone = true
     }
-    onOpenSheet({
-      showId: snap.id,
-      showName: snap.name,
-      season: s,
-      episode: e,
-      episodeTitle: epInfo?.title,
-    })
+
+    // Reaction-sheet frequency: 'always' opens the deep-react sheet on every
+    // check-off, 'milestones' only on premieres/finales/completions, 'never'
+    // relies on the toast + inline reactions on the show page.
+    const openSheet =
+      reactionPrompt === 'always' || (reactionPrompt === 'milestones' && milestone)
+    if (openSheet) {
+      onOpenSheet({
+        showId: snap.id,
+        showName: snap.name,
+        season: s,
+        episode: e,
+        episodeTitle: epInfo?.title,
+      })
+    }
   }
 
   return (
-    <div className={`queue-row${flash ? ' flash' : ''}${leaving ? ' leaving' : ''}`}>
+    <div
+      className={`queue-row${flash ? ' flash' : ''}${leaving ? ' leaving' : ''}${
+        resuming ? ' resuming' : ''
+      }`}
+    >
       <Link
         to={`/show/${snap.id}`}
         className={`queue-poster${stillOn ? ' has-still' : ''}`}
@@ -492,6 +539,8 @@ export default function MyShows() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [sheet, setSheet] = useState<SheetInfo | null>(null)
   const [leavingIds, setLeavingIds] = useState<number[]>([])
+  // Shows just un-paused: animate their re-insertion into Watch Next once.
+  const [resumingIds, setResumingIds] = useState<number[]>([])
 
   // Freshness engine: refreshing flag (spinner) + newly-aired ribbon.
   const freshness = useSyncExternalStore(subscribeFreshness, getFreshnessSnapshot)
@@ -568,6 +617,21 @@ export default function MyShows() {
       window.setTimeout(() => setLeavingIds((ids) => ids.filter((x) => x !== id)), 520),
     )
   }, [])
+
+  const handleResume = useCallback(
+    (id: string | number) => {
+      const numId = Number(id)
+      togglePauseShow(numId)
+      setResumingIds((ids) => (ids.includes(numId) ? ids : [...ids, numId]))
+      leaveTimers.current.push(
+        window.setTimeout(
+          () => setResumingIds((ids) => ids.filter((x) => x !== numId)),
+          460,
+        ),
+      )
+    },
+    [togglePauseShow],
+  )
   const queueCount = fresh.length + stale.length
 
   const toggleLayout = () =>
@@ -605,7 +669,6 @@ export default function MyShows() {
 
   return (
     <div ref={pageRef}>
-      <ConfettiHost />
       {/* Elastic pull-to-refresh indicator (height driven by usePullToRefresh) */}
       <div
         ref={ptrRef}
@@ -840,6 +903,7 @@ export default function MyShows() {
                     key={s.snapshot.id}
                     show={s}
                     index={i}
+                    resuming={resumingIds.includes(s.snapshot.id)}
                     onCaughtUp={handleCaughtUp}
                     onOpenSheet={setSheet}
                   />
@@ -857,6 +921,7 @@ export default function MyShows() {
                     key={s.snapshot.id}
                     show={s}
                     index={fresh.length + i}
+                    resuming={resumingIds.includes(s.snapshot.id)}
                     onCaughtUp={handleCaughtUp}
                     onOpenSheet={setSheet}
                   />
@@ -877,7 +942,7 @@ export default function MyShows() {
                       <button
                         className="btn small"
                         onClick={() => {
-                          togglePauseShow(s.snapshot.id)
+                          handleResume(s.snapshot.id)
                           showToast(`Resumed ${s.snapshot.name} ▶`, '▶️')
                         }}
                       >

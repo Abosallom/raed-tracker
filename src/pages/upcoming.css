@@ -83,6 +83,14 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+  /* Sticky so the network filter stays reachable while scrolling the long
+     day-grouped schedule. Sits just under the page top with a matching bg so
+     rows scroll cleanly beneath it. */
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 8px 0;
+  background: var(--bg);
 }
 
 .upcoming-filter {

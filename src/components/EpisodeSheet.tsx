@@ -171,6 +171,7 @@ export default function EpisodeSheet({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="epsheet-grip" aria-hidden="true" />
+        <div className="epsheet-skiphint">Tap outside to skip</div>
 
         <div className="epsheet-header">
           <div className="epsheet-check" aria-hidden="true">
@@ -183,6 +184,9 @@ export default function EpisodeSheet({
             </div>
             <div className="epsheet-show">{showName}</div>
           </div>
+          <button className="epsheet-close" onClick={close} aria-label="Close" title="Close">
+            ✕
+          </button>
         </div>
 
         <div className="epsheet-section">

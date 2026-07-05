@@ -1,7 +1,8 @@
-import { Suspense, lazy, useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { isDemoMode } from './api/tmdb'
 import { LoadingSpinner } from './components/shared'
+import { ConfettiHost } from './components/Confetti'
 import { ConfirmHost } from './components/confirm'
 import { Toaster } from './components/toast'
 import { nextEpisode, useLibrary } from './store/library'
@@ -55,6 +56,30 @@ function useFreshness() {
   return useSyncExternalStore(subscribeFreshness, getFreshnessSnapshot)
 }
 
+/**
+ * Reactive matchMedia hook (matchMedia + useSyncExternalStore, same external-
+ * store pattern as useFreshness). Renders exactly one nav per viewport so no
+ * invisible duplicate link can steal a tap.
+ */
+function useMediaQuery(query: string): boolean {
+  const [mql] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(query) : null,
+  )
+  return useSyncExternalStore(
+    (cb) => {
+      mql?.addEventListener('change', cb)
+      return () => mql?.removeEventListener('change', cb)
+    },
+    () => mql?.matches ?? false,
+    () => false,
+  )
+}
+
+// Module-level: true only until the first route has painted. The full opacity
+// fade plays on the initial app mount; in-app navigations get a near-instant
+// variant (see .page-enter[data-first] in app-shell.css).
+let firstLoad = true
+
 function Nav({
   showsBadge,
   exploreDot,
@@ -106,10 +131,14 @@ function Nav({
   )
 }
 
-/** Mobile-only (<=760px) fixed bottom tab bar — the four primary destinations. */
+/** Mobile-only (<=760px) fixed bottom tab bar — the five primary destinations. */
 function TabBar({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: boolean }) {
-  const tab = (to: string, icon: string, label: string, extra?: ReactNode) => (
-    <NavLink to={to} className={({ isActive }) => `tabbar-item${isActive ? ' active' : ''}`}>
+  const tab = (to: string, icon: string, label: string, extra?: ReactNode, end?: boolean) => (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) => `tabbar-item${isActive ? ' active' : ''}`}
+    >
       {/* Only the decorative emoji is aria-hidden — the badge/dot carry
           aria-labels and must stay in the a11y tree, but they also have to
           remain inside .tabbar-icon, their position:relative anchor. */}
@@ -122,6 +151,8 @@ function TabBar({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: bo
   )
   return (
     <nav className="tabbar" aria-label="Primary">
+      {/* `end` so "/" only matches Home exactly, not every route. */}
+      {tab('/', '🏠', 'Home', undefined, true)}
       {tab(
         '/shows',
         '📺',
@@ -144,6 +175,8 @@ function TabBar({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: bo
   )
 }
 
+// Root tab pages that get the minimal mobile brand row. Home is excluded — it
+// has its own greeting page-title, so a brand row above it would double up.
 const TAB_ROOTS = ['/shows', '/movies', '/search', '/profile']
 
 /** Mobile-only minimal brand row, shown on the four root tab pages only
@@ -163,6 +196,15 @@ export default function App() {
   const showsBadge = useUnwatchedShowCount()
   const { hasNewTrending } = useFreshness()
   const { isAdmin, adminMode } = useAdminGate()
+  const isMobile = useMediaQuery('(max-width: 760px)')
+
+  // Only the very first painted route plays the fuller fade; every in-app
+  // navigation after it gets the near-instant variant. Reading + flipping the
+  // module flag during render is safe: it's a monotonic one-way latch.
+  const initialLoad = firstLoad
+  useEffect(() => {
+    firstLoad = false
+  }, [])
 
   // Kick off the background freshness engine once per app load.
   useEffect(() => {
@@ -187,7 +229,11 @@ export default function App() {
 
   return (
     <div className="app-layout">
-      <Nav showsBadge={showsBadge} exploreDot={hasNewTrending} showAdmin={isAdmin && adminMode} />
+      {/* Exactly one nav is in the DOM per viewport, so an invisible duplicate
+          link can never intercept a tap on the primary nav. */}
+      {!isMobile && (
+        <Nav showsBadge={showsBadge} exploreDot={hasNewTrending} showAdmin={isAdmin && adminMode} />
+      )}
       <main className="main-content">
         <MobileBrand />
         {isDemoMode() && (
@@ -196,7 +242,11 @@ export default function App() {
             <Link to="/settings">Settings</Link> to browse real shows and movies.
           </div>
         )}
-        <div key={location.pathname} className="page-enter">
+        <div
+          key={location.pathname}
+          className="page-enter"
+          data-first={initialLoad ? '' : undefined}
+        >
           <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/" element={<Home />} />
@@ -218,7 +268,10 @@ export default function App() {
           </Suspense>
         </div>
       </main>
-      <TabBar showsBadge={showsBadge} exploreDot={hasNewTrending} />
+      {isMobile && <TabBar showsBadge={showsBadge} exploreDot={hasNewTrending} />}
+      {/* Mounted once at the app root so every check-off path across all pages
+          can fire confetti (previously per-page mounts missed most paths). */}
+      <ConfettiHost />
       <Toaster />
       <ConfirmHost />
     </div>

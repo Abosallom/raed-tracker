@@ -87,6 +87,9 @@ export function movieToSnapshot(m: MovieDetail): MovieSnapshot {
   }
 }
 
+/** How often the post-check-off reaction sheet should auto-open. */
+export type ReactionPrompt = 'always' | 'milestones' | 'never'
+
 interface LibraryState {
   shows: Record<number, TrackedShow>
   movies: Record<number, TrackedMovie>
@@ -94,6 +97,9 @@ interface LibraryState {
   comments: Comment[] // user's own + likes state on seeded ones
   lists: UserList[]
   profile: Profile
+  /** Reaction-sheet frequency (Settings > App). Defaults to 'always'. */
+  reactionPrompt: ReactionPrompt
+  setReactionPrompt: (pref: ReactionPrompt) => void
 
   // ----- shows -----
   addShow: (detail: ShowDetail) => void
@@ -204,6 +210,7 @@ const EMPTY = {
   comments: [] as Comment[],
   lists: [] as UserList[],
   profile: { name: 'Watcher', avatar: '🍿', joinedAt: now() } as Profile,
+  reactionPrompt: 'always' as ReactionPrompt,
 }
 
 export const useLibrary = create<LibraryState>()(
@@ -564,9 +571,26 @@ export const useLibrary = create<LibraryState>()(
       updateProfile: (patch) =>
         set((st) => ({ profile: { ...st.profile, ...patch } })),
 
+      setReactionPrompt: (pref) => set({ reactionPrompt: pref }),
+
       resetAll: () => set({ ...EMPTY, profile: { ...EMPTY.profile, joinedAt: now() } }),
     }),
-    { name: 'showtrackr_library' },
+    {
+      name: 'showtrackr_library',
+      // Persist only serializable data slices — never the action functions.
+      // Explicit now that a scalar preference (reactionPrompt) lives alongside
+      // the collections; a legacy store missing it falls back to EMPTY's
+      // 'always' via merge (undefined slice → initial-state value).
+      partialize: (st) => ({
+        shows: st.shows,
+        movies: st.movies,
+        watchlist: st.watchlist,
+        comments: st.comments,
+        lists: st.lists,
+        profile: st.profile,
+        reactionPrompt: st.reactionPrompt,
+      }),
+    },
   ),
 )
 
@@ -659,6 +683,34 @@ export function nextEpisode(show: TrackedShow): { season: number; episode: numbe
     }
   }
   return null
+}
+
+/** The lowest season number the show has (its "first" season, usually 1). */
+function firstSeasonNumber(show: TrackedShow): number | null {
+  const seasons = Object.keys(show.snapshot.seasonEpisodeCounts).map(Number)
+  return seasons.length > 0 ? Math.min(...seasons) : null
+}
+
+/** The very first episode of the whole series (its first season, episode 1). */
+export function isSeriesPremiere(show: TrackedShow, season: number, episode: number): boolean {
+  return episode === 1 && season === firstSeasonNumber(show)
+}
+
+/** Episode 1 of any season is a season premiere. */
+export function isSeasonPremiere(_show: TrackedShow, _season: number, episode: number): boolean {
+  return episode === 1
+}
+
+/**
+ * Last episode of a season, derived from the snapshot's per-season episode
+ * count (falls back to aired count when the total isn't known). Used to fire a
+ * finale celebration on the check-off users actually reach.
+ */
+export function isSeasonFinale(show: TrackedShow, season: number, episode: number): boolean {
+  const total = show.snapshot.seasonEpisodeCounts[season]
+  if (total != null && total > 0) return episode === total
+  const aired = airedEpisodeCount(show, season)
+  return aired > 0 && episode === aired
 }
 
 /** Every aired episode of season `season` is watched (used for completion celebrations). */

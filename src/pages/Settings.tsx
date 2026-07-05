@@ -5,6 +5,7 @@ import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getApiKey, isDemoMode, setApiKey } from '../api/tmdb'
 import { useLibrary } from '../store/library'
+import type { ReactionPrompt } from '../store/library'
 import { getSyncStatus, noteLibraryReplaced } from '../store/sync'
 import { AccountSyncCard } from '../components/AccountSync'
 import { BackBar } from '../components/BackBar'
@@ -34,6 +35,17 @@ const THEME_OPTIONS: { value: ThemePref; emoji: string; title: string; desc: str
   { value: 'auto', emoji: '🌗', title: 'Auto', desc: 'Sync with your device appearance' },
   { value: 'dark', emoji: '🌙', title: 'Dark', desc: 'Dark grey, easy on the eyes' },
   { value: 'light', emoji: '☀️', title: 'Light', desc: 'Bright surfaces, same yellow accent' },
+]
+
+const REACTION_OPTIONS: { value: ReactionPrompt; emoji: string; title: string; desc: string }[] = [
+  { value: 'always', emoji: '💬', title: 'Always', desc: 'Open the react sheet after every check-off' },
+  {
+    value: 'milestones',
+    emoji: '🏆',
+    title: 'Milestones only',
+    desc: 'Only on premieres, finales and completions',
+  },
+  { value: 'never', emoji: '🚫', title: 'Never', desc: 'Just a toast — react inline on the show page' },
 ]
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -85,6 +97,8 @@ export default function Settings() {
   const watchlist = useLibrary((s) => s.watchlist)
   const comments = useLibrary((s) => s.comments)
   const resetAll = useLibrary((s) => s.resetAll)
+  const reactionPrompt = useLibrary((s) => s.reactionPrompt)
+  const setReactionPrompt = useLibrary((s) => s.setReactionPrompt)
 
   function saveKey() {
     setApiKey(key)
@@ -103,6 +117,12 @@ export default function Settings() {
     setPref(pref)
     const opt = THEME_OPTIONS.find((o) => o.value === pref)
     showToast(`Theme: ${opt?.title ?? pref}`, opt?.emoji ?? '🎨')
+  }
+
+  function chooseReactionPrompt(pref: ReactionPrompt) {
+    setReactionPrompt(pref) // persisted in the library store
+    const opt = REACTION_OPTIONS.find((o) => o.value === pref)
+    showToast(`Reaction prompts: ${opt?.title ?? pref}`, opt?.emoji ?? '💬')
   }
 
   function exportData() {
@@ -302,6 +322,43 @@ export default function Settings() {
                     value={opt.value}
                     checked={themePref === opt.value}
                     onChange={() => chooseTheme(opt.value)}
+                  />
+                  <span className="settings-theme-emoji" aria-hidden>
+                    {opt.emoji}
+                  </span>
+                  <span className="settings-theme-text">
+                    <span className="settings-theme-title">{opt.title}</span>
+                    <span className="settings-theme-desc">{opt.desc}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="settings-card-head">
+              <div className="settings-card-title">💬 Reaction prompts</div>
+            </div>
+            <p className="settings-card-desc">
+              Choose how often the “How did it feel?” sheet pops up after you check off an
+              episode. You can always react inline on the show page.
+            </p>
+            <div
+              className="settings-theme-options"
+              role="radiogroup"
+              aria-label="Reaction prompt frequency"
+            >
+              {REACTION_OPTIONS.map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`settings-theme-row${reactionPrompt === opt.value ? ' selected' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="reactionPrompt"
+                    value={opt.value}
+                    checked={reactionPrompt === opt.value}
+                    onChange={() => chooseReactionPrompt(opt.value)}
                   />
                   <span className="settings-theme-emoji" aria-hidden>
                     {opt.emoji}

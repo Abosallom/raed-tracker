@@ -42,6 +42,27 @@
   font-weight: 700;
 }
 
+/* While offline, push the app content down so the fixed banner never sits on
+   the BackBar (its text can wrap to two lines at 375px). The transition shifts
+   content smoothly in sync with the banner's slide. The reserve clears the
+   two-line worst case plus the status-bar/safe-area inset. */
+/* body.offline-banner-on … (0,2,1) intentionally out-specifies the standalone
+   PWA's `.app-layout .main-content` padding-top rule so the shift always
+   applies. */
+body.offline-banner-on .main-content {
+  padding-top: calc(56px + env(safe-area-inset-top, 0px));
+}
+
+.main-content {
+  transition: padding-top 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main-content {
+    transition: none;
+  }
+}
+
 .offline-banner-emoji {
   font-size: 14px;
   line-height: 1;

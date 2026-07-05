@@ -89,6 +89,20 @@
   flex-direction: column;
   gap: 10px;
   margin-bottom: 24px;
+  transition: opacity 0.2s ease;
+}
+
+/* Paused: slightly dimmed so it reads as "on hold", not active. */
+.show-detail-progress-card.paused {
+  opacity: 0.62;
+}
+
+/* "⏸ Paused" chip in the hero chip row (both themes via accent-soft). */
+.show-detail-paused-chip {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-weight: 700;
 }
 
 /* Let the fill glide when episodes are (un)checked. */
@@ -192,7 +206,19 @@ a.show-detail-trailer-btn:hover {
 .show-detail-season-ring {
   flex-shrink: 0;
   display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding-bottom: 8px; /* optically aligns with the tabs' scrollbar padding */
+}
+
+/* The watched/aired fraction beside the ring — turns an ambiguous spinning
+   ring into legible progress. */
+.show-detail-season-ring-frac {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .show-detail-season-ring-fill {
@@ -269,6 +295,16 @@ a.show-detail-trailer-btn:hover {
   border-radius: var(--radius);
   background: var(--bg-elev);
   overflow: hidden;
+}
+
+/* While the floating quick-log bar is on screen, reserve space below the last
+   episode row so no row is ever occluded by the pill. Mobile-only — the
+   quickbar itself only shows there. The value clears the quickbar's own height
+   (~46px) plus its bottom offset (62px + tab bar / home indicator) and a gap. */
+@media (max-width: 760px) {
+  .show-detail-episodes.has-quickbar {
+    margin-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 .show-detail-ep {

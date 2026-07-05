@@ -1,5 +1,34 @@
 /* Movies hub — scoped styles (prefix: movies-) */
 
+/* ---------- header: title + full-watchlist entry point ---------- */
+
+.movies-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.movies-watchlist-link {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.movies-watchlist-link:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
 /* ---------- toolbar: segmented tabs + favorites filter ---------- */
 
 .movies-toolbar {
@@ -18,6 +47,26 @@
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 999px;
+  /* Never clip a tab label on narrow screens — scroll the pill group instead. */
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.movies-seg::-webkit-scrollbar {
+  display: none;
+}
+
+/* Tighten the segmented buttons so all three (incl. "Upcoming") fit at ≤400px
+   without truncating mid-word. */
+@media (max-width: 400px) {
+  .movies-seg-btn {
+    padding: 6px 10px;
+    font-size: 12.5px;
+  }
+  .movies-seg-count {
+    margin-left: 4px;
+  }
 }
 
 .movies-seg-btn {
