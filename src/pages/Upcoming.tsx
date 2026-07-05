@@ -304,7 +304,11 @@ export default function Upcoming() {
     const ids = followKey ? followKey.split(',').map(Number) : []
 
     async function load() {
-      setEntries(null)
+      // Keep any already-rendered schedule visible while reloading: followKey
+      // changes whenever the freshness engine advances a show's snapshot, and
+      // blanking to the skeleton on every background refresh made the page
+      // flash and reshuffle repeatedly during a refresh run. First load still
+      // shows the skeleton (entries starts as null).
       setError(null)
       try {
         const allShows = useLibrary.getState().shows

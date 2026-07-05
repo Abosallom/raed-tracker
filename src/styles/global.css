@@ -7,7 +7,9 @@
   --border: #2e2e2e;
   --text: #f2f2f2;
   --text-dim: #a5a5a5;
-  --text-faint: #737373;
+  /* 4.7:1+ on every dark surface incl. --bg-elev-2 (#737373 was 3.4–3.9:1 on
+     cards — below WCAG AA for the small text this token is used for) */
+  --text-faint: #8a8a8a;
   --accent: #fbbf24;
   --accent-hover: #fcd34d;
   --accent-soft: rgba(251, 191, 36, 0.14);
@@ -358,7 +360,9 @@ textarea:focus {
   --border: #d9d9d5;
   --text: #1c1c1a;
   --text-dim: #5c5c58;
-  --text-faint: #8b8b86;
+  /* 4.5:1+ on --bg / --bg-elev / --bg-elev-2 (#8b8b86 was ~3.2:1 — inactive
+     toptabs and timestamps were unreadable for low-vision users) */
+  --text-faint: #6b6b64;
   --accent: #d99a06;
   --accent-hover: #b57f02;
   --accent-soft: rgba(217, 154, 6, 0.14);

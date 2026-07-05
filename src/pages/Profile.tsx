@@ -6,6 +6,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import type { Comment, TrackedMovie, TrackedShow } from '../types'
 import { useLibrary, watchedCount } from '../store/library'
 import { computeStreaks } from '../lib/streaks'
+import { useAdminGate } from '../lib/admin'
 import { posterUrl } from '../api/tmdb'
 import { PosterImage, formatMinutes, timeAgo } from '../components/shared'
 import { showToast } from '../components/toast'
@@ -61,6 +62,7 @@ function commentTarget(
 }
 
 export default function Profile() {
+  const adminGate = useAdminGate()
   const profile = useLibrary((s) => s.profile)
   const shows = useLibrary((s) => s.shows)
   const movies = useLibrary((s) => s.movies)
@@ -145,6 +147,11 @@ export default function Profile() {
           >
             🔖
           </Link>
+          {adminGate.isAdmin && adminGate.adminMode && (
+            <Link className="profile-shortcut" to="/admin" aria-label="Admin" title="Admin">
+              🛡️
+            </Link>
+          )}
         </div>
       </div>
 

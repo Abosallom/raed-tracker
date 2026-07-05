@@ -17,6 +17,7 @@ import { getSyncStatus, onSyncStatus, signIn, signOut, signUp, syncNow, type Syn
 import { showToast } from '../components/toast'
 import { timeAgo } from '../components/shared'
 import { BackBar } from '../components/BackBar'
+import { usernameToEmail } from '../lib/admin'
 import './account.css'
 
 // ---------- signed-out: OTP-first sign in ----------
@@ -55,10 +56,13 @@ function SignInFlow() {
   const passwordSubmit = async () => {
     setBusy(true)
     setError(null)
+    // Members sign in with the username the admin gave them — usernames map
+    // to their account's internal address.
+    const identity = email.includes('@') ? email.trim() : usernameToEmail(email)
     const err =
       pwMode === 'signin'
-        ? await signIn(email.trim(), password)
-        : await signUp(email.trim(), password)
+        ? await signIn(identity, password)
+        : await signUp(identity, password)
     setBusy(false)
     if (err) setError(err)
   }
@@ -144,10 +148,12 @@ function SignInFlow() {
       ) : (
         <div className="account-form">
           <input
-            type="email"
-            placeholder="Email"
+            type="text"
+            placeholder="Email or username"
             value={email}
-            autoComplete="email"
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
             onChange={(e) => setEmail(e.target.value)}
           />
           <input
@@ -160,11 +166,15 @@ function SignInFlow() {
               if (e.key === 'Enter' && email && password.length >= 6) void passwordSubmit()
             }}
           />
+          <p className="account-hint">
+            Got a username and password from the admin? Enter them here — your library is
+            your own, separate from every other member.
+          </p>
           {error && <div className="account-error">{error}</div>}
           <div className="account-actions">
             <button
               className="btn primary"
-              disabled={busy || !email.includes('@') || password.length < 6}
+              disabled={busy || email.trim().length < 3 || password.length < 6}
               onClick={() => void passwordSubmit()}
             >
               {busy ? 'Working…' : pwMode === 'signin' ? 'Sign in' : 'Create account'}

@@ -308,7 +308,11 @@ export default function ShowDetailPage() {
   const progress = tracked ? showProgress(tracked) : 0
   const watched = tracked ? watchedCount(tracked) : 0
   const upNext = tracked ? nextEpisode(tracked) : null
-  const todayStr = new Date().toISOString().slice(0, 10)
+  // Local calendar date, NOT the UTC one (toISOString) — must agree with
+  // library.ts todayISO()/airedEpisodeCount so episode rows and the header's
+  // aired counts flip "aired" at the same local midnight.
+  const now = new Date()
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
   const ensureFollowed = () => {
     if (!tracked) addShow(detail)

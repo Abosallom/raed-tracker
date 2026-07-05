@@ -637,6 +637,7 @@ export default function MyShows() {
             className={`queue-chip queue-fav${favOnly ? ' active' : ''}`}
             onClick={() => setFavOnly((v) => !v)}
             title="Only favorite shows"
+            aria-pressed={favOnly}
           >
             ★ Favorites
           </button>

@@ -99,7 +99,23 @@ export default function EpisodeSheet({
     restoreFocusRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null
     sheetRef.current?.focus()
-    return () => restoreFocusRef.current?.focus()
+    return () => {
+      const el = restoreFocusRef.current
+      if (el && el.isConnected) {
+        el.focus()
+        return
+      }
+      // The originating element unmounted while the sheet was open (e.g. the
+      // queue row left after "caught up" or "Pause this show"): focusing a
+      // detached node no-ops and strands keyboard focus on <body>. Land on
+      // the main content instead so Tab resumes from the page, not the top
+      // of the document.
+      const main = document.querySelector<HTMLElement>('main.main-content')
+      if (main) {
+        main.tabIndex = -1
+        main.focus()
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -205,6 +221,7 @@ export default function EpisodeSheet({
                   <button
                     key={c.id}
                     className={`epsheet-cast-chip${selected ? ' selected' : ''}`}
+                    aria-pressed={selected}
                     title={c.character ? `${c.name} as ${c.character}` : c.name}
                     onClick={() => {
                       setEpisodeFavoriteCast(

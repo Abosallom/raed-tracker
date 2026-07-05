@@ -38,7 +38,9 @@
   border-bottom: none;
   border-radius: var(--radius) var(--radius) 0 0;
   box-shadow: var(--shadow);
-  padding: 10px 20px 20px;
+  /* Bottom inset keeps the actions row clear of the iPhone home-indicator
+     gesture zone (standalone PWA ships viewport-fit=cover). */
+  padding: 10px 20px calc(20px + env(safe-area-inset-bottom, 0px));
   animation: epsheet-up 0.26s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 

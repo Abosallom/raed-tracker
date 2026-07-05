@@ -164,7 +164,11 @@ function isDeleted(meta: SyncMeta, key: string, itemTime?: string): boolean {
  * store change, so tombstones are already persisted even if the page reloads
  * before the debounced push fires (e.g. Settings "Reset everything").
  */
-function recordChanges(prev: LibrarySlices, next: LibrarySlices) {
+function recordChanges(
+  prev: LibrarySlices,
+  next: LibrarySlices,
+  opts?: { reviveAll?: boolean },
+) {
   const meta = loadMeta()
   const at = new Date().toISOString()
   let dirty = false
@@ -181,9 +185,12 @@ function recordChanges(prev: LibrarySlices, next: LibrarySlices) {
   // TV Time imports keep their ORIGINAL addedAt/watchedAt, which predates any
   // tombstone recorded since the export — without this the first pullAndMerge
   // after a restore silently wipes the restored data again and pushes the
-  // wipe to the cloud. Only tombstoned keys are touched to keep meta small.
+  // wipe to the cloud. Normally only locally-tombstoned keys are touched to
+  // keep meta small; `reviveAll` (backup import) touches every re-added key
+  // because the matching tombstone may exist only in the REMOTE meta (restore
+  // on a new device / cleared storage) where this function cannot see it.
   const revive = (k: string) => {
-    if (meta.deleted[k]) touch(k)
+    if (opts?.reviveAll || meta.deleted[k]) touch(k)
   }
 
   const pShows = prev.shows ?? {}
@@ -292,8 +299,25 @@ function recordChanges(prev: LibrarySlices, next: LibrarySlices) {
  * Record deletions implied by replacing the local library wholesale (backup
  * import): everything the replacement drops gets a tombstone, so the intent
  * survives the immediate page reload and propagates to the cloud instead of
- * being silently re-merged from the remote doc.
+ * being silently re-merged from the remote doc. Everything the replacement
+ * (re-)adds gets a fresh set-time (`reviveAll`) so tombstones held only by
+ * the cloud doc — deletions recorded on another device, or on this device
+ * before its storage was cleared — cannot silently re-delete the restored
+ * items on the first pull after the restore.
  */
+// One-shot reviveAll for the next subscriber-recorded store change. The TV
+// Time import (library.ts bulkImport) re-adds ep:/movie-watched:/show:/movie:
+// keys whose tombstones may live only in the REMOTE sync meta (deleted on
+// another device, or here before storage was cleared); recordChanges'
+// conditional revive() cannot see those, so without this the first
+// pullAndMerge after a re-run import silently strips the imported records.
+// library.ts cannot import this module (cycle), so the import PAGE arms the
+// flag just before calling bulkImport.
+let reviveNextRecordedChange = false
+export function reviveNextLibraryChange() {
+  reviveNextRecordedChange = true
+}
+
 export function noteLibraryReplaced(next: {
   shows?: Record<number, TrackedShow>
   movies?: Record<number, TrackedMovie>
@@ -312,7 +336,7 @@ export function noteLibraryReplaced(next: {
     // Backups from older versions have no lists; keep the current ones rather
     // than tombstoning every list the backup predates.
     lists: next.lists ?? prev.lists,
-  })
+  }, { reviveAll: true })
 }
 
 function pickData(): LibraryData {
@@ -834,7 +858,11 @@ export function initSync() {
   initialized = true
 
   useLibrary.subscribe((state, prev) => {
-    if (!applyingRemote) recordChanges(prev, state)
+    if (!applyingRemote) {
+      const reviveAll = reviveNextRecordedChange
+      reviveNextRecordedChange = false
+      recordChanges(prev, state, { reviveAll })
+    }
     schedulePush()
   })
 

@@ -1,7 +1,7 @@
 // TV Time migration wizard: parse a GDPR export (ZIP/CSVs), preview it,
 // map everything to TMDB and merge into the library via bulkImport.
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { MovieDetail, ShowDetail } from '../types'
 import {
@@ -12,6 +12,7 @@ import {
   searchMulti,
 } from '../api/tmdb'
 import { useLibrary } from '../store/library'
+import { reviveNextLibraryChange } from '../store/sync'
 import { BackBar } from '../components/BackBar'
 import { ErrorBox, LoadingSpinner, ProgressBar } from '../components/shared'
 import { showToast } from '../components/toast'
@@ -95,6 +96,17 @@ export default function Migrate() {
   const [unmatched, setUnmatched] = useState<string[]>([])
   const cancelRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Navigating away must cancel a running import: the loop would otherwise
+  // keep hitting TMDB invisibly, and a remount (sessionStorage still holds the
+  // parsed export) would show an enabled "Start import" that races the orphan
+  // run — the orphan's bulkImport lands first and the mounted run reports
+  // "Imported 0 shows, 0 episodes, 0 movies" for a successful import.
+  useEffect(() => {
+    return () => {
+      cancelRef.current = true
+    }
+  }, [])
 
   const totalEpisodes = parsed
     ? parsed.shows.reduce((sum, s) => sum + s.episodes.length, 0)
@@ -212,6 +224,10 @@ export default function Migrate() {
       return
     }
 
+    // Re-run imports re-add records that may be tombstoned only in the REMOTE
+    // sync meta; arm a one-shot reviveAll so every key this import (re-)adds
+    // gets a fresh set-time and survives the next pullAndMerge.
+    reviveNextLibraryChange()
     const counts = useLibrary.getState().bulkImport({ shows: showPayload, movies: moviePayload })
     savePendingImport(null) // import finished — drop the stashed export
     setResult(counts)

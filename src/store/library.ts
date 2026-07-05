@@ -162,6 +162,26 @@ function now(): string {
   return new Date().toISOString()
 }
 
+/**
+ * Structural equality for plain JSON-ish values (snapshots). Key order is
+ * irrelevant and `undefined` properties are treated as absent, so a freshly
+ * built snapshot compares equal to its persisted/merged copy.
+ */
+function jsonEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
+    return a.every((x, i) => jsonEqual(x, b[i]))
+  }
+  const ra = a as Record<string, unknown>
+  const rb = b as Record<string, unknown>
+  const ka = Object.keys(ra).filter((k) => ra[k] !== undefined)
+  const kb = Object.keys(rb).filter((k) => rb[k] !== undefined)
+  if (ka.length !== kb.length) return false
+  return ka.every((k) => jsonEqual(ra[k], rb[k]))
+}
+
 const EMPTY = {
   shows: {} as Record<number, TrackedShow>,
   movies: {} as Record<number, TrackedMovie>,
@@ -198,8 +218,14 @@ export const useLibrary = create<LibraryState>()(
         set((st) => {
           const show = st.shows[detail.id]
           if (!show) return st
+          const snapshot = showToSnapshot(detail)
+          // No-op when TMDB data is unchanged: a fresh snapshot object would
+          // make sync's recordChanges stamp a new LWW touch-time, defeating
+          // push()'s dedupe and re-uploading the entire library on every
+          // show-page visit / freshness run even when nothing changed.
+          if (jsonEqual(show.snapshot, snapshot)) return st
           return {
-            shows: { ...st.shows, [detail.id]: { ...show, snapshot: showToSnapshot(detail) } },
+            shows: { ...st.shows, [detail.id]: { ...show, snapshot } },
           }
         }),
 
@@ -500,6 +526,20 @@ export const useLibrary = create<LibraryState>()(
   ),
 )
 
+// Cross-tab consistency: persist hydrates once at load and rewrites the WHOLE
+// document on every set, so a second tab holding stale state would clobber
+// everything the first tab wrote since (signed-out users have no cloud merge
+// to repair it). `storage` fires only in OTHER tabs, and this tab's own state
+// is already persisted at that moment, so rehydrating simply absorbs the other
+// tab's write instead of overwriting it later.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'showtrackr_library' && e.newValue !== null) {
+      void useLibrary.persist.rehydrate()
+    }
+  })
+}
+
 // ---------- derived helpers (pure functions over store slices) ----------
 
 export function watchedCount(show: TrackedShow): number {
@@ -512,7 +552,12 @@ export function showProgress(show: TrackedShow): number {
 }
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10)
+  // Local calendar date, NOT the UTC one (toISOString): every other air-date
+  // computation (Upcoming, ShowDetail, stats) compares against local midnight.
+  // Using UTC counted tomorrow's episode as aired from ~5pm for US users and
+  // kept today's episode "unaired" until UTC midnight east of Greenwich.
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 /**

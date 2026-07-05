@@ -215,6 +215,7 @@ export function ReactionPicker({
         <button
           key={e.key}
           title={e.label}
+          aria-pressed={value === e.key}
           onClick={(ev) => {
             ev.preventDefault()
             ev.stopPropagation()

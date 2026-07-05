@@ -14,6 +14,12 @@ import type { ThemePref } from '../lib/theme'
 import './settings.css'
 
 const LIBRARY_STORAGE_KEY = 'showtrackr_library'
+// Mirrors META_KEY in src/store/sync.ts (tombstones + LWW set-times).
+const SYNC_META_STORAGE_KEY = 'showtrackr_sync_meta'
+// Mirrors WIPED_BACKUP_KEY in src/store/sync.ts: connect() stashes the local
+// library here before wiping it on an account switch, so the data (possibly
+// including signed-out work) stays recoverable from this card.
+const WIPED_BACKUP_STORAGE_KEY = 'showtrackr_wiped_library_backup'
 
 type SettingsTab = 'account' | 'app' | 'data'
 
@@ -64,6 +70,13 @@ export default function Settings() {
   const [key, setKey] = useState(() => getApiKey())
   const [themePref, setPref] = useState<ThemePref>(() => getThemePref())
   const [dataMessage, setDataMessage] = useState<{ text: string; error: boolean } | null>(null)
+  const [wipedBackup, setWipedBackup] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(WIPED_BACKUP_STORAGE_KEY)
+    } catch {
+      return null
+    }
+  })
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const shows = useLibrary((s) => s.shows)
@@ -148,11 +161,42 @@ export default function Settings() {
     window.location.reload()
   }
 
+  function downloadWipedBackup() {
+    if (!wipedBackup) return
+    const blob = new Blob([wipedBackup], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'showtrackr-recovered-library.json'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    showToast('Recovered library downloaded', '🛟')
+  }
+
+  function discardWipedBackup() {
+    if (!window.confirm('Discard the recovered library snapshot? This cannot be undone.')) return
+    try {
+      localStorage.removeItem(WIPED_BACKUP_STORAGE_KEY)
+    } catch {
+      // storage unavailable — nothing to remove
+    }
+    setWipedBackup(null)
+    showToast('Recovered snapshot discarded', '🗑️')
+  }
+
   function confirmReset() {
     // While signed in the reset is deliberately synced: tombstones propagate
     // to the cloud copy and every other device — say so instead of promising
     // an "on this device" wipe that actually destroys everything everywhere.
-    const signedIn = getSyncStatus().state === 'synced' || getSyncStatus().state === 'syncing'
+    // An 'error' status with an email is still a signed-in session (transient
+    // network failure), so it gets the synced wording and behaviour too.
+    const status = getSyncStatus()
+    const signedIn =
+      status.state === 'synced' ||
+      status.state === 'syncing' ||
+      (status.state === 'error' && status.email !== undefined)
     if (
       window.confirm(
         signedIn
@@ -161,6 +205,18 @@ export default function Settings() {
       )
     ) {
       resetAll()
+      if (!signedIn) {
+        // The signed-out dialog promises a device-local wipe, but resetAll()'s
+        // store transition just tombstoned every item in the sync meta. Left
+        // in place, those tombstones would be merged on a future sign-in and
+        // silently wipe the cloud copy (and every other device) too. Drop
+        // them so signing back in restores the cloud library instead.
+        try {
+          localStorage.removeItem(SYNC_META_STORAGE_KEY)
+        } catch {
+          // storage unavailable — nothing to clean up
+        }
+      }
       showToast('Library reset', '🗑️')
       window.location.reload()
     }
@@ -373,6 +429,28 @@ export default function Settings() {
               </p>
             )}
           </section>
+
+          {wipedBackup !== null && (
+            <section className="card">
+              <div className="settings-card-head">
+                <div className="settings-card-title">🛟 Recovered library snapshot</div>
+              </div>
+              <p className="settings-card-desc">
+                Signing in to a different account replaced the library that was on this device.
+                The old library was saved first — download it as a backup (you can re-import it
+                via “Import backup” on the account it belongs to), or discard it if you no
+                longer need it.
+              </p>
+              <div className="settings-actions">
+                <button className="btn primary" onClick={downloadWipedBackup}>
+                  ⬇️ Download snapshot
+                </button>
+                <button className="btn danger" onClick={discardWipedBackup}>
+                  Discard
+                </button>
+              </div>
+            </section>
+          )}
 
           <section className="card">
             <div className="settings-card-head">

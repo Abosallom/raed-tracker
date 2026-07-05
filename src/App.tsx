@@ -11,6 +11,7 @@ import {
   refreshFollowedShows,
   subscribeFreshness,
 } from './lib/freshness'
+import { initAdmin, useAdminGate } from './lib/admin'
 import './app-shell.css'
 
 // Route-level code splitting: each page loads on demand so the initial
@@ -29,6 +30,7 @@ const Account = lazy(() => import('./pages/Account'))
 const Settings = lazy(() => import('./pages/Settings'))
 const ListDetail = lazy(() => import('./pages/ListDetail'))
 const Migrate = lazy(() => import('./pages/Migrate'))
+const Admin = lazy(() => import('./pages/Admin'))
 
 /** Minimal centered fallback shown while a route chunk downloads. */
 function RouteFallback() {
@@ -52,7 +54,15 @@ function useFreshness() {
   return useSyncExternalStore(subscribeFreshness, getFreshnessSnapshot)
 }
 
-function Nav({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: boolean }) {
+function Nav({
+  showsBadge,
+  exploreDot,
+  showAdmin,
+}: {
+  showsBadge: number
+  exploreDot: boolean
+  showAdmin: boolean
+}) {
   const item = (to: string, icon: string, label: string, extra?: ReactNode) => (
     <NavLink to={to} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
       <span>{icon}</span> {label}
@@ -90,6 +100,7 @@ function Nav({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: boole
       {item('/profile', '👤', 'Profile')}
       {item('/account', '🔐', 'Account')}
       {item('/settings', '⚙️', 'Settings')}
+      {showAdmin && item('/admin', '🛡️', 'Admin')}
     </nav>
   )
 }
@@ -98,8 +109,11 @@ function Nav({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: boole
 function TabBar({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: boolean }) {
   const tab = (to: string, icon: string, label: string, extra?: ReactNode) => (
     <NavLink to={to} className={({ isActive }) => `tabbar-item${isActive ? ' active' : ''}`}>
-      <span className="tabbar-icon" aria-hidden="true">
-        {icon}
+      {/* Only the decorative emoji is aria-hidden — the badge/dot carry
+          aria-labels and must stay in the a11y tree, but they also have to
+          remain inside .tabbar-icon, their position:relative anchor. */}
+      <span className="tabbar-icon">
+        <span aria-hidden="true">{icon}</span>
         {extra}
       </span>
       <span className="tabbar-label">{label}</span>
@@ -147,9 +161,11 @@ export default function App() {
   const location = useLocation()
   const showsBadge = useUnwatchedShowCount()
   const { hasNewTrending } = useFreshness()
+  const { isAdmin, adminMode } = useAdminGate()
 
   // Kick off the background freshness engine once per app load.
   useEffect(() => {
+    initAdmin()
     void refreshFollowedShows()
     void checkTrendingPulse()
   }, [])
@@ -170,7 +186,7 @@ export default function App() {
 
   return (
     <div className="app-layout">
-      <Nav showsBadge={showsBadge} exploreDot={hasNewTrending} />
+      <Nav showsBadge={showsBadge} exploreDot={hasNewTrending} showAdmin={isAdmin && adminMode} />
       <main className="main-content">
         <MobileBrand />
         {isDemoMode() && (
@@ -196,6 +212,7 @@ export default function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/list/:id" element={<ListDetail />} />
               <Route path="/migrate" element={<Migrate />} />
+              <Route path="/admin" element={<Admin />} />
             </Routes>
           </Suspense>
         </div>

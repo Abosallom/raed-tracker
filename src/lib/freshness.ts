@@ -13,7 +13,7 @@
 // (useSyncExternalStore-friendly: the snapshot reference only changes on emit).
 
 import { getShowDetail, isDemoMode, trendingShows } from '../api/tmdb'
-import { airedEpisodeCount, useLibrary } from '../store/library'
+import { useLibrary } from '../store/library'
 import type { TrackedShow } from '../types'
 import { showToast } from '../components/toast'
 
@@ -93,11 +93,23 @@ function isStale(map: Record<string, string>, showId: number): boolean {
   return !Number.isFinite(t) || Date.now() - t > STALE_MS
 }
 
-/** Sum of aired episodes across all seasons of a tracked show. */
+/**
+ * Sum of aired episodes across all seasons, from the RAW snapshot counts.
+ *
+ * Deliberately not airedEpisodeCount(): that helper advances past
+ * nextEpisodeToAir once its air date arrives, which would pre-count the new
+ * episode in the *old* snapshot — the before/after comparison in runRefresh()
+ * would then never fire for the common one-episode-per-week case (before=5,
+ * after=5) and undercount multi-episode drops by one. Comparing raw counts on
+ * both sides also avoids double-toasting the same episode across runs.
+ */
 function totalAired(show: TrackedShow): number {
+  const snap = show.snapshot
   let sum = 0
-  for (const seasonStr of Object.keys(show.snapshot.seasonEpisodeCounts)) {
-    sum += airedEpisodeCount(show, Number(seasonStr))
+  for (const seasonStr of Object.keys(snap.seasonEpisodeCounts)) {
+    const season = Number(seasonStr)
+    const total = snap.seasonEpisodeCounts[season] ?? 0
+    sum += Math.min(total, snap.airedEpisodeCounts?.[season] ?? total)
   }
   return sum
 }
