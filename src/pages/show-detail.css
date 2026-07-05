@@ -116,11 +116,25 @@ a.show-detail-trailer-btn {
   border-radius: 999px;
   font-weight: 700;
   letter-spacing: 0.2px;
+  color: #ff4d4d;
+  border-color: rgba(255, 77, 77, 0.45);
 }
 
 a.show-detail-trailer-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent-hover);
+  background: rgba(255, 77, 77, 0.14);
+  border-color: #ff4d4d;
+  color: #ff6b6b;
+}
+
+:root[data-theme='light'] a.show-detail-trailer-btn {
+  color: #c4302b;
+  border-color: rgba(196, 48, 43, 0.45);
+}
+
+:root[data-theme='light'] a.show-detail-trailer-btn:hover {
+  background: rgba(196, 48, 43, 0.1);
+  border-color: #c4302b;
+  color: #a02722;
 }
 
 /* next-episode countdown card */

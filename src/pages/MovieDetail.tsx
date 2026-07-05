@@ -256,7 +256,7 @@ export default function MovieDetail() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  ▶ Trailer
+                  ▶ YouTube trailer
                 </a>
               )}
               {detail.imdb_id && (
