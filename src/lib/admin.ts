@@ -103,18 +103,65 @@ export function initAdmin() {
   })
 }
 
-// ---------- member creation via Edge Function ----------
+// ---------- member management via the admin-members Edge Function ----------
 
-export type CreateMemberResult =
-  | { ok: true }
+export interface Member {
+  id: string
+  email: string
+  username: string | null
+  createdAt: string
+  lastSignInAt: string | null
+  isAdmin: boolean
+}
+
+export type AdminCallResult<T = undefined> =
+  | { ok: true; data: T }
   | { ok: false; kind: 'error'; message: string }
   | { ok: false; kind: 'function-missing' }
+
+/**
+ * Invoke the admin-members Edge Function and normalize its error surface.
+ * FunctionsHttpError carries only a fixed literal message; the real reason
+ * ({ error: '...' }) lives on error.context (the raw Response) — read it so
+ * the admin sees actual failure reasons. A relay 404 / fetch failure means
+ * the function has not been deployed yet.
+ */
+async function invokeAdmin<T>(body: Record<string, unknown>): Promise<AdminCallResult<T>> {
+  if (!supabase) return { ok: false, kind: 'error', message: 'Sync is not configured.' }
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-members', { body })
+    if (error) {
+      const ctx = (error as { context?: unknown }).context
+      if (ctx instanceof Response) {
+        if (ctx.status === 404) return { ok: false, kind: 'function-missing' }
+        try {
+          const parsed = (await ctx.clone().json()) as { error?: unknown }
+          if (parsed && typeof parsed === 'object' && parsed.error) {
+            return { ok: false, kind: 'error', message: String(parsed.error) }
+          }
+        } catch {
+          // non-JSON body — fall through to the generic message
+        }
+      }
+      const msg = String((error as Error).message ?? error)
+      if (/fetch|404|not found|failed to send/i.test(msg)) {
+        return { ok: false, kind: 'function-missing' }
+      }
+      return { ok: false, kind: 'error', message: msg }
+    }
+    if (data && typeof data === 'object' && 'error' in data && (data as { error?: unknown }).error) {
+      return { ok: false, kind: 'error', message: String((data as { error: unknown }).error) }
+    }
+    return { ok: true, data: data as T }
+  } catch {
+    return { ok: false, kind: 'function-missing' }
+  }
+}
 
 export async function createMember(
   username: string,
   password: string,
-): Promise<CreateMemberResult> {
-  if (!supabase) return { ok: false, kind: 'error', message: 'Sync is not configured.' }
+): Promise<AdminCallResult> {
   if (!isValidUsername(username)) {
     return {
       ok: false,
@@ -125,43 +172,36 @@ export async function createMember(
   if (password.length < 6) {
     return { ok: false, kind: 'error', message: 'Password must be at least 6 characters.' }
   }
-  try {
-    const { data, error } = await supabase.functions.invoke('admin-create-user', {
-      body: { email: usernameToEmail(username), password, username: username.trim() },
-    })
-    if (error) {
-      // FunctionsHttpError (any non-2xx) carries only the fixed literal
-      // "Edge Function returned a non-2xx status code" as its message; the
-      // function's actual JSON body ({ error: '...' } — e.g. "Only the app
-      // admin can add members", "email address has already been registered")
-      // is on error.context (the raw Response, unconsumed on the error path).
-      // Read it so the admin sees the real reason instead of the same opaque
-      // string for every failure.
-      const ctx = (error as { context?: unknown }).context
-      if (ctx instanceof Response) {
-        // Relay 404 = the function itself has not been deployed.
-        if (ctx.status === 404) return { ok: false, kind: 'function-missing' }
-        try {
-          const body = (await ctx.clone().json()) as { error?: unknown }
-          if (body && typeof body === 'object' && body.error) {
-            return { ok: false, kind: 'error', message: String(body.error) }
-          }
-        } catch {
-          // non-JSON body — fall through to the generic message
-        }
-      }
-      // FunctionsFetchError / 404 relay → the function has not been deployed yet.
-      const msg = String((error as Error).message ?? error)
-      if (/fetch|404|not found|failed to send/i.test(msg)) {
-        return { ok: false, kind: 'function-missing' }
-      }
-      return { ok: false, kind: 'error', message: msg }
-    }
-    if (data && typeof data === 'object' && 'error' in data && data.error) {
-      return { ok: false, kind: 'error', message: String(data.error) }
-    }
-    return { ok: true }
-  } catch {
-    return { ok: false, kind: 'function-missing' }
-  }
+  const res = await invokeAdmin<undefined>({
+    action: 'create',
+    email: usernameToEmail(username),
+    password,
+    username: username.trim(),
+  })
+  return res.ok ? { ok: true, data: undefined } : res
 }
+
+export async function listMembers(): Promise<AdminCallResult<Member[]>> {
+  const res = await invokeAdmin<{ members: Member[] }>({ action: 'list' })
+  if (!res.ok) return res
+  return { ok: true, data: res.data?.members ?? [] }
+}
+
+export async function resetMemberPassword(
+  userId: string,
+  password: string,
+): Promise<AdminCallResult> {
+  if (password.length < 6) {
+    return { ok: false, kind: 'error', message: 'Password must be at least 6 characters.' }
+  }
+  const res = await invokeAdmin<undefined>({ action: 'reset-password', userId, password })
+  return res.ok ? { ok: true, data: undefined } : res
+}
+
+export async function deleteMember(userId: string): Promise<AdminCallResult> {
+  const res = await invokeAdmin<undefined>({ action: 'delete', userId })
+  return res.ok ? { ok: true, data: undefined } : res
+}
+
+/** Legacy alias shape used by the Admin page's create card. */
+export type CreateMemberResult = AdminCallResult

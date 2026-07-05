@@ -1,18 +1,26 @@
-// Admin console (/admin): add members (username + password), switch between
-// admin and watcher modes. Only rendered usefully for admin accounts; the
-// server-side gate lives in supabase/functions/admin-create-user.
+// Admin console (/admin): manage members fully in-app (list, add, reset
+// password, remove), switch between admin and watcher modes. Only rendered
+// usefully for admin accounts; the server-side gate lives in
+// supabase/functions/admin-members.
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
+import { confirm } from '../components/confirm'
+import { timeAgo } from '../components/shared'
 import {
   createMember,
+  deleteMember,
+  displayIdentity,
   generatePassword,
   isValidUsername,
+  listMembers,
+  resetMemberPassword,
   setAdminMode,
   useAdminGate,
   usernameToEmail,
+  type Member,
 } from '../lib/admin'
 import './admin.css'
 
@@ -52,7 +60,7 @@ function ModeCard({ adminMode }: { adminMode: boolean }) {
   )
 }
 
-function AddMemberCard() {
+function AddMemberCard({ onCreated }: { onCreated: () => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState(() => generatePassword())
   const [busy, setBusy] = useState(false)
@@ -71,6 +79,7 @@ function AddMemberCard() {
       showToast(`Member "${username.trim()}" created`, '🎉')
       setUsername('')
       setPassword(generatePassword())
+      onCreated()
     } else if (res.kind === 'function-missing') {
       setNeedsDeploy(true)
     } else {
@@ -157,9 +166,10 @@ function AddMemberCard() {
           <ol className="admin-steps">
             <li>
               <b>Deploy the function (2 minutes, once):</b> Supabase Dashboard → Edge
-              Functions → Deploy new function → name it <code>admin-create-user</code> →
-              paste the file <code>supabase/functions/admin-create-user/index.ts</code>{' '}
-              from this project → Deploy. Then retry here.
+              Functions → Deploy new function → name it <code>admin-members</code> →
+              paste the file <code>supabase/functions/admin-members/index.ts</code>{' '}
+              from this project → Deploy. Then retry here. It unlocks everything:
+              adding, listing, resetting and removing members — all in-app.
             </li>
             <li>
               <b>Or add members in the dashboard right now:</b> Authentication → Users →
@@ -176,8 +186,194 @@ function AddMemberCard() {
   )
 }
 
+/** In-app member manager: list, reset password, remove — no dashboard needed. */
+function MembersCard({ refreshKey }: { refreshKey: number }) {
+  const [members, setMembers] = useState<Member[] | null>(null)
+  const [state, setState] = useState<'loading' | 'ready' | 'function-missing' | 'error'>('loading')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [resetInfo, setResetInfo] = useState<{ username: string; password: string } | null>(null)
+
+  const load = useCallback(async () => {
+    setState('loading')
+    const res = await listMembers()
+    if (res.ok) {
+      setMembers(res.data)
+      setState('ready')
+    } else if (res.kind === 'function-missing') {
+      setState('function-missing')
+    } else {
+      setErrorMsg(res.message)
+      setState('error')
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load, refreshKey])
+
+  const handleReset = async (m: Member) => {
+    const name = m.username ?? displayIdentity(m.email)
+    if (
+      !(await confirm({
+        title: `Reset ${name}'s password?`,
+        message: 'A new password is generated — their current one stops working immediately.',
+        confirmLabel: 'Reset password',
+      }))
+    )
+      return
+    setBusyId(m.id)
+    const password = generatePassword()
+    const res = await resetMemberPassword(m.id, password)
+    setBusyId(null)
+    if (res.ok) {
+      setResetInfo({ username: name, password })
+      showToast(`Password reset for ${name}`, '🔑')
+    } else {
+      showToast(res.kind === 'error' ? res.message : 'Server function not deployed', '⚠️')
+    }
+  }
+
+  const handleRemove = async (m: Member) => {
+    const name = m.username ?? displayIdentity(m.email)
+    if (
+      !(await confirm({
+        title: `Remove ${name}?`,
+        message:
+          'Their account and their cloud library are permanently deleted. Anything still on their device stays there but stops syncing.',
+        confirmLabel: 'Remove member',
+        danger: true,
+      }))
+    )
+      return
+    setBusyId(m.id)
+    const res = await deleteMember(m.id)
+    setBusyId(null)
+    if (res.ok) {
+      showToast(`${name} removed`, '🗑️')
+      void load()
+    } else {
+      showToast(res.kind === 'error' ? res.message : 'Server function not deployed', '⚠️')
+    }
+  }
+
+  return (
+    <section className="card">
+      <div className="admin-card-title admin-members-head">
+        <span>👥 Members{members ? ` (${members.length})` : ''}</span>
+        <button
+          className="btn small"
+          onClick={() => void load()}
+          disabled={state === 'loading'}
+          aria-label="Refresh members"
+        >
+          ↻ Refresh
+        </button>
+      </div>
+
+      {state === 'loading' && (
+        <div aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="skeleton admin-member-skel" />
+          ))}
+        </div>
+      )}
+
+      {state === 'function-missing' && (
+        <p className="admin-desc">
+          Deploy the <code>admin-members</code> server function (see the setup card above,
+          it appears when adding a member) to list, reset and remove members right here.
+          Until then the Supabase dashboard still works:{' '}
+          <a href={DASHBOARD_USERS_URL} target="_blank" rel="noreferrer">
+            open users ↗
+          </a>
+        </p>
+      )}
+
+      {state === 'error' && <div className="admin-error">{errorMsg}</div>}
+
+      {state === 'ready' && members && (
+        <>
+          <div className="admin-members">
+            {members.map((m) => {
+              const name = m.username ?? displayIdentity(m.email)
+              return (
+                <div className="admin-member-row" key={m.id}>
+                  <div className="admin-member-avatar" aria-hidden="true">
+                    {name.slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="admin-member-main">
+                    <div className="admin-member-name">
+                      {name}
+                      {m.isAdmin && <span className="admin-member-badge">admin</span>}
+                    </div>
+                    <div className="admin-member-sub">
+                      joined {new Date(m.createdAt).toLocaleDateString()} · last sign-in{' '}
+                      {m.lastSignInAt ? timeAgo(m.lastSignInAt) : 'never'}
+                    </div>
+                  </div>
+                  {!m.isAdmin && (
+                    <div className="admin-member-actions">
+                      <button
+                        className="btn small"
+                        disabled={busyId === m.id}
+                        onClick={() => void handleReset(m)}
+                        title="Reset password"
+                      >
+                        🔑
+                      </button>
+                      <button
+                        className="btn small danger"
+                        disabled={busyId === m.id}
+                        onClick={() => void handleRemove(m)}
+                        title="Remove member"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {members.length === 0 && (
+              <p className="admin-desc">No members yet — add the first one above.</p>
+            )}
+          </div>
+
+          {resetInfo && (
+            <div className="admin-credentials">
+              <div className="admin-credentials-title">🔑 New password for {resetInfo.username}</div>
+              <code className="admin-credentials-block">
+                Username: {resetInfo.username}
+                {'\n'}Password: {resetInfo.password}
+              </code>
+              <button
+                className="btn small"
+                onClick={() => {
+                  void navigator.clipboard.writeText(
+                    `Raed Tracker\nUsername: ${resetInfo.username}\nNew password: ${resetInfo.password}`,
+                  )
+                  showToast('Credentials copied', '📋')
+                }}
+              >
+                📋 Copy
+              </button>
+            </div>
+          )}
+
+          <p className="admin-hint">
+            Every member's library is private to their account. Removing a member also
+            deletes their cloud library.
+          </p>
+        </>
+      )}
+    </section>
+  )
+}
+
 export default function Admin() {
   const { email, isAdmin, adminMode } = useAdminGate()
+  const [membersRefresh, setMembersRefresh] = useState(0)
 
   return (
     <div>
@@ -218,20 +414,8 @@ export default function Admin() {
       ) : (
         <div className="admin-stack">
           <ModeCard adminMode={adminMode} />
-          <AddMemberCard />
-          <section className="card">
-            <div className="admin-card-title">👥 Your members</div>
-            <p className="admin-desc">
-              Each member signs in with their username on the Account page and tracks
-              their own shows — libraries are separated per account by the database's
-              row-level security. Viewing, resetting passwords, or removing members
-              happens in the Supabase dashboard (client apps can't safely hold that
-              power).
-            </p>
-            <a className="btn" href={DASHBOARD_USERS_URL} target="_blank" rel="noreferrer">
-              Manage members in Supabase ↗
-            </a>
-          </section>
+          <AddMemberCard onCreated={() => setMembersRefresh((n) => n + 1)} />
+          <MembersCard refreshKey={membersRefresh} />
         </div>
       )}
     </div>
