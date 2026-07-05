@@ -1,0 +1,54 @@
+/* Global offline banner (mounted by initInstallUx into its own body root).
+   Fixed to the top edge, safe-area aware, slides in/out. Layering: above page
+   content and the tab bar (80), below the confirm sheet (120), the episode
+   sheet (950) and toasts (1000). */
+
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  /* Thin strip; the notch/status-bar inset only pads, never hides, the text */
+  padding: calc(6px + env(safe-area-inset-top, 0px)) calc(14px + env(safe-area-inset-right, 0px))
+    6px calc(14px + env(safe-area-inset-left, 0px));
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border-bottom: 1px solid var(--accent);
+  box-shadow: var(--shadow);
+  pointer-events: none; /* never intercept taps meant for the page */
+  transform: translateY(-110%);
+  visibility: hidden;
+  transition:
+    transform 0.3s ease,
+    visibility 0s linear 0.3s;
+}
+
+.offline-banner.on {
+  transform: translateY(0);
+  visibility: visible;
+  transition:
+    transform 0.3s ease,
+    visibility 0s;
+}
+
+.offline-banner b {
+  font-weight: 700;
+}
+
+.offline-banner-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .offline-banner {
+    transition: none !important;
+  }
+}

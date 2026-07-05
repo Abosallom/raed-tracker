@@ -299,6 +299,13 @@ const QueueRow = memo(function QueueRow({
 
   const handleCheck = () => {
     if (leaving) return
+    // Haptic tick where supported (Android Chrome etc.); iOS Safari has no
+    // navigator.vibrate, so the optional call is a silent no-op there.
+    try {
+      navigator.vibrate?.(12)
+    } catch {
+      /* haptics unavailable — non-critical */
+    }
     const { season: s, episode: e } = shown
     setPop(true)
     setFlash(true)

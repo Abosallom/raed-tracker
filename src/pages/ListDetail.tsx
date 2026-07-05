@@ -8,6 +8,7 @@ import { useLibrary } from '../store/library'
 import { posterUrl, searchMulti } from '../api/tmdb'
 import { ErrorBox, LoadingSpinner, PosterImage, timeAgo } from '../components/shared'
 import { BackBar } from '../components/BackBar'
+import { confirm } from '../components/confirm'
 import { showToast } from '../components/toast'
 import './list-detail.css'
 
@@ -111,8 +112,14 @@ export default function ListDetail() {
     setEditingName(false)
   }
 
-  const onDelete = () => {
-    if (!window.confirm(`Delete the list “${list.name}”? This cannot be undone.`)) return
+  const onDelete = async () => {
+    const ok = await confirm({
+      title: `Delete “${list.name}”?`,
+      message: 'The list and its items will be removed. This cannot be undone.',
+      confirmLabel: 'Delete list',
+      danger: true,
+    })
+    if (!ok) return
     deleteList(list.id)
     showToast(`List “${list.name}” deleted`, '🗑️')
     navigate('/profile')
@@ -182,7 +189,7 @@ export default function ListDetail() {
               </span>
             </button>
           )}
-          <button className="btn danger small" onClick={onDelete}>
+          <button className="btn danger small" onClick={() => void onDelete()}>
             🗑️ Delete list
           </button>
         </div>

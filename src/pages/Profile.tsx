@@ -1,12 +1,19 @@
 // Profile page — identity hub: avatar + name, stats summary, custom lists,
 // favorites, full library grids and the user's own comments.
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { Comment, TrackedMovie, TrackedShow } from '../types'
 import { useLibrary, watchedCount } from '../store/library'
 import { computeStreaks } from '../lib/streaks'
 import { useAdminGate } from '../lib/admin'
+import {
+  getDeferredPrompt,
+  isIOSSafari,
+  isStandalone,
+  promptInstall,
+  subscribeInstall,
+} from '../lib/install'
 import { posterUrl } from '../api/tmdb'
 import { PosterImage, formatMinutes, timeAgo } from '../components/shared'
 import { showToast } from '../components/toast'
@@ -59,6 +66,49 @@ function commentTarget(
     epLabel = m ? `S${m[1]} · E${m[2]}` : epPart
   }
   return { to, title, epLabel }
+}
+
+/** "Get the app" install card — hidden once running as an installed app.
+    Chrome (Android/desktop) gets a real Install button via the captured
+    beforeinstallprompt; iOS Safari gets Share-sheet instructions; everything
+    else gets a generic browser-menu pointer. */
+function InstallCard() {
+  const deferred = useSyncExternalStore(subscribeInstall, getDeferredPrompt)
+  if (isStandalone()) return null
+
+  const handleInstall = async () => {
+    const outcome = await promptInstall()
+    if (outcome === 'accepted') showToast('Installing Raed Tracker…', '📲')
+    else if (outcome === 'dismissed') showToast('Install dismissed — it’ll be here later', '🙂')
+  }
+
+  return (
+    <div className="card profile-install fade-in">
+      <span className="profile-install-icon" aria-hidden="true">
+        📲
+      </span>
+      <div className="profile-install-body">
+        <div className="profile-install-title">Get the app</div>
+        <div className="profile-install-text">
+          {deferred ? (
+            <>Install Raed Tracker for a faster, full-screen experience on your home screen.</>
+          ) : isIOSSafari() ? (
+            <>
+              Tap <b>Share</b> <span aria-hidden="true">⬆︎</span> in Safari, then{' '}
+              <b>Add to Home Screen</b>.
+            </>
+          ) : (
+            <>Installs right from your browser menu — look for “Install app”.</>
+          )}
+        </div>
+      </div>
+      {deferred && (
+        <button className="btn primary small profile-install-btn" onClick={() => void handleInstall()}>
+          Install
+        </button>
+      )}
+    </div>
+  )
 }
 
 export default function Profile() {
@@ -247,6 +297,9 @@ export default function Profile() {
           </div>
         </div>
       </div>
+
+      {/* ---------- install nudge (browser tab only) ---------- */}
+      <InstallCard />
 
       {/* ---------- stats summary ---------- */}
       <h2 className="section-title">

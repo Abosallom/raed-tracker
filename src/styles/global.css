@@ -43,6 +43,77 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ---------- native touch feel ---------- */
+
+html {
+  /* No grey/blue flash on tap (inherited everywhere) */
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  /* No rubber-band page bounce revealing browser chrome. The /shows
+     pull-to-refresh is unaffected: it is JS-driven (reads scrollTop from its
+     own touch handlers) and additionally sets an inline
+     overscroll-behavior-y: contain while mounted. */
+  overscroll-behavior-y: none;
+}
+
+body {
+  /* Removes the double-tap-to-zoom tap delay; panning and pinch-zoom keep
+     working (effective touch-action intersects down the ancestor chain). */
+  touch-action: manipulation;
+}
+
+/* Interactive chrome must not spawn a text-selection caret on long-press.
+   Prose (paragraphs, overviews, comments, credentials, inputs) is explicitly
+   re-enabled below so users can still copy real content. */
+button,
+.btn,
+.chip,
+.nav-item,
+.sidebar,
+.tabbar,
+.mobile-brand,
+.poster-card,
+.page-title,
+.section-title {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+p,
+input,
+textarea,
+code,
+.admin-credentials-block,
+.account-credentials-block,
+.home-hero-overview,
+.show-detail-overview,
+.moviedetail-overview {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+img {
+  /* No ghost-drag, no selection, no iOS long-press save-image callout on
+     posters/stills — they are app chrome, not document images. */
+  -webkit-user-drag: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.poster-img,
+.poster-fallback,
+.show-detail-ep-still,
+.queue-poster,
+.queue-still {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -266,6 +337,7 @@ textarea:focus {
   overflow-x: auto;
   padding-bottom: 10px;
   scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
 .media-row > * {
@@ -480,5 +552,30 @@ textarea:focus {
     padding: calc(20px + env(safe-area-inset-top, 0px)) 16px 48px;
     padding-left: calc(16px + env(safe-area-inset-left, 0px));
     padding-right: calc(16px + env(safe-area-inset-right, 0px));
+  }
+
+  /* Internal horizontal scroll rows: momentum scrolling, no visible
+     scrollbar on touch widths (the row itself is the affordance). */
+  .media-row,
+  .show-detail-season-tabs,
+  .show-detail-cast,
+  .moviedetail-cast {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .media-row::-webkit-scrollbar,
+  .show-detail-season-tabs::-webkit-scrollbar,
+  .show-detail-cast::-webkit-scrollbar,
+  .moviedetail-cast::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Installed to home screen: enforce a floor on the top inset so the brand
+   row / first content block clears the status bar even on devices that
+   report env(safe-area-inset-top) as 0 while still overlaying it. */
+@media (max-width: 760px) and (display-mode: standalone) {
+  .app-layout .main-content {
+    padding-top: max(calc(20px + env(safe-area-inset-top, 0px)), 44px);
   }
 }

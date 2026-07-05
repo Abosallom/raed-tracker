@@ -14,6 +14,7 @@ import {
   type AccountInfo,
 } from '../store/auth'
 import { getSyncStatus, onSyncStatus, signIn, signOut, syncNow, type SyncStatus } from '../store/sync'
+import { confirm } from '../components/confirm'
 import { showToast } from '../components/toast'
 import { timeAgo } from '../components/shared'
 import { BackBar } from '../components/BackBar'
@@ -288,10 +289,16 @@ function ManageAccount({ info, status }: { info: AccountInfo; status: SyncStatus
           <button
             className="btn small"
             disabled={busy !== null}
-            onClick={() => {
-              if (window.confirm('Sign out on every device, including this one?'))
-                void run('all', signOutEverywhere, 'Signed out everywhere')
-            }}
+            onClick={() =>
+              void (async () => {
+                const ok = await confirm({
+                  title: 'Sign out on all devices?',
+                  message: 'You will be signed out on every device, including this one.',
+                  confirmLabel: 'Sign out everywhere',
+                })
+                if (ok) void run('all', signOutEverywhere, 'Signed out everywhere')
+              })()
+            }
           >
             Sign out on all devices
           </button>
@@ -309,10 +316,18 @@ function ManageAccount({ info, status }: { info: AccountInfo; status: SyncStatus
           <button
             className="btn small danger"
             disabled={busy !== null}
-            onClick={() => {
-              if (window.confirm('Delete the cloud copy of your library?'))
-                void run('cloud', deleteCloudData, 'Cloud copy deleted')
-            }}
+            onClick={() =>
+              void (async () => {
+                const ok = await confirm({
+                  title: 'Delete cloud copy?',
+                  message:
+                    'The cloud copy of your library will be deleted. Everything on this device stays, and the next sync re-uploads it.',
+                  confirmLabel: 'Delete cloud copy',
+                  danger: true,
+                })
+                if (ok) void run('cloud', deleteCloudData, 'Cloud copy deleted')
+              })()
+            }
           >
             Delete cloud copy
           </button>

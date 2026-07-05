@@ -488,3 +488,47 @@
     text-align: center;
   }
 }
+
+/* ---------- "Get the app" install card ---------- */
+
+.profile-install {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px 18px;
+  border-color: rgba(251, 191, 36, 0.35);
+  background:
+    linear-gradient(115deg, var(--accent-soft) 0%, transparent 60%),
+    var(--bg-elev);
+}
+
+:root[data-theme='light'] .profile-install {
+  border-color: rgba(181, 127, 2, 0.4);
+}
+
+.profile-install-icon {
+  font-size: 26px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.profile-install-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-install-title {
+  font-weight: 700;
+  font-size: 14.5px;
+}
+
+.profile-install-text {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.profile-install-btn {
+  flex-shrink: 0;
+}

@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useSyncExternalStore, type ReactNod
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { isDemoMode } from './api/tmdb'
 import { LoadingSpinner } from './components/shared'
+import { ConfirmHost } from './components/confirm'
 import { Toaster } from './components/toast'
 import { nextEpisode, useLibrary } from './store/library'
 import {
@@ -219,6 +220,7 @@ export default function App() {
       </main>
       <TabBar showsBadge={showsBadge} exploreDot={hasNewTrending} />
       <Toaster />
+      <ConfirmHost />
     </div>
   )
 }

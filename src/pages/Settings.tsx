@@ -8,6 +8,7 @@ import { useLibrary } from '../store/library'
 import { getSyncStatus, noteLibraryReplaced } from '../store/sync'
 import { AccountSyncCard } from '../components/AccountSync'
 import { BackBar } from '../components/BackBar'
+import { confirm } from '../components/confirm'
 import { showToast } from '../components/toast'
 import { getThemePref, setThemePref } from '../lib/theme'
 import type { ThemePref } from '../lib/theme'
@@ -148,7 +149,11 @@ export default function Settings() {
       comments.length > 0
     if (
       hasData &&
-      !window.confirm('Importing this backup will replace your current library on this device. Continue?')
+      !(await confirm({
+        title: 'Replace current library?',
+        message: 'Importing this backup will replace your current library on this device.',
+        confirmLabel: 'Replace library',
+      }))
     ) {
       return
     }
@@ -175,8 +180,17 @@ export default function Settings() {
     showToast('Recovered library downloaded', '🛟')
   }
 
-  function discardWipedBackup() {
-    if (!window.confirm('Discard the recovered library snapshot? This cannot be undone.')) return
+  async function discardWipedBackup() {
+    if (
+      !(await confirm({
+        title: 'Discard recovered snapshot?',
+        message: 'The recovered library snapshot will be deleted. This cannot be undone.',
+        confirmLabel: 'Discard',
+        danger: true,
+      }))
+    ) {
+      return
+    }
     try {
       localStorage.removeItem(WIPED_BACKUP_STORAGE_KEY)
     } catch {
@@ -186,7 +200,7 @@ export default function Settings() {
     showToast('Recovered snapshot discarded', '🗑️')
   }
 
-  function confirmReset() {
+  async function confirmReset() {
     // While signed in the reset is deliberately synced: tombstones propagate
     // to the cloud copy and every other device — say so instead of promising
     // an "on this device" wipe that actually destroys everything everywhere.
@@ -198,11 +212,14 @@ export default function Settings() {
       status.state === 'syncing' ||
       (status.state === 'error' && status.email !== undefined)
     if (
-      window.confirm(
-        signedIn
-          ? 'Reset everything? This permanently deletes your shows, movies, watchlist, comments and profile — including your cloud copy and every synced device.'
-          : 'Reset everything? This permanently deletes your shows, movies, watchlist, comments and profile on this device.',
-      )
+      await confirm({
+        title: 'Reset everything?',
+        message: signedIn
+          ? 'This permanently deletes your shows, movies, watchlist, comments and profile — including your cloud copy and every synced device.'
+          : 'This permanently deletes your shows, movies, watchlist, comments and profile on this device.',
+        confirmLabel: 'Reset everything',
+        danger: true,
+      })
     ) {
       resetAll()
       if (!signedIn) {
@@ -445,7 +462,7 @@ export default function Settings() {
                 <button className="btn primary" onClick={downloadWipedBackup}>
                   ⬇️ Download snapshot
                 </button>
-                <button className="btn danger" onClick={discardWipedBackup}>
+                <button className="btn danger" onClick={() => void discardWipedBackup()}>
                   Discard
                 </button>
               </div>
@@ -478,7 +495,7 @@ export default function Settings() {
               cannot be undone (export a backup first!).
             </p>
             <div className="settings-actions">
-              <button className="btn danger" onClick={confirmReset}>
+              <button className="btn danger" onClick={() => void confirmReset()}>
                 Reset everything
               </button>
             </div>
