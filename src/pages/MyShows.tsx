@@ -585,8 +585,12 @@ export default function MyShows() {
       const queueable = pool.filter(
         (s) => !s.paused && (nextEpisode(s) !== null || leavingIds.includes(s.snapshot.id)),
       )
-      const fresh = queueable.filter((s) => !meta(s).stale).sort(byRank)
-      const stale = queueable.filter((s) => meta(s).stale).sort(byRank)
+      // "To Watch" = shows the user STOPPED recently: real watch activity
+      // inside the recency window. Everything else queueable (stale momentum
+      // or never started) belongs to "Haven't seen in a while".
+      const stoppedRecently = (s: TrackedShow) => watchedCount(s) > 0 && !meta(s).stale
+      const fresh = queueable.filter(stoppedRecently).sort(byRank)
+      const stale = queueable.filter((s) => !stoppedRecently(s)).sort(byRank)
       const paused = pool.filter((s) => s.paused).sort(byRank)
       const notStarted = pool.filter((s) => watchedCount(s) === 0).sort(byRank)
       const upToDate = pool
@@ -695,7 +699,7 @@ export default function MyShows() {
 
       <div className="toptabs" role="tablist" aria-label="My Shows sections">
         <span className="toptab active" role="tab" aria-selected="true">
-          Watch List
+          Keep Watching
           {queueCount > 0 && <span className="toptab-count">{queueCount}</span>}
         </span>
         <Link to="/upcoming" className="toptab" role="tab" aria-selected="false">
@@ -883,14 +887,14 @@ export default function MyShows() {
           )}
 
           <section className="queue-section">
-            <h2 className="queue-section-title">Watch next</h2>
+            <h2 className="queue-section-title">To Watch</h2>
             {fresh.length === 0 && stale.length === 0 ? (
               <div className="empty-state fade-in">
                 <div className="big">{favOnly && pool.length === 0 ? '☆' : '🎉'}</div>
                 <p>
                   {favOnly && pool.length === 0
                     ? 'No favorites yet — hit the ★ star on any show.'
-                    : 'All caught up — nothing queued to watch next.'}
+                    : 'All caught up — nothing left to watch.'}
                 </p>
                 <Link className="btn primary" to="/search" style={{ marginTop: 18 }}>
                   🔍 Find something new
@@ -914,7 +918,7 @@ export default function MyShows() {
 
           {stale.length > 0 && (
             <section className="queue-section">
-              <h2 className="queue-section-title">Haven't watched for a while</h2>
+              <h2 className="queue-section-title">Haven't seen in a while</h2>
               <div className="queue-list stagger">
                 {stale.map((s, i) => (
                   <QueueRow
