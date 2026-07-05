@@ -13,7 +13,7 @@ import {
   verifyOtp,
   type AccountInfo,
 } from '../store/auth'
-import { getSyncStatus, onSyncStatus, signIn, signOut, signUp, syncNow, type SyncStatus } from '../store/sync'
+import { getSyncStatus, onSyncStatus, signIn, signOut, syncNow, type SyncStatus } from '../store/sync'
 import { showToast } from '../components/toast'
 import { timeAgo } from '../components/shared'
 import { BackBar } from '../components/BackBar'
@@ -27,7 +27,6 @@ function SignInFlow() {
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
-  const [pwMode, setPwMode] = useState<'signin' | 'signup'>('signin')
   const [stage, setStage] = useState<'email' | 'code'>('email')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -57,12 +56,12 @@ function SignInFlow() {
     setBusy(true)
     setError(null)
     // Members sign in with the username the admin gave them — usernames map
-    // to their account's internal address.
+    // to their account's internal address. Sign-in ONLY: member accounts are
+    // provisioned exclusively by the admin (admin-create-user edge function);
+    // open self-signup would allow username squatting on the synthetic domain
+    // and signing arbitrary real addresses up to confirmation emails.
     const identity = email.includes('@') ? email.trim() : usernameToEmail(email)
-    const err =
-      pwMode === 'signin'
-        ? await signIn(identity, password)
-        : await signUp(identity, password)
+    const err = await signIn(identity, password)
     setBusy(false)
     if (err) setError(err)
   }
@@ -160,7 +159,7 @@ function SignInFlow() {
             type="password"
             placeholder="Password (min 6 characters)"
             value={password}
-            autoComplete={pwMode === 'signup' ? 'new-password' : 'current-password'}
+            autoComplete="current-password"
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && email && password.length >= 6) void passwordSubmit()
@@ -177,13 +176,7 @@ function SignInFlow() {
               disabled={busy || email.trim().length < 3 || password.length < 6}
               onClick={() => void passwordSubmit()}
             >
-              {busy ? 'Working…' : pwMode === 'signin' ? 'Sign in' : 'Create account'}
-            </button>
-            <button
-              className="btn small"
-              onClick={() => setPwMode(pwMode === 'signin' ? 'signup' : 'signin')}
-            >
-              {pwMode === 'signin' ? 'New here? Create account' : 'Have an account? Sign in'}
+              {busy ? 'Working…' : 'Sign in'}
             </button>
             <button className="btn small" onClick={() => setMethod('otp')}>
               Use a code instead

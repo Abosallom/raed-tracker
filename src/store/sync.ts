@@ -30,7 +30,7 @@ import type {
   WatchlistItem,
 } from '../types'
 import { supabase } from '../api/supabase'
-import { useLibrary } from './library'
+import { isAbsorbingCrossTabWrite, useLibrary } from './library'
 
 /**
  * Sync metadata: tombstones for deletions and last-writer timestamps for
@@ -858,6 +858,14 @@ export function initSync() {
   initialized = true
 
   useLibrary.subscribe((state, prev) => {
+    // A cross-tab storage rehydrate is another tab's write being absorbed, not
+    // a local edit: the originating tab already recorded its tombstones /
+    // LWW set-times into the shared meta key and scheduled its own push.
+    // Diffing it here would tombstone this library against the other tab's
+    // wipe (resetAll / account switch) and re-stamp every snapshot + profile
+    // set-time (persist replaces all object references), reverting fresher
+    // remote edits via LWW.
+    if (isAbsorbingCrossTabWrite()) return
     if (!applyingRemote) {
       const reviveAll = reviveNextRecordedChange
       reviveNextRecordedChange = false
@@ -893,11 +901,11 @@ export function initSync() {
 
 // ---------- auth helpers for the UI ----------
 
-export async function signUp(email: string, password: string): Promise<string | null> {
-  if (!supabase) return 'Sync is not configured in this build.'
-  const { error } = await supabase.auth.signUp({ email, password })
-  return error ? error.message : null
-}
+// NOTE: deliberately no signUp() helper. Members are provisioned exclusively
+// by the admin via the admin-create-user edge function; an open
+// supabase.auth.signUp path would allow username squatting on the synthetic
+// member domain and sending confirmation emails to arbitrary addresses.
+// (Signups should also be disabled server-side in the Supabase project.)
 
 export async function signIn(email: string, password: string): Promise<string | null> {
   if (!supabase) return 'Sync is not configured in this build.'

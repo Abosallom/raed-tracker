@@ -532,10 +532,31 @@ export const useLibrary = create<LibraryState>()(
 // to repair it). `storage` fires only in OTHER tabs, and this tab's own state
 // is already persisted at that moment, so rehydrating simply absorbs the other
 // tab's write instead of overwriting it later.
+//
+// The sync engine's store subscriber must IGNORE the set() this rehydrate
+// triggers: the originating tab already recorded tombstones/set-times for its
+// change into the shared meta key and scheduled its own push. Diffing here
+// would misread the absorbed write as local user edits — e.g. another tab's
+// resetAll()/account-switch wipe would tombstone this tab's entire library
+// (and re-tombstone right after Settings clears the meta), and persist's
+// set(stateFromStorage, true) replaces every object reference, which would
+// re-stamp stale snap:<id>/profile LWW times over genuinely fresher remote
+// edits. library.ts cannot import sync.ts (cycle), so it exposes a flag the
+// subscriber checks. persist's storage is synchronous localStorage, so the
+// whole hydrate (including set()) completes before rehydrate() returns.
+let absorbingCrossTabWrite = false
+export function isAbsorbingCrossTabWrite(): boolean {
+  return absorbingCrossTabWrite
+}
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
     if (e.key === 'showtrackr_library' && e.newValue !== null) {
-      void useLibrary.persist.rehydrate()
+      absorbingCrossTabWrite = true
+      try {
+        void useLibrary.persist.rehydrate()
+      } finally {
+        absorbingCrossTabWrite = false
+      }
     }
   })
 }

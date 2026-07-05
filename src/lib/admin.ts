@@ -130,6 +130,26 @@ export async function createMember(
       body: { email: usernameToEmail(username), password, username: username.trim() },
     })
     if (error) {
+      // FunctionsHttpError (any non-2xx) carries only the fixed literal
+      // "Edge Function returned a non-2xx status code" as its message; the
+      // function's actual JSON body ({ error: '...' } — e.g. "Only the app
+      // admin can add members", "email address has already been registered")
+      // is on error.context (the raw Response, unconsumed on the error path).
+      // Read it so the admin sees the real reason instead of the same opaque
+      // string for every failure.
+      const ctx = (error as { context?: unknown }).context
+      if (ctx instanceof Response) {
+        // Relay 404 = the function itself has not been deployed.
+        if (ctx.status === 404) return { ok: false, kind: 'function-missing' }
+        try {
+          const body = (await ctx.clone().json()) as { error?: unknown }
+          if (body && typeof body === 'object' && body.error) {
+            return { ok: false, kind: 'error', message: String(body.error) }
+          }
+        } catch {
+          // non-JSON body — fall through to the generic message
+        }
+      }
       // FunctionsFetchError / 404 relay → the function has not been deployed yet.
       const msg = String((error as Error).message ?? error)
       if (/fetch|404|not found|failed to send/i.test(msg)) {
