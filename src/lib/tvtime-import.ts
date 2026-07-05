@@ -7,6 +7,8 @@
 
 import JSZip from 'jszip'
 
+import type { Emotion } from '../types'
+
 // ---------- normalized model ----------
 
 export interface ImportedEpisode {
@@ -15,10 +17,25 @@ export interface ImportedEpisode {
   watchedAt?: string // ISO
 }
 
+/** An emotion reaction attached to a specific episode of a show. */
+export interface ImportedEmotion {
+  season: number
+  episode: number
+  emotion: Emotion
+}
+
 export interface ImportedShow {
   name: string
   tvdbId?: string
   episodes: ImportedEpisode[]
+  /** TV Time is_favorite. */
+  favorite?: boolean
+  /** status 'stopped' → the show is paused (drops out of Watch Next). */
+  paused?: boolean
+  /** status 'watch_later' → treat as a watchlist entry, not a followed show. */
+  watchLater?: boolean
+  /** Per-episode emotion reactions (best-effort, may be name-joined from CSV). */
+  emotions?: ImportedEmotion[]
 }
 
 export interface ImportedFollow {
@@ -29,10 +46,25 @@ export interface ImportedFollow {
 export interface ImportedMovie {
   title: string
   imdbId?: string
+  tvdbId?: string
+  year?: number
   watchedAt?: string // ISO
+  /** Whether the user has actually watched it; unwatched → watchlist candidate. */
+  watched: boolean
+  favorite?: boolean
 }
 
-export type DetectedKind = 'episode-history' | 'followed-shows' | 'movies' | 'unknown'
+export type DetectedKind =
+  | 'episode-history'
+  | 'followed-shows'
+  | 'movies'
+  | 'third-party series JSON'
+  | 'third-party movies JSON'
+  | 'official episode history'
+  | 'official watch/watchlist records'
+  | 'official followed shows'
+  | 'episode emotions'
+  | 'unknown'
 
 export interface FileDiagnostic {
   file: string
@@ -40,13 +72,29 @@ export interface FileDiagnostic {
   rows: number
   skipped: number
   note?: string
+  /** Parsed contributions — what the file actually yielded (not raw row counts). */
+  episodes?: number
+  movies?: number
+  shows?: number
+  watchlist?: number
+  emotions?: number
 }
 
 export interface TvTimeImport {
   shows: ImportedShow[]
   followedOnly: ImportedFollow[]
   movies: ImportedMovie[]
+  /** Movies/shows the user wants to watch but hasn't — feed the store's watchlist. */
+  watchlistMovies: ImportedMovie[]
   diagnostics: FileDiagnostic[]
+}
+
+/** A single emotion row lifted from episode_emotion.csv (joined by name later). */
+export interface ParsedEmotionRow {
+  show: string
+  season: number
+  episode: number
+  emotion: Emotion
 }
 
 /** Per-file intermediate result (also the unit reviewers can test). */
@@ -56,6 +104,11 @@ export interface ParsedFile {
   episodes: { show: string; tvdbId?: string; season: number; episode: number; watchedAt?: string }[]
   follows: ImportedFollow[]
   movies: ImportedMovie[]
+  emotions: ParsedEmotionRow[]
+  /** Full show records (with metadata) — only third-party series JSON populates these. */
+  shows: ImportedShow[]
+  /** true for third-party JSON, which is the authoritative source in a merge. */
+  primary: boolean
   totalRows: number
   skipped: number
   note?: string
@@ -175,7 +228,8 @@ function findEpisodeNumberIdx(headers: string[], words: string[][]): number {
 function findTvdbIdx(headers: string[]): number {
   return findIdx(
     headers,
-    (h) => h.includes('tvdb') || h.includes('seriesid') || h.includes('showid'),
+    // `sid` is the official v2 episode log's s_id column (the TVDB series id).
+    (h) => h.includes('tvdb') || h.includes('seriesid') || h.includes('showid') || h === 'sid',
   )
 }
 
@@ -214,6 +268,25 @@ function cleanId(v: string | undefined): string | undefined {
   return t && t !== '0' ? t : undefined
 }
 
+// TV Time's numeric emotion ids. This mapping is BEST-EFFORT: the GDPR export
+// ships only the integer id (1..6), so the label order below is inferred from
+// the app's reaction row (Loved it / Funny / OMG / Meh / Cried / Scared) and
+// matches Raed Tracker's own EMOTIONS order. If TV Time ever reorders its
+// reactions, this table is the single place to correct.
+const EMOTION_BY_ID: Record<number, Emotion> = {
+  1: 'love',
+  2: 'fun',
+  3: 'wow',
+  4: 'meh',
+  5: 'sad',
+  6: 'scared',
+}
+
+function emotionFromId(v: string | undefined): Emotion | undefined {
+  const n = parseIntField(v)
+  return n != null ? EMOTION_BY_ID[n] : undefined
+}
+
 // ---------- per-file classification + parsing ----------
 
 /**
@@ -227,6 +300,9 @@ export function parseCsvText(name: string, text: string): ParsedFile {
     episodes: [],
     follows: [],
     movies: [],
+    emotions: [],
+    shows: [],
+    primary: false,
     totalRows: 0,
     skipped: 0,
   }
@@ -240,6 +316,82 @@ export function parseCsvText(name: string, text: string): ParsedFile {
   const data = rows.slice(1)
   out.totalRows = data.length
 
+  // --- episode emotions (episode_emotion.csv): emotion_id + tv_show_name + s/e ---
+  const emotionIdx = findIdx(headers, (h) => h === 'emotionid' || h.includes('emotion'))
+  if (emotionIdx >= 0 && headers.some((h) => h.includes('emotion'))) {
+    const showIdx = findIdx(headers, (h) => h.includes('show') && h.includes('name'))
+    const sIdx = findIdx(headers, (h) => h.includes('season'))
+    // Prefer the exact episode-number column; "episode_season_number" also
+    // contains both words, so fall back to it only if no exact match exists.
+    let eIdx = findIdx(headers, (h) => h === 'episodenumber' || h === 'episodenum')
+    if (eIdx < 0) eIdx = findIdx(headers, (h) => h.includes('episode') && h.includes('number') && !h.includes('season'))
+    if (showIdx >= 0 && sIdx >= 0 && eIdx >= 0) {
+      out.kind = 'episode emotions'
+      for (const r of data) {
+        const show = r[showIdx]?.trim()
+        const season = parseIntField(r[sIdx])
+        const episode = parseIntField(r[eIdx])
+        const emotion = emotionFromId(r[emotionIdx])
+        if (!show || season == null || episode == null || !emotion) {
+          out.skipped++
+          continue
+        }
+        out.emotions.push({ show, season, episode, emotion })
+      }
+      return out
+    }
+  }
+
+  // --- official "records" table (tracking-prod-records.csv): a `type` column
+  //     mixing watch/towatch/follow rows for movies (by name) and shows. ---
+  const typeIdx = findIdx(headers, (h) => h === 'type')
+  const movieNameCol = findIdx(headers, (h) => h === 'moviename')
+  if (typeIdx >= 0 && movieNameCol >= 0) {
+    out.kind = 'official watch/watchlist records'
+    const recDateIdx = findDateIdx(headers)
+    const recImdb = findIdx(headers, (h) => h.includes('imdb'))
+    for (const r of data) {
+      const type = norm(r[typeIdx] ?? '')
+      const movie = r[movieNameCol]?.trim()
+      if (!movie) {
+        // Non-movie rows (episode/show tracking) are covered by v2 history; skip.
+        out.skipped++
+        continue
+      }
+      const rawImdb = recImdb >= 0 ? cleanId(r[recImdb]) : undefined
+      if (type === 'watch' || type === 'rewatch') {
+        out.movies.push({
+          title: movie,
+          imdbId: rawImdb && /^tt\d+$/i.test(rawImdb) ? rawImdb : undefined,
+          watchedAt: recDateIdx >= 0 ? parseDateField(r[recDateIdx]) : undefined,
+          watched: true,
+        })
+      } else if (type === 'towatch') {
+        out.movies.push({ title: movie, watched: false })
+      } else {
+        out.skipped++
+      }
+    }
+    return out
+  }
+
+  const fileLower = name.toLowerCase()
+
+  // Vote/comment/rating/rewatch/source metadata tables in the official ZIP
+  // mirror the episode/movie columns (show name + season/episode + created_at),
+  // but their created_at is a vote/comment/rewatch time, NOT the watch time —
+  // parsing them would poison real watch dates (and even invent watches for
+  // never-watched episodes), so they are ignored outright. The real watch log
+  // (tracking-prod-records-v2.csv) carries none of these markers.
+  const isMetadataFile =
+    /vote|comment|rating|rewatch|character|watched.?on|latest|source|addiction/.test(fileLower) ||
+    headers.some((h) => h.includes('vote') || h.includes('comment') || h.includes('rating'))
+  if (isMetadataFile) {
+    out.skipped = data.length
+    out.note = 'Votes/comments/metadata — not watch history, ignored'
+    return out
+  }
+
   const nameIdx = findShowNameIdx(headers)
   const seasonIdx = findSeasonIdx(headers, words)
   let epIdx = findEpisodeNumberIdx(headers, words)
@@ -249,19 +401,35 @@ export function parseCsvText(name: string, text: string): ParsedFile {
   }
   const tvdbIdx = findTvdbIdx(headers)
   const dateIdx = findDateIdx(headers)
+  // The official GDPR episode log has a distinctive `s_id`/`key` shape; label it
+  // as such in diagnostics while the generic path handles synthetic exports.
+  const isOfficialV2 = headers.includes('sid') && headers.some((h) => h === 'key')
 
   // --- episode history: structured season+episode columns ---
   if (nameIdx >= 0 && seasonIdx >= 0 && epIdx >= 0) {
-    out.kind = 'episode-history'
+    out.kind = isOfficialV2 ? 'official episode history' : 'episode-history'
+    // Generic exports skip season 0 (specials) per the legacy contract; the
+    // official log legitimately records special watches, so keep season 0 there.
+    const minSeason = isOfficialV2 ? 0 : 1
+    // The official log mixes watch-episode and rewatch-episode rows (tagged in
+    // key/gsi) in arbitrary order. Emit rewatch rows LAST so the merge's
+    // first-record-wins dedupe keeps the original watch date, while episodes
+    // known only from a rewatch still make it in.
+    const keyIdx = isOfficialV2 ? findIdx(headers, (h) => h === 'key') : -1
+    const gsiIdx = isOfficialV2 ? findIdx(headers, (h) => h === 'gsi') : -1
+    const rewatches: ParsedFile['episodes'] = []
     for (const r of data) {
       const show = r[nameIdx]?.trim()
       const season = parseIntField(r[seasonIdx])
       const episode = parseIntField(r[epIdx])
-      if (!show || season == null || episode == null || season <= 0 || episode <= 0) {
+      if (!show || season == null || episode == null || season < minSeason || episode <= 0) {
         out.skipped++
         continue
       }
-      out.episodes.push({
+      const isRewatch =
+        isOfficialV2 &&
+        `${keyIdx >= 0 ? r[keyIdx] : ''} ${gsiIdx >= 0 ? r[gsiIdx] : ''}`.includes('rewatch')
+      ;(isRewatch ? rewatches : out.episodes).push({
         show,
         tvdbId: tvdbIdx >= 0 ? cleanId(r[tvdbIdx]) : undefined,
         season,
@@ -269,6 +437,7 @@ export function parseCsvText(name: string, text: string): ParsedFile {
         watchedAt: dateIdx >= 0 ? parseDateField(r[dateIdx]) : undefined,
       })
     }
+    out.episodes.push(...rewatches)
     return out
   }
 
@@ -309,7 +478,6 @@ export function parseCsvText(name: string, text: string): ParsedFile {
     headers,
     (h) => h.includes('movie') && (h.includes('name') || h.includes('title')),
   )
-  const fileLower = name.toLowerCase()
   const movieish =
     fileLower.includes('movie') ||
     movieNameIdx >= 0 ||
@@ -321,7 +489,10 @@ export function parseCsvText(name: string, text: string): ParsedFile {
     fileLower.includes('series') ||
     fileLower.includes('follow') ||
     tvdbIdx >= 0 ||
-    headers.some((h) => h.includes('series') || h.includes('show'))
+    // The NAME column itself must be show-flavored — scanning every header
+    // would misfire on incidental columns (user.csv's notif_webseries_new_video
+    // contains "series" but the file's `name` column is the username).
+    (nameIdx >= 0 && (headers[nameIdx].includes('series') || headers[nameIdx].includes('show')))
 
   const titleIdx = movieNameIdx >= 0 ? movieNameIdx : nameIdx
 
@@ -338,14 +509,19 @@ export function parseCsvText(name: string, text: string): ParsedFile {
         title,
         imdbId: rawImdb && /^tt\d+$/i.test(rawImdb) ? rawImdb : undefined,
         watchedAt: dateIdx >= 0 ? parseDateField(r[dateIdx]) : undefined,
+        watched: true,
       })
     }
     return out
   }
 
-  if (nameIdx >= 0 && (showish || !movieish)) {
-    out.kind = 'followed-shows'
-    if (!showish) out.note = 'Assumed followed shows (name column, no episode columns)'
+  // Followed shows require a REAL show signal (filename or show/series/tvdb
+  // columns). A bare name/title column is NOT enough: the official ZIP is full
+  // of settings/tracking CSVs with generic name+value columns whose "names"
+  // ('os', 'locale', usernames…) would otherwise be imported as shows.
+  if (nameIdx >= 0 && showish) {
+    const isOfficialFollow = headers.some((h) => h === 'tvshowid') && !!fileLower.includes('follow')
+    out.kind = isOfficialFollow ? 'official followed shows' : 'followed-shows'
     for (const r of data) {
       const show = r[nameIdx]?.trim()
       if (!show) {
@@ -362,75 +538,383 @@ export function parseCsvText(name: string, text: string): ParsedFile {
   return out
 }
 
+// ---------- third-party JSON parsing ----------
+
+function emptyJsonParsed(name: string, note: string): ParsedFile {
+  return {
+    file: name,
+    kind: 'unknown',
+    episodes: [],
+    follows: [],
+    movies: [],
+    emotions: [],
+    shows: [],
+    primary: false,
+    totalRows: 0,
+    skipped: 0,
+    note,
+  }
+}
+
+interface RawId {
+  tvdb?: number | string | null
+  imdb?: number | string | null
+}
+
+function idStr(v: number | string | null | undefined): string | undefined {
+  if (v == null) return undefined
+  const t = String(v).trim()
+  return t && t !== '0' ? t : undefined
+}
+
+/** Shape-detect a third-party series export: array of shows with seasons/episodes. */
+function looksLikeSeriesJson(arr: unknown[]): boolean {
+  return arr.some(
+    (x) =>
+      x != null &&
+      typeof x === 'object' &&
+      Array.isArray((x as Record<string, unknown>).seasons) &&
+      typeof (x as Record<string, unknown>).title === 'string',
+  )
+}
+
+/** Shape-detect a third-party movies export: array with is_watched + title. */
+function looksLikeMoviesJson(arr: unknown[]): boolean {
+  return arr.some(
+    (x) =>
+      x != null &&
+      typeof x === 'object' &&
+      'is_watched' in (x as Record<string, unknown>) &&
+      typeof (x as Record<string, unknown>).title === 'string' &&
+      !Array.isArray((x as Record<string, unknown>).seasons),
+  )
+}
+
+/**
+ * Parse a third-party TV Time JSON export (series or movies). Auto-detects the
+ * shape. Pure and exported for the same reason parseCsvText is: unit-testable
+ * without a File. The richer per-show/movie metadata (ids, status, favorite,
+ * dates) makes JSON the PRIMARY source when merged with the official CSVs.
+ */
+export function parseJsonText(name: string, text: string): ParsedFile {
+  let data: unknown
+  try {
+    data = JSON.parse(text)
+  } catch {
+    return emptyJsonParsed(name, 'Not valid JSON — ignored')
+  }
+  if (!Array.isArray(data)) {
+    return emptyJsonParsed(name, 'Unexpected JSON shape — expected an array')
+  }
+
+  if (looksLikeSeriesJson(data)) {
+    const out = emptyJsonParsed(name, undefined as unknown as string)
+    out.kind = 'third-party series JSON'
+    out.primary = true
+    out.totalRows = data.length
+    for (const rawShow of data as Record<string, unknown>[]) {
+      const title = typeof rawShow.title === 'string' ? rawShow.title.trim() : ''
+      if (!title) {
+        out.skipped++
+        continue
+      }
+      const id = (rawShow.id ?? {}) as RawId
+      const status = String(rawShow.status ?? '')
+      const show: ImportedShow = {
+        name: title,
+        tvdbId: idStr(id.tvdb),
+        episodes: [],
+        favorite: rawShow.is_favorite === true || undefined,
+        paused: status === 'stopped' || undefined,
+        watchLater: status === 'watch_later' || undefined,
+      }
+      const seasons = Array.isArray(rawShow.seasons) ? rawShow.seasons : []
+      for (const rawSeason of seasons as Record<string, unknown>[]) {
+        const season = Number(rawSeason.number)
+        if (!Number.isFinite(season)) continue
+        const episodes = Array.isArray(rawSeason.episodes) ? rawSeason.episodes : []
+        for (const rawEp of episodes as Record<string, unknown>[]) {
+          if (rawEp.is_watched !== true) continue
+          const episode = Number(rawEp.number)
+          if (!Number.isFinite(episode)) continue
+          show.episodes.push({
+            season,
+            episode,
+            watchedAt: parseDateField(
+              typeof rawEp.watched_at === 'string' ? rawEp.watched_at : undefined,
+            ),
+          })
+        }
+      }
+      out.shows.push(show)
+    }
+    return out
+  }
+
+  if (looksLikeMoviesJson(data)) {
+    const out = emptyJsonParsed(name, undefined as unknown as string)
+    out.kind = 'third-party movies JSON'
+    out.primary = true
+    out.totalRows = data.length
+    for (const rawMovie of data as Record<string, unknown>[]) {
+      const title = typeof rawMovie.title === 'string' ? rawMovie.title.trim() : ''
+      if (!title) {
+        out.skipped++
+        continue
+      }
+      const id = (rawMovie.id ?? {}) as RawId
+      const imdb = idStr(id.imdb)
+      const year = Number(rawMovie.year)
+      out.movies.push({
+        title,
+        imdbId: imdb && /^tt\d+$/i.test(imdb) ? imdb : undefined,
+        tvdbId: idStr(id.tvdb),
+        year: Number.isFinite(year) ? year : undefined,
+        watchedAt: parseDateField(
+          typeof rawMovie.watched_at === 'string' ? rawMovie.watched_at : undefined,
+        ),
+        watched: rawMovie.is_watched === true,
+        favorite: rawMovie.is_favorite === true || undefined,
+      })
+    }
+    return out
+  }
+
+  return emptyJsonParsed(name, 'Unrecognized JSON — not a TV Time series or movies export')
+}
+
 // ---------- merging per-file results ----------
 
+const showKey = (name: string) => name.trim().toLowerCase()
+
+/**
+ * Merge every parsed file into one model. Third-party JSON (f.primary) is the
+ * AUTHORITATIVE source for shows/episodes/movies — it carries real ids, dates,
+ * favorite/status flags. The official CSVs then fill gaps: episode watch rows
+ * for shows the JSON never mentioned, 'towatch' movie names not already known,
+ * and — uniquely — episode_emotion rows joined by (name, season, episode).
+ */
 export function mergeParsedFiles(files: ParsedFile[]): TvTimeImport {
+  // Shows keyed by tvdbId first, else normalized name. A name→key index lets
+  // CSV/emotion rows (name only) resolve onto a JSON show that has a tvdb key.
   const shows = new Map<string, ImportedShow>()
+  const nameToKey = new Map<string, string>()
   const seenEpisodes = new Map<string, Set<string>>()
 
-  const showKey = (name: string) => name.trim().toLowerCase()
+  function keyForShow(name: string, tvdbId?: string): string {
+    if (tvdbId) {
+      const byName = nameToKey.get(showKey(name))
+      // A prior name-only entry with no id: adopt it so we don't split the show.
+      if (byName && !shows.get(byName)?.tvdbId) return byName
+      return `tvdb:${tvdbId}`
+    }
+    return nameToKey.get(showKey(name)) ?? `name:${showKey(name)}`
+  }
 
-  for (const f of files) {
-    for (const ep of f.episodes) {
-      const key = showKey(ep.show)
-      let show = shows.get(key)
-      if (!show) {
-        show = { name: ep.show, episodes: [] }
-        shows.set(key, show)
-        seenEpisodes.set(key, new Set())
+  function ensureShow(name: string, tvdbId?: string): ImportedShow {
+    const key = keyForShow(name, tvdbId)
+    let show = shows.get(key)
+    if (!show) {
+      show = { name, tvdbId, episodes: [] }
+      shows.set(key, show)
+      seenEpisodes.set(key, new Set())
+    }
+    if (!show.tvdbId && tvdbId) show.tvdbId = tvdbId
+    nameToKey.set(showKey(name), key)
+    return show
+  }
+
+  function addEpisode(show: ImportedShow, ep: ImportedEpisode) {
+    const setKey = show.tvdbId ? `tvdb:${show.tvdbId}` : `name:${showKey(show.name)}`
+    let seen = seenEpisodes.get(setKey)
+    if (!seen) {
+      seen = new Set()
+      seenEpisodes.set(setKey, seen)
+    }
+    const epKey = `${ep.season}:${ep.episode}`
+    const existingIdx = seen.has(epKey)
+    if (existingIdx) {
+      // Prefer a dated record over an undated duplicate.
+      if (ep.watchedAt) {
+        const prior = show.episodes.find((e) => e.season === ep.season && e.episode === ep.episode)
+        if (prior && !prior.watchedAt) prior.watchedAt = ep.watchedAt
       }
-      if (!show.tvdbId && ep.tvdbId) show.tvdbId = ep.tvdbId
-      const epKey = `${ep.season}:${ep.episode}`
-      const seen = seenEpisodes.get(key)!
-      if (seen.has(epKey)) continue
-      seen.add(epKey)
-      show.episodes.push({ season: ep.season, episode: ep.episode, watchedAt: ep.watchedAt })
+      return
+    }
+    seen.add(epKey)
+    show.episodes.push({ season: ep.season, episode: ep.episode, watchedAt: ep.watchedAt })
+  }
+
+  // watch_later shows become watchlist entries, not follows.
+  const watchLaterShows = new Map<string, ImportedShow>()
+
+  // 1) PRIMARY: third-party series JSON — full show records.
+  for (const f of files) {
+    if (!f.primary) continue
+    for (const s of f.shows) {
+      if (s.watchLater) {
+        watchLaterShows.set(showKey(s.name), s)
+        continue
+      }
+      const show = ensureShow(s.name, s.tvdbId)
+      if (s.favorite) show.favorite = true
+      if (s.paused) show.paused = true
+      for (const ep of s.episodes) addEpisode(show, ep)
     }
   }
 
-  // Follows that already have episode history just enrich the show entry;
-  // the rest become "followed only".
+  // watch_later shows must stay watchlist-only: official CSV rows (episode
+  // history, follows) for them would otherwise recreate a tracked show.
+  const watchLaterTvdb = new Set(
+    [...watchLaterShows.values()].map((s) => s.tvdbId).filter((id): id is string => !!id),
+  )
+  const isWatchLater = (name: string, tvdbId?: string) =>
+    watchLaterShows.has(showKey(name)) || (!!tvdbId && watchLaterTvdb.has(tvdbId))
+
+  // 2) GAP FILL: loose episode rows (official history) for shows JSON may miss.
+  for (const f of files) {
+    for (const ep of f.episodes) {
+      if (isWatchLater(ep.show, ep.tvdbId)) continue
+      const show = ensureShow(ep.show, ep.tvdbId)
+      addEpisode(show, { season: ep.season, episode: ep.episode, watchedAt: ep.watchedAt })
+    }
+  }
+
+  // 3) EMOTIONS: join episode_emotion rows by (show name, season, episode).
+  for (const f of files) {
+    for (const em of f.emotions) {
+      const key = nameToKey.get(showKey(em.show))
+      const show = key ? shows.get(key) : undefined
+      if (!show) continue // name-based join may drop shows absent from the merge
+      if (!show.emotions) show.emotions = []
+      if (show.emotions.some((e) => e.season === em.season && e.episode === em.episode)) continue
+      show.emotions.push({ season: em.season, episode: em.episode, emotion: em.emotion })
+    }
+  }
+
+  // Follows enrich existing shows or become "followed only".
   const followedOnly = new Map<string, ImportedFollow>()
   for (const f of files) {
     for (const fo of f.follows) {
-      const key = showKey(fo.name)
-      const tracked = shows.get(key)
+      if (isWatchLater(fo.name, fo.tvdbId)) continue
+      const key = nameToKey.get(showKey(fo.name))
+      const tracked = key ? shows.get(key) : undefined
       if (tracked) {
         if (!tracked.tvdbId && fo.tvdbId) tracked.tvdbId = fo.tvdbId
         continue
       }
-      const existing = followedOnly.get(key)
+      const existing = followedOnly.get(showKey(fo.name))
       if (existing) {
         if (!existing.tvdbId && fo.tvdbId) existing.tvdbId = fo.tvdbId
       } else {
-        followedOnly.set(key, { ...fo })
+        followedOnly.set(showKey(fo.name), { ...fo })
       }
     }
   }
 
-  const movies = new Map<string, ImportedMovie>()
-  for (const f of files) {
+  // Movies: JSON primary, then CSV fills. Dedupe by imdbId, else title+year.
+  // Movies dedupe by imdbId first, then normalized title+year. Because JSON
+  // movies carry imdb ids while the official CSV has title only, we also index
+  // every stored movie by its normalized title so a title-only CSV row resolves
+  // onto the existing imdb-keyed JSON movie instead of creating a duplicate.
+  const titleKey = (m: ImportedMovie) => `t:${m.title.trim().toLowerCase()}|${m.year ?? ''}`
+  const titleKeyLoose = (m: ImportedMovie) => `tl:${m.title.trim().toLowerCase()}`
+  const watched = new Map<string, ImportedMovie>()
+  const watchlist = new Map<string, ImportedMovie>()
+  // canonical key (imdb or title+year) for each movie already stored, indexed
+  // by every alias so later rows can find it.
+  const movieAlias = new Map<string, string>()
+
+  function resolveMovie(store: Map<string, ImportedMovie>, m: ImportedMovie): string | undefined {
+    let key: string | undefined
+    if (m.imdbId) {
+      // A movie with its own imdb id is identified by that id alone. Falling
+      // back to a title match here would wrongly collapse distinct same-title
+      // films (e.g. Aladdin 1993 vs 2019, each with its own imdb id).
+      key = movieAlias.get(`id:${m.imdbId.toLowerCase()}`)
+    } else {
+      // Title-only row (official CSV): match exact title+year, else loose title
+      // so it can attach to an existing imdb-keyed JSON movie.
+      key = movieAlias.get(titleKey(m)) ?? movieAlias.get(titleKeyLoose(m))
+    }
+    // The alias map is shared between the watched and watchlist stores, so the
+    // canonical key may belong to the OTHER store — only report a match the
+    // target store actually contains.
+    return key != null && store.has(key) ? key : undefined
+  }
+  function indexMovie(canonical: string, m: ImportedMovie) {
+    if (m.imdbId) movieAlias.set(`id:${m.imdbId.toLowerCase()}`, canonical)
+    movieAlias.set(titleKey(m), canonical)
+    movieAlias.set(titleKeyLoose(m), canonical)
+  }
+
+  // Whether any primary (JSON) movies export exists. When it does it is the
+  // AUTHORITATIVE, complete set of watched movies, so official CSV watch rows
+  // only enrich matches (they never add new watched entries — a CSV-only title
+  // is a name variant of a JSON movie, not a genuinely missing film). Without a
+  // JSON movies file, CSV watch rows are all we have, so they may add.
+  const hasPrimaryMovies = files.some((f) => f.primary && f.movies.length > 0)
+
+  // Primary (JSON) first so its ids/dates/favorite win.
+  const orderedMovieFiles = [...files.filter((f) => f.primary), ...files.filter((f) => !f.primary)]
+  for (const f of orderedMovieFiles) {
     for (const m of f.movies) {
-      const key = m.imdbId ? `id:${m.imdbId.toLowerCase()}` : `t:${m.title.trim().toLowerCase()}`
-      const existing = movies.get(key)
-      if (existing) {
-        if (!existing.watchedAt && m.watchedAt) existing.watchedAt = m.watchedAt
+      if (m.watched) {
+        let key = resolveMovie(watched, m)
+        if (key) {
+          const existing = watched.get(key)!
+          if (!existing.watchedAt && m.watchedAt) existing.watchedAt = m.watchedAt
+          if (!existing.imdbId && m.imdbId) existing.imdbId = m.imdbId
+          if (!existing.tvdbId && m.tvdbId) existing.tvdbId = m.tvdbId
+          if (existing.favorite == null && m.favorite) existing.favorite = true
+          indexMovie(key, m) // learn the new alias (e.g. imdb id)
+        } else if (f.primary || !hasPrimaryMovies) {
+          key = m.imdbId ? `id:${m.imdbId.toLowerCase()}` : titleKey(m)
+          watched.set(key, { ...m })
+          indexMovie(key, m)
+        }
+        // A movie recorded as watched supersedes any watchlist entry for the
+        // same title. But a CSV watch row that did NOT land in `watched`
+        // (authoritative JSON says the movie is unwatched now) must leave the
+        // watchlist entry alone.
+        if (key) {
+          const wlKey = resolveMovie(watchlist, m)
+          if (wlKey) watchlist.delete(wlKey)
+        }
       } else {
-        movies.set(key, { ...m })
+        // Unwatched: only add if not already watched or already listed.
+        if (resolveMovie(watched, m)) continue
+        if (resolveMovie(watchlist, m)) continue
+        const canonical = m.imdbId ? `id:${m.imdbId.toLowerCase()}` : titleKey(m)
+        watchlist.set(canonical, { ...m })
+        indexMovie(canonical, m)
       }
     }
+  }
+
+  // watch_later shows join the movie/show watchlist as show entries.
+  for (const s of watchLaterShows.values()) {
+    const key = `show:${s.tvdbId ?? showKey(s.name)}`
+    watchlist.set(key, { title: s.name, tvdbId: s.tvdbId, watched: false })
   }
 
   return {
     shows: [...shows.values()].sort((a, b) => b.episodes.length - a.episodes.length),
     followedOnly: [...followedOnly.values()].sort((a, b) => a.name.localeCompare(b.name)),
-    movies: [...movies.values()].sort((a, b) => a.title.localeCompare(b.title)),
+    movies: [...watched.values()].sort((a, b) => a.title.localeCompare(b.title)),
+    watchlistMovies: [...watchlist.values()].sort((a, b) => a.title.localeCompare(b.title)),
     diagnostics: files.map((f) => ({
       file: f.file,
       detectedAs: f.kind,
       rows: f.totalRows,
       skipped: f.skipped,
       note: f.note,
+      episodes: f.episodes.length + f.shows.reduce((n, s) => n + s.episodes.length, 0),
+      movies: f.movies.filter((m) => m.watched).length,
+      watchlist:
+        f.movies.filter((m) => !m.watched).length + f.shows.filter((s) => s.watchLater).length,
+      shows: f.shows.filter((s) => !s.watchLater).length + f.follows.length,
+      emotions: f.emotions.length,
     })),
   }
 }
@@ -438,10 +922,22 @@ export function mergeParsedFiles(files: ParsedFile[]): TvTimeImport {
 // ---------- File / ZIP entry point ----------
 
 function emptyParsed(file: string, note: string): ParsedFile {
-  return { file, kind: 'unknown', episodes: [], follows: [], movies: [], totalRows: 0, skipped: 0, note }
+  return {
+    file,
+    kind: 'unknown',
+    episodes: [],
+    follows: [],
+    movies: [],
+    emotions: [],
+    shows: [],
+    primary: false,
+    totalRows: 0,
+    skipped: 0,
+    note,
+  }
 }
 
-/** Parse dropped files (.zip archives and/or loose .csv files) into one merged model. */
+/** Parse dropped files (.zip archives and/or loose .csv/.json files) into one merged model. */
 export async function parseExportFiles(files: File[]): Promise<TvTimeImport> {
   const parsed: ParsedFile[] = []
   for (const file of files) {
@@ -450,22 +946,29 @@ export async function parseExportFiles(files: File[]): Promise<TvTimeImport> {
       try {
         const zip = await JSZip.loadAsync(await file.arrayBuffer())
         const entries = Object.values(zip.files).filter(
-          (e) => !e.dir && e.name.toLowerCase().endsWith('.csv'),
+          (e) => !e.dir && /\.(csv|json)$/i.test(e.name),
         )
         if (entries.length === 0) {
-          parsed.push(emptyParsed(file.name, 'No CSV files inside this ZIP'))
+          parsed.push(emptyParsed(file.name, 'No CSV or JSON files inside this ZIP'))
           continue
         }
         for (const entry of entries) {
-          parsed.push(parseCsvText(entry.name, await entry.async('string')))
+          const text = await entry.async('string')
+          parsed.push(
+            entry.name.toLowerCase().endsWith('.json')
+              ? parseJsonText(entry.name, text)
+              : parseCsvText(entry.name, text),
+          )
         }
       } catch {
         parsed.push(emptyParsed(file.name, 'Could not open this ZIP archive'))
       }
+    } else if (lower.endsWith('.json') || file.type === 'application/json') {
+      parsed.push(parseJsonText(file.name, await file.text()))
     } else if (lower.endsWith('.csv') || file.type === 'text/csv') {
       parsed.push(parseCsvText(file.name, await file.text()))
     } else {
-      parsed.push(emptyParsed(file.name, 'Not a ZIP or CSV — ignored'))
+      parsed.push(emptyParsed(file.name, 'Not a ZIP, CSV or JSON — ignored'))
     }
   }
   return mergeParsedFiles(parsed)

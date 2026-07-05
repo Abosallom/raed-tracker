@@ -120,12 +120,27 @@ interface LibraryState {
   /**
    * Merge a migration payload (e.g. a TV Time export) into the library in one
    * state update. Existing shows/movies keep their data; only missing watch
-   * records are added. Returns counts for the summary screen.
+   * records are added. Optional extras carry source-app metadata: favorites,
+   * paused shows, per-episode emotions, and watchlist entries.
+   * Returns counts for the summary screen.
    */
   bulkImport: (payload: {
-    shows: { detail: ShowDetail; watched: { season: number; episode: number; watchedAt?: string }[] }[]
-    movies: { detail: MovieDetail; watchedAt?: string | null }[]
-  }) => { showsAdded: number; episodesMarked: number; moviesAdded: number }
+    shows: {
+      detail: ShowDetail
+      watched: { season: number; episode: number; watchedAt?: string }[]
+      favorite?: boolean
+      paused?: boolean
+      emotions?: { season: number; episode: number; emotion: Emotion }[]
+    }[]
+    movies: { detail: MovieDetail; watchedAt?: string | null; favorite?: boolean }[]
+    watchlist?: Omit<WatchlistItem, 'addedAt'>[]
+  }) => {
+    showsAdded: number
+    episodesMarked: number
+    moviesAdded: number
+    watchlistAdded: number
+    emotionsApplied: number
+  }
 
   // ----- custom lists -----
   createList: (name: string) => string
@@ -345,6 +360,8 @@ export const useLibrary = create<LibraryState>()(
         let showsAdded = 0
         let episodesMarked = 0
         let moviesAdded = 0
+        let watchlistAdded = 0
+        let emotionsApplied = 0
 
         for (const item of payload.shows) {
           const existing = shows[item.detail.id]
@@ -363,16 +380,31 @@ export const useLibrary = create<LibraryState>()(
               episodesMarked++
             }
           }
-          shows[item.detail.id] = { ...base, watched }
+          // Source-app emotions attach to (existing or just-created) watch records.
+          for (const emo of item.emotions ?? []) {
+            const key = episodeKey(emo.season, emo.episode)
+            const rec = watched[key]
+            if (rec && !rec.emotion) {
+              watched[key] = { ...rec, emotion: emo.emotion }
+              emotionsApplied++
+            }
+          }
+          shows[item.detail.id] = {
+            ...base,
+            watched,
+            favorite: base.favorite || !!item.favorite,
+            paused: item.paused ?? base.paused,
+          }
         }
 
         for (const m of payload.movies) {
-          if (movies[m.detail.id]) {
-            if (m.watchedAt !== undefined && !movies[m.detail.id].watched && m.watchedAt) {
-              movies[m.detail.id] = {
-                ...movies[m.detail.id],
-                watched: { watchedAt: m.watchedAt },
-              }
+          const existing = movies[m.detail.id]
+          if (existing) {
+            movies[m.detail.id] = {
+              ...existing,
+              watched:
+                !existing.watched && m.watchedAt ? { watchedAt: m.watchedAt } : existing.watched,
+              favorite: existing.favorite || !!m.favorite,
             }
             continue
           }
@@ -381,12 +413,24 @@ export const useLibrary = create<LibraryState>()(
             snapshot: movieToSnapshot(m.detail),
             addedAt: now(),
             watched: m.watchedAt ? { watchedAt: m.watchedAt } : null,
-            favorite: false,
+            favorite: !!m.favorite,
           }
         }
 
-        set({ shows, movies })
-        return { showsAdded, episodesMarked, moviesAdded }
+        // Watchlist entries: skip anything already tracked or already listed.
+        let watchlist = st.watchlist
+        for (const w of payload.watchlist ?? []) {
+          const tracked =
+            (w.type === 'tv' && shows[w.id]) || (w.type === 'movie' && movies[w.id])
+          const listed = watchlist.some((x) => x.type === w.type && x.id === w.id)
+          if (!tracked && !listed) {
+            watchlist = [{ ...w, addedAt: now() }, ...watchlist]
+            watchlistAdded++
+          }
+        }
+
+        set({ shows, movies, watchlist })
+        return { showsAdded, episodesMarked, moviesAdded, watchlistAdded, emotionsApplied }
       },
 
       createList: (name) => {
