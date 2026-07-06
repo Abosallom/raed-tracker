@@ -585,26 +585,80 @@ export default function Migrate() {
       {step === 0 && (
         <section className="card mig-card">
           <div className="mig-card-title">📨 Get your data out of TV Time</div>
+
+          <div className="mig-deadline" role="alert">
+            ⚠️ <b>TV Time shuts down on July 15, 2026</b> — all account data is permanently
+            deleted after that date. Export before then; once it&apos;s gone there is no way to
+            get it back.
+          </div>
+
+          <div className="mig-method">
+            <span className="mig-method-tag">Recommended · ~5 minutes</span>
+            Chrome extension: TV Time Out by Refract
+          </div>
+          <p className="mig-desc">
+            A free extension that downloads your complete library — every show, episode, watch
+            date, movie and list. It runs entirely on your own computer; nothing is uploaded
+            anywhere. You need a <b>computer with Google Chrome</b> (extensions don&apos;t work in
+            phone browsers).
+          </p>
           <ol className="mig-instructions">
             <li>
-              In the TV Time app, open <b>Profile → Settings</b> and request your{' '}
-              <b>personal data</b> (the GDPR export).
+              In Chrome, install{' '}
+              <a
+                href="https://chromewebstore.google.com/detail/tv-time-out-by-refract/pmejpdpjbkjklfceogdkolmgclldogbi"
+                target="_blank"
+                rel="noreferrer"
+              >
+                TV Time Out by Refract
+              </a>{' '}
+              from the Chrome Web Store: <b>Add to Chrome → Add extension</b>.
             </li>
             <li>
-              No such option in your version? Email TV Time support and ask for your personal data
-              export instead.
+              Go to{' '}
+              <a href="https://app.tvtime.com" target="_blank" rel="noreferrer">
+                app.tvtime.com
+              </a>{' '}
+              and <b>sign in with your TV Time account</b> (same email + password as the app).
             </li>
             <li>
-              They&apos;ll email you a <b>ZIP file</b> — usually within a few days.
+              Click the <b>puzzle-piece icon</b> 🧩 at Chrome&apos;s top-right, then click{' '}
+              <b>TV Time Out by Refract</b>.
             </li>
             <li>
-              Have the <b>third-party JSON</b> exports too (series + movies)? Bring those as well —
-              importing both gives the richest result.
+              Pick <b>JSON</b> as the format and click <b>Export my data</b> — large libraries
+              take a minute or two.
             </li>
             <li>
-              Drop your files on the next step <b>as-is</b> — the ZIP, the JSON files, or both.
+              Your <b>Downloads</b> folder now has <code>tvtime-series-….json</code> and{' '}
+              <code>tvtime-movies-….json</code> (plus a browsable summary page). Keep them safe.
             </li>
           </ol>
+
+          <div className="mig-method">
+            <span className="mig-method-tag">Backup · can be slow</span>
+            Official TV Time export
+          </div>
+          <ol className="mig-instructions">
+            <li>
+              Sign in at{' '}
+              <a href="https://gdpr.tvtime.com/gdpr/self-service" target="_blank" rel="noreferrer">
+                gdpr.tvtime.com/gdpr/self-service
+              </a>{' '}
+              and request your personal data.
+            </li>
+            <li>
+              TV Time emails a download link — hours to days right now. Download the{' '}
+              <b>ZIP file</b> and <b>don&apos;t unzip it</b>; this page reads it directly.
+            </li>
+          </ol>
+
+          <p className="mig-desc">
+            Bring <b>either or both</b> to the next step — they&apos;re merged automatically, and
+            re-importing never creates duplicates. Signed in? Your history lands in the library
+            shown above.
+          </p>
+
           <div className="mig-actions">
             <button className="btn primary" onClick={() => setStep(1)}>
               I have my export →
