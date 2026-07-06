@@ -36,7 +36,9 @@ import './myshows.css'
 const pad2 = (n: number) => String(n).padStart(2, '0')
 const epCode = (s: number, e: number) => `S${pad2(s)}E${pad2(e)}`
 
-const STALE_MS = 30 * 86400000 // "haven't watched for a while" threshold
+// "To Watch" recency window: activity within 2 weeks counts as recently
+// stopped; older momentum drops to "Haven't seen in a while".
+const STALE_MS = 14 * 86400000
 const PREFETCH_CAP = 25 // max queue rows that fetch episode titles
 
 // Module-level season cache — survives navigation, dedupes in-flight fetches.
