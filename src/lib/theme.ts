@@ -29,5 +29,5 @@ export function applyTheme() {
     meta.name = 'theme-color'
     document.head.appendChild(meta)
   }
-  meta.content = light ? '#f6f6f4' : '#000000'
+  meta.content = light ? '#f6f6f4' : '#1a1a1a'
 }

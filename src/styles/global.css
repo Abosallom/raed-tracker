@@ -1,20 +1,21 @@
 /* Raed Tracker design system — dark grey theme, yellow accent */
 
 :root {
-  --bg: #000000;
-  --bg-elev: #141414;
-  --bg-elev-2: #202020;
-  --border: #2e2e2e;
+  /* Dark grey base (not pure black) with a lighter elevation ladder. */
+  --bg: #1a1a1a;
+  --bg-elev: #242424;
+  --bg-elev-2: #2e2e2e;
+  --border: #3a3a3a;
   --text: #f2f2f2;
   --text-dim: #a5a5a5;
   /* 4.7:1+ on every dark surface incl. --bg-elev-2 (#737373 was 3.4–3.9:1 on
      cards — below WCAG AA for the small text this token is used for) */
-  --text-faint: #8a8a8a;
-  /* Purer TV-forward yellow; --yellow stays amber for star ratings and the
-     NEW badge so they read independently of the accent. */
-  --accent: #ffd614;
-  --accent-hover: #ffe14d;
-  --accent-soft: rgba(255, 214, 20, 0.14);
+  --text-faint: #909090;
+  /* Slightly darker TV-forward yellow; --yellow stays amber for star ratings
+     and the NEW badge so they read independently of the accent. */
+  --accent: #eec50e;
+  --accent-hover: #f8d335;
+  --accent-soft: rgba(238, 197, 14, 0.14);
   --green: #34d399;
   --yellow: #fbbf24;
   --red: #f87171;

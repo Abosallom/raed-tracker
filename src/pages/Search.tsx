@@ -28,6 +28,7 @@ import {
 import { useLibrary } from '../store/library'
 import { showToast } from '../components/toast'
 import { ErrorBox, PosterCard, SkeletonGrid, SkeletonRow, timeAgo } from '../components/shared'
+import HeroCarousel from '../components/HeroCarousel'
 import {
   compactNumber as compactNum,
   generateActivityFeed,
@@ -613,8 +614,17 @@ function DiscoverTab({
 }) {
   const trendTv = useCached<SearchResult[]>('trending:tv', trendingShows)
   const trendMv = useCached<SearchResult[]>('trending:movie', trendingMovies)
+  const popTv = useCached<SearchResult[]>('popular:tv', popularShows)
   const topTv = useCached<SearchResult[]>('top:tv', topRatedShows)
   const topMv = useCached<SearchResult[]>('top:movie', topRatedMovies)
+
+  // Trending spotlight carousel (moved here from Home): top 5 with backdrops
+  // first (stable sort keeps trending order; demo-mode backdrops are null).
+  const heroItems = trendTv.data
+    ? [...trendTv.data]
+        .sort((a, b) => Number(Boolean(b.backdrop_path)) - Number(Boolean(a.backdrop_path)))
+        .slice(0, 5)
+    : []
 
   // "Browse all" CTAs now just jump straight into the folded-in genre hub,
   // pre-selecting the media type so the grid below is scrolled into view.
@@ -625,8 +635,10 @@ function DiscoverTab({
 
   return (
     <div className="fade-in">
+      {heroItems.length > 0 && <HeroCarousel items={heroItems} />}
       <ExploreRow title="🔥 Trending shows" res={trendTv} />
       <ExploreRow title="🍿 Trending movies" res={trendMv} />
+      <ExploreRow title="📺 Popular shows" res={popTv} />
       <BrowseBanner type="tv" onClick={() => jumpToGenreHub('tv')} />
       <ExploreRow title="🏆 Top rated shows" res={topTv} />
       <ExploreRow title="🎖️ Top rated movies" res={topMv} />

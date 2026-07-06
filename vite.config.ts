@@ -28,8 +28,8 @@ export default defineConfig({
         // GitHub Pages (resolved against the deployed manifest URL).
         start_url: './',
         scope: './',
-        background_color: '#000000',
-        theme_color: '#000000',
+        background_color: '#1a1a1a',
+        theme_color: '#1a1a1a',
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
