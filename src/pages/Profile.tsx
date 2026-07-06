@@ -4,7 +4,7 @@
 import { useMemo, useState, useSyncExternalStore } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { Comment, TrackedMovie, TrackedShow } from '../types'
-import { useLibrary, watchedCount } from '../store/library'
+import { displayWatchedCount, useLibrary, watchedCount } from '../store/library'
 import { computeStreaks } from '../lib/streaks'
 import { useAdminGate } from '../lib/admin'
 import {
@@ -445,7 +445,7 @@ export default function Profile() {
               <PosterImage path={s.snapshot.poster_path} title={s.snapshot.name} />
               <div className="poster-title">{s.snapshot.name}</div>
               <div className="poster-sub">
-                {watchedCount(s)}/{s.snapshot.totalEpisodes} episodes
+                {displayWatchedCount(s)}/{s.snapshot.totalEpisodes} episodes
               </div>
             </Link>
           ))}
@@ -505,7 +505,7 @@ export default function Profile() {
               <PosterImage path={s.snapshot.poster_path} title={s.snapshot.name} />
               <div className="poster-title">{s.snapshot.name}</div>
               <div className="poster-sub">
-                {watchedCount(s)}/{s.snapshot.totalEpisodes} episodes
+                {displayWatchedCount(s)}/{s.snapshot.totalEpisodes} episodes
               </div>
             </Link>
           ))}

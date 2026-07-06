@@ -732,6 +732,18 @@ export function showProgress(show: TrackedShow): number {
   return total > 0 ? Math.min(1, watchedCount(show) / total) : 0
 }
 
+/**
+ * watchedCount clamped to the snapshot total, for per-show "x / y" displays.
+ * TV Time imports can carry records outside TMDB's episode count (season-0
+ * specials, TVDB-numbered episodes), so the raw count can exceed the total —
+ * "1225 / 1169" reads as a bug. Aggregate stats keep the raw count: those
+ * specials really were watched.
+ */
+export function displayWatchedCount(show: TrackedShow): number {
+  const total = show.snapshot.totalEpisodes
+  return total > 0 ? Math.min(watchedCount(show), total) : watchedCount(show)
+}
+
 function todayISO(): string {
   // Local calendar date, NOT the UTC one (toISOString): every other air-date
   // computation (Upcoming, ShowDetail, stats) compares against local midnight.

@@ -14,6 +14,7 @@ import {
   seasonComplete,
   showProgress,
   useLibrary,
+  displayWatchedCount,
   watchedCount,
 } from '../store/library'
 import type { SeasonDetail, TrackedShow } from '../types'
@@ -639,7 +640,7 @@ const QueueRow = memo(function QueueRow({
 
 function CompactRow({ show, action }: { show: TrackedShow; action?: ReactNode }) {
   const snap = show.snapshot
-  const seen = watchedCount(show)
+  const seen = displayWatchedCount(show)
   return (
     <div className="queue-compact-row">
       <Link to={`/show/${snap.id}`} className="queue-compact-poster" title={snap.name}>
@@ -1117,7 +1118,7 @@ export default function MyShows() {
         ) : (
           <div className="poster-grid stagger">
             {gridPool.map((s) => {
-              const seen = watchedCount(s)
+              const seen = displayWatchedCount(s)
               const status = showStatus(s)
               const behind = status === 'watching' ? behindCount(s) + 1 : 0
               // NEW badge: snapshot heuristic (aired within 7d, unwatched) OR a

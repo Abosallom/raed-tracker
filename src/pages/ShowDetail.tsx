@@ -25,7 +25,7 @@ import {
   nextEpisode,
   showProgress,
   useLibrary,
-  watchedCount,
+  displayWatchedCount,
 } from '../store/library'
 import {
   ErrorBox,
@@ -522,7 +522,6 @@ export default function ShowDetailPage() {
   const year = detail.first_air_date?.slice(0, 4)
   const network = detail.networks[0]?.name
   const progress = tracked ? showProgress(tracked) : 0
-  const watched = tracked ? watchedCount(tracked) : 0
   const upNext = tracked ? nextEpisode(tracked) : null
   // Local calendar date, NOT the UTC one (toISOString) — must agree with
   // library.ts todayISO()/airedEpisodeCount so episode rows and the header's
@@ -797,7 +796,7 @@ export default function ShowDetailPage() {
         <div className={`card show-detail-progress-card${tracked.paused ? ' paused' : ''}`}>
           <div className="show-detail-progress-top">
             <div>
-              <strong>{watched}</strong>{' '}
+              <strong>{displayWatchedCount(tracked)}</strong>{' '}
               <span style={{ color: 'var(--text-dim)' }}>
                 of {tracked.snapshot.totalEpisodes} episodes watched
               </span>
