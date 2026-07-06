@@ -20,6 +20,7 @@ import {
 import { isDemoMode } from './api/tmdb'
 import { LoadingSpinner } from './components/shared'
 import { ConfettiHost } from './components/Confetti'
+import MigratePrompt from './components/MigratePrompt'
 import { ConfirmHost } from './components/confirm'
 import { Toaster } from './components/toast'
 import { nextEpisode, useLibrary } from './store/library'
@@ -423,6 +424,7 @@ export default function App() {
           can fire confetti (previously per-page mounts missed most paths). */}
       <ConfettiHost />
       <Toaster />
+      <MigratePrompt />
       <ConfirmHost />
     </div>
   )

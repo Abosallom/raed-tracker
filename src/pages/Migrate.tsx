@@ -17,6 +17,7 @@ import { reviveNextLibraryChange } from '../store/sync'
 import { supabase } from '../api/supabase'
 import { displayIdentity } from '../lib/admin'
 import { BackBar } from '../components/BackBar'
+import { IMPORTED_KEY } from '../components/MigratePrompt'
 import { ErrorBox, LoadingSpinner, ProgressBar } from '../components/shared'
 import { showToast } from '../components/toast'
 import type {
@@ -542,6 +543,12 @@ export default function Migrate() {
       watchlist: watchlistPayload,
     })
     savePendingImport(null) // import finished — drop the stashed export
+    try {
+      // Suppresses the "Moving from TV Time?" first-visit prompt for good.
+      localStorage.setItem(IMPORTED_KEY, '1')
+    } catch {
+      /* the prompt's library-size check covers this */
+    }
     setResult(counts)
     setUnmatched(missed)
     setStep(4)
@@ -667,8 +674,35 @@ export default function Migrate() {
         </section>
       )}
 
-      {/* ================= step 2: upload ================= */}
-      {step === 1 && (
+      {/* ================= step 2: upload (members only) ================= */}
+      {step === 1 && supabase && identity.state !== 'signed-in' && (
+        <section className="card mig-card">
+          <div className="mig-card-title">🔐 Importing is for members</div>
+          {identity.state === 'loading' ? (
+            <div className="mig-who mig-who-loading" aria-busy="true">
+              <LoadingSpinner />
+              <span>Checking who&apos;s signed in…</span>
+            </div>
+          ) : (
+            <>
+              <p className="mig-desc">
+                Sign in with your member account first, so your history lands in <b>your</b>{' '}
+                library and follows you to every device. Don&apos;t have an account yet? Ask the
+                person who shared this app with you.
+              </p>
+              <div className="mig-actions">
+                <Link className="btn primary" to="/account">
+                  Sign in →
+                </Link>
+                <button className="btn" onClick={() => setStep(0)}>
+                  ← Back to the guide
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+      {step === 1 && (!supabase || identity.state === 'signed-in') && (
         <section className="card mig-card">
           <div className="mig-card-title">📂 Upload your export</div>
           <p className="mig-desc">

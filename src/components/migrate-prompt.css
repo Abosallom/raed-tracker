@@ -1,0 +1,122 @@
+/* "Moving from TV Time?" first-visit prompt — bottom card above the tab bar. */
+
+.migprompt {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px)); /* clears the mobile tab bar */
+  z-index: 900; /* under toasts (1000+), over content */
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  width: min(480px, calc(100vw - 24px));
+  padding: 16px 18px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  animation: migprompt-in 0.3s cubic-bezier(0.21, 1.02, 0.55, 1.1) backwards;
+}
+
+@media (min-width: 761px) {
+  .migprompt {
+    bottom: 24px; /* desktop has no tab bar */
+  }
+}
+
+.migprompt.closing {
+  animation: migprompt-out 0.22s ease-in forwards;
+}
+
+@keyframes migprompt-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes migprompt-out {
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(24px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .migprompt,
+  .migprompt.closing {
+    animation: none;
+  }
+}
+
+.migprompt-emoji {
+  font-size: 28px;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.migprompt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.migprompt-title {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.migprompt-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.migprompt-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.migprompt-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  cursor: pointer;
+  user-select: none;
+}
+
+.migprompt-check input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.migprompt-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.migprompt-close:hover,
+.migprompt-close:focus-visible {
+  background: var(--bg-elev);
+  color: var(--text);
+}
