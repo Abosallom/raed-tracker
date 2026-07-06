@@ -51,7 +51,9 @@ export default defineConfig({
               // heavily for quota accounting; self-purge this cache instead of
               // letting the browser evict the whole origin's storage.
               expiration: {
-                maxEntries: 300,
+                // A 150-show library easily exceeds 300 poster/still/backdrop
+                // URLs; too-small caps mean constant re-downloads.
+                maxEntries: 800,
                 maxAgeSeconds: 60 * 60 * 24 * 30,
                 purgeOnQuotaError: true,
               },
@@ -59,13 +61,22 @@ export default defineConfig({
             },
           },
           {
-            // TMDB API: fresh when online, 1h-stale fallback when not.
+            // TMDB API: serve from cache INSTANTLY and revalidate in the
+            // background. NetworkFirst (the old handler) made every request
+            // wait up to 4s on the network before touching the cache — the
+            // single biggest source of perceived lag. Staleness is bounded
+            // (6h) and the background refresh updates the cache for the next
+            // render; air-date-sensitive data is re-fetched by the freshness
+            // engine anyway.
             urlPattern: /^https:\/\/api\.themoviedb\.org\/.*/i,
-            handler: 'NetworkFirst',
+            handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'tmdb-api',
-              networkTimeoutSeconds: 4,
-              expiration: { maxAgeSeconds: 3600, purgeOnQuotaError: true },
+              expiration: {
+                maxEntries: 400,
+                maxAgeSeconds: 6 * 3600,
+                purgeOnQuotaError: true,
+              },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

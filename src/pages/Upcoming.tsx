@@ -196,7 +196,7 @@ function badgeFor(e: UpcomingEntry): 'PREMIERE' | 'NEW' | null {
 // milestone confetti + toasts (including lifetime hundreds/thousands and
 // streak bests), the stale 'pause-this' sheet, and the reactionPrompt
 // preference driving the deep-react EpisodeSheet.
-const STALE_MS = 14 * 86400000
+const STALE_MS = 30 * 86400000 // a month without logging = stale
 
 interface SheetInfo {
   showId: number
@@ -294,7 +294,7 @@ function CheckButton({
 
     const episodeTitle = isTba(entry) ? undefined : entry.epName
 
-    // Checking an episode of a STALE show (no activity for >2wk before this
+    // Checking an episode of a STALE show (no activity for >1 month before this
     // check) opens the EpisodeSheet in its 'pause-this' variant — takes
     // precedence over the reaction-frequency preference.
     if (wasStale && updated && nextEpisode(updated) !== null) {

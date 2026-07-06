@@ -39,9 +39,9 @@ import './myshows.css'
 const pad2 = (n: number) => String(n).padStart(2, '0')
 const epCode = (s: number, e: number) => `S${pad2(s)}E${pad2(e)}`
 
-// "To Watch" recency window: activity within 2 weeks counts as recently
+// "To Watch" recency window: activity within a month counts as recently
 // stopped; older momentum drops to "Haven't seen in a while".
-const STALE_MS = 14 * 86400000
+const STALE_MS = 30 * 86400000
 const PREFETCH_CAP = 25 // max queue rows that fetch episode titles
 
 // Module-level season cache — survives navigation, dedupes in-flight fetches.
@@ -510,7 +510,7 @@ const QueueRow = memo(function QueueRow({
       milestone = true
     }
 
-    // P5b: checking an episode of a STALE show (no activity for >2wk before
+    // P5b: checking an episode of a STALE show (no activity for >1 month before
     // this check) opens the EpisodeSheet in its 'pause-this' variant instead of
     // the normal reaction sheet — nudging the user to pause or resume in
     // earnest. Takes precedence over the reaction-frequency preference.

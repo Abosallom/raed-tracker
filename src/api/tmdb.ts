@@ -48,24 +48,49 @@ class TmdbError extends Error {
   }
 }
 
+// Session-level request memo: dedupes concurrent identical requests and
+// reuses fresh responses, so navigating between pages doesn't refetch what
+// the app fetched moments ago (each page keeping its own ad-hoc cache never
+// covered cross-page traffic like detail/season/trailer loads).
+const REQUEST_TTL_MS = 5 * 60 * 1000
+const REQUEST_CACHE_MAX = 400
+const requestCache = new Map<string, { at: number; promise: Promise<unknown> }>()
+
 async function fetchTmdb<T>(path: string, params: Record<string, string> = {}): Promise<T> {
   const key = getApiKey()
   const url = new URL(BASE + path)
   const isV4Token = key.startsWith('eyJ') // v4 read access tokens are JWTs
   if (!isV4Token) url.searchParams.set('api_key', key)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
-  const res = await fetch(url.toString(), {
-    headers: isV4Token ? { Authorization: `Bearer ${key}` } : undefined,
-  })
-  if (!res.ok) {
-    throw new TmdbError(
-      res.status === 401
-        ? 'TMDB rejected the API key — check it in Settings.'
-        : `TMDB request failed (${res.status})`,
-      res.status,
-    )
+  const cacheKey = url.toString()
+
+  const hit = requestCache.get(cacheKey)
+  if (hit && Date.now() - hit.at < REQUEST_TTL_MS) return hit.promise as Promise<T>
+
+  const promise = (async () => {
+    const res = await fetch(cacheKey, {
+      headers: isV4Token ? { Authorization: `Bearer ${key}` } : undefined,
+    })
+    if (!res.ok) {
+      throw new TmdbError(
+        res.status === 401
+          ? 'TMDB rejected the API key — check it in Settings.'
+          : `TMDB request failed (${res.status})`,
+        res.status,
+      )
+    }
+    return res.json() as Promise<T>
+  })()
+
+  requestCache.set(cacheKey, { at: Date.now(), promise })
+  // Failures must not stick — the next call should retry the network.
+  promise.catch(() => requestCache.delete(cacheKey))
+  if (requestCache.size > REQUEST_CACHE_MAX) {
+    // Map iterates in insertion order — drop the oldest entry.
+    const oldest = requestCache.keys().next().value
+    if (oldest !== undefined) requestCache.delete(oldest)
   }
-  return res.json() as Promise<T>
+  return promise as Promise<T>
 }
 
 // ---------- images ----------
