@@ -49,6 +49,7 @@ const Account = lazy(() => import('./pages/Account'))
 const Settings = lazy(() => import('./pages/Settings'))
 const ListDetail = lazy(() => import('./pages/ListDetail'))
 const Migrate = lazy(() => import('./pages/Migrate'))
+const Privacy = lazy(() => import('./pages/Privacy'))
 const Admin = lazy(() => import('./pages/Admin'))
 const UserProfile = lazy(() => import('./pages/UserProfile'))
 const Users = lazy(() => import('./pages/Users'))
@@ -410,6 +411,7 @@ export default function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/list/:id" element={<ListDetail />} />
               <Route path="/migrate" element={<Migrate />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/user/:id" element={<UserProfile />} />
               <Route path="/users" element={<Users />} />

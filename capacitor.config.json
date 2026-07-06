@@ -1,0 +1,12 @@
+{
+  "appId": "app.raedtracker",
+  "appName": "Raed Tracker",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#1a1a1a"
+  },
+  "android": {
+    "backgroundColor": "#1a1a1a"
+  }
+}

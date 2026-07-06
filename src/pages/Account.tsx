@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { isSyncAvailable } from '../api/supabase'
+import { isSyncAvailable, supabase } from '../api/supabase'
 import {
   changeEmail,
   changePassword,
@@ -332,10 +332,46 @@ function ManageAccount({ info, status }: { info: AccountInfo; status: SyncStatus
             Delete cloud copy
           </button>
         </div>
-        <p className="account-hint">
-          To delete the account itself, an administrator can remove it in the Supabase
-          dashboard (Authentication → Users).
+      </div>
+
+      <div className="card">
+        <div className="account-card-title">⚠️ Delete account</div>
+        <p className="account-desc">
+          Permanently deletes this account and its cloud library. The library on this device is
+          kept until you reset it in Settings. This cannot be undone.
         </p>
+        <div className="account-actions">
+          <button
+            className="btn small danger"
+            disabled={busy !== null}
+            onClick={() =>
+              void (async () => {
+                const ok = await confirm({
+                  title: 'Delete this account forever?',
+                  message:
+                    'Your account and its cloud library will be permanently deleted. This cannot be undone.',
+                  confirmLabel: 'Delete my account',
+                  danger: true,
+                })
+                if (!ok) return
+                void run(
+                  'delete-account',
+                  async () => {
+                    if (!supabase) return 'Cloud sync is not configured.'
+                    const { data, error } = await supabase.functions.invoke('delete-account')
+                    if (error) return 'Deletion failed — the delete-account function may not be deployed yet.'
+                    if ((data as { error?: string })?.error) return (data as { error: string }).error
+                    await signOut()
+                    return null
+                  },
+                  'Account deleted',
+                )
+              })()
+            }
+          >
+            Delete my account
+          </button>
+        </div>
       </div>
     </>
   )

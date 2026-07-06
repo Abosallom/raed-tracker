@@ -526,3 +526,28 @@
   border-radius: 6px;
   padding: 1px 6px;
 }
+
+/* ---------- preview pre-flight data check ---------- */
+
+.mig-preflight {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+
+.mig-preflight-top {
+  font-size: 13.5px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.mig-preflight-label {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.mig-preflight-date {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}

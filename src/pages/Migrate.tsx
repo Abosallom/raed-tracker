@@ -86,6 +86,36 @@ function trackableShows(model: TvTimeImport): ImportedShow[] {
 }
 
 /** Total emotion reactions across all shows. */
+/**
+ * Pre-flight data check, shown on the preview step — the same verification
+ * run on the first real migration: date coverage decides whether history
+ * ordering will be exact, and the per-show last-watch dates preview what
+ * "Keep watching" will look like after the import.
+ */
+function preflightOf(model: TvTimeImport): {
+  dated: number
+  undated: number
+  top: { name: string; last: string }[]
+} {
+  let dated = 0
+  let undated = 0
+  const tops: { name: string; last: string }[] = []
+  for (const s of trackableShows(model)) {
+    let last = ''
+    for (const ep of s.episodes) {
+      if (ep.watchedAt) {
+        dated++
+        if (ep.watchedAt > last) last = ep.watchedAt
+      } else {
+        undated++
+      }
+    }
+    if (last) tops.push({ name: s.name, last })
+  }
+  tops.sort((a, b) => (a.last < b.last ? 1 : -1))
+  return { dated, undated, top: tops.slice(0, 5) }
+}
+
 function totalEmotionsOf(model: TvTimeImport): number {
   return model.shows.reduce((sum, s) => sum + (s.emotions?.length ?? 0), 0)
 }
@@ -850,6 +880,58 @@ export default function Migrate() {
               </div>
             )}
           </div>
+
+          {/* Pre-flight data check: date coverage + expected queue order. */}
+          {(() => {
+            const pf = preflightOf(parsed)
+            const total = pf.dated + pf.undated
+            return (
+              <div className="mig-preflight">
+                {pf.undated === 0 && total > 0 ? (
+                  <div className="mig-who mig-who-ok">
+                    <span className="mig-who-icon" aria-hidden>
+                      🧪
+                    </span>
+                    <div className="mig-who-text">
+                      <div className="mig-who-main">
+                        Data check: all {fmt(total)} episodes carry their original watch dates
+                      </div>
+                      <div className="mig-who-sub">
+                        Your history and &ldquo;Keep watching&rdquo; order will be exact.
+                      </div>
+                    </div>
+                  </div>
+                ) : pf.undated > 0 ? (
+                  <div className="mig-who mig-who-warn">
+                    <span className="mig-who-icon" aria-hidden>
+                      🧪
+                    </span>
+                    <div className="mig-who-text">
+                      <div className="mig-who-main">
+                        Data check: {fmt(pf.undated)} of {fmt(total)} episodes have no watch date
+                      </div>
+                      <div className="mig-who-sub">
+                        Those will be stamped with today&apos;s date and sort as recently watched.
+                        The rest keep their real dates.
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+                {pf.top.length > 0 && (
+                  <div className="mig-preflight-top">
+                    <span className="mig-preflight-label">Keep watching will start with:</span>{' '}
+                    {pf.top.map((t, i) => (
+                      <span key={t.name}>
+                        {i > 0 && ' · '}
+                        <b>{t.name}</b>{' '}
+                        <span className="mig-preflight-date">({t.last.slice(0, 10)})</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {shownShows.length > 0 && (
             <details className="mig-details">

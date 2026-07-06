@@ -742,6 +742,9 @@ export default function Settings() {
                 <p className="settings-attribution" style={{ marginTop: 0 }}>
                   This product uses the TMDB API but is not endorsed or certified by TMDB.
                 </p>
+                <p style={{ marginTop: 8 }}>
+                  <Link to="/privacy">Read the full privacy policy →</Link>
+                </p>
               </div>
             </details>
           </section>
