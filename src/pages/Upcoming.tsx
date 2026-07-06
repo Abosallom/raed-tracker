@@ -12,6 +12,7 @@ import {
   isSeriesPremiere,
   nextEpisode,
   seasonComplete,
+  unwatchedBefore,
   useLibrary,
   watchedCount,
 } from '../store/library'
@@ -19,6 +20,7 @@ import { lastActivity } from '../lib/activity'
 import { computeStreaks } from '../lib/streaks'
 import { ErrorBox, PosterCard, PosterImage, SkeletonRow } from '../components/shared'
 import { showToast } from '../components/toast'
+import { confirm } from '../components/confirm'
 import { fireConfetti } from '../components/Confetti'
 import EpisodeSheet from '../components/EpisodeSheet'
 import './upcoming.css'
@@ -216,12 +218,34 @@ function CheckButton({
 }) {
   const shows = useLibrary((s) => s.shows)
   const toggleEpisode = useLibrary((s) => s.toggleEpisode)
+  const markUpTo = useLibrary((s) => s.markUpTo)
+  const unmarkEpisodes = useLibrary((s) => s.unmarkEpisodes)
   const reactionPrompt = useLibrary((s) => s.reactionPrompt)
   const tracked = shows[entry.showId]
   if (!tracked) return null
   const watched = Boolean(tracked.watched[episodeKey(entry.season, entry.episode)])
 
-  const handleClick = () => {
+  const handleClick = async () => {
+    // Checking mid-season/mid-show: offer to catch up everything before it.
+    if (!watched) {
+      const gap = unwatchedBefore(tracked, entry.season, entry.episode)
+      if (gap > 0) {
+        const catchUp = await confirm({
+          title: 'Seen all previous episodes?',
+          message: `${gap} earlier episode${gap === 1 ? ' is' : 's are'} still unmarked. Mark them watched too?`,
+          confirmLabel: `Mark all ${gap + 1} ✓`,
+          cancelLabel: 'Just this one',
+        })
+        if (catchUp) {
+          const keys = markUpTo(entry.showId, entry.season, entry.episode)
+          showToast(`${keys.length} episodes marked watched ✓`, '✅', {
+            label: 'Undo',
+            onClick: () => unmarkEpisodes(entry.showId, keys),
+          })
+          return
+        }
+      }
+    }
     // Snapshot pre-check state for milestone deltas (lifetime episode total,
     // longest streak, staleness) — same recipe as the Keep Watching queue.
     const before = useLibrary.getState()
@@ -234,6 +258,9 @@ function CheckButton({
     showToast(
       nowWatched ? `${epCode(entry)} marked watched ✓` : `${epCode(entry)} marked unwatched`,
       nowWatched ? '✅' : '↩️',
+      nowWatched
+        ? { label: 'Undo', onClick: () => toggleEpisode(entry.showId, entry.season, entry.episode) }
+        : undefined,
     )
     // Unchecking stays silent — no celebration, no reaction sheet.
     if (!nowWatched) return

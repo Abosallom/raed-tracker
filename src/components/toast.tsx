@@ -4,10 +4,16 @@
 import { useEffect, useState } from 'react'
 import './toast.css'
 
+export interface ToastAction {
+  label: string
+  onClick: () => void
+}
+
 export interface Toast {
   id: number
   message: string
   emoji?: string
+  action?: ToastAction
 }
 
 type Listener = (toasts: Toast[]) => void
@@ -20,14 +26,23 @@ function emit() {
   for (const l of listeners) l([...toasts])
 }
 
-export function showToast(message: string, emoji?: string) {
+export function showToast(message: string, emoji?: string, action?: ToastAction) {
   const id = nextId++
-  toasts = [...toasts, { id, message, emoji }].slice(-3) // max 3 stacked
+  toasts = [...toasts, { id, message, emoji, action }].slice(-3) // max 3 stacked
   emit()
-  setTimeout(() => {
-    toasts = toasts.filter((t) => t.id !== id)
-    emit()
-  }, 2600)
+  // Actionable toasts stay longer — the user needs time to tap Undo.
+  setTimeout(
+    () => {
+      toasts = toasts.filter((t) => t.id !== id)
+      emit()
+    },
+    action ? 5000 : 2600,
+  )
+}
+
+function dismiss(id: number) {
+  toasts = toasts.filter((t) => t.id !== id)
+  emit()
 }
 
 export function Toaster() {
@@ -49,6 +64,17 @@ export function Toaster() {
         <div key={t.id} className="toast">
           {t.emoji && <span className="toast-emoji">{t.emoji}</span>}
           {t.message}
+          {t.action && (
+            <button
+              className="toast-action"
+              onClick={() => {
+                t.action?.onClick()
+                dismiss(t.id)
+              }}
+            >
+              {t.action.label}
+            </button>
+          )}
         </div>
       ))}
     </div>

@@ -112,6 +112,11 @@ interface LibraryState {
   toggleFavoriteShow: (id: number) => void
   /** Toggle one episode. Returns true if it is now watched. */
   toggleEpisode: (showId: number, season: number, episode: number) => boolean
+  /** Catch-up: mark every aired regular-season episode up to AND INCLUDING
+   *  (season, episode). Returns the keys it newly added (for undo). */
+  markUpTo: (showId: number, season: number, episode: number) => EpisodeKey[]
+  /** Inverse of a bulk mark: remove exactly these records (undo). */
+  unmarkEpisodes: (showId: number, keys: EpisodeKey[]) => void
   setEpisodeEmotion: (showId: number, season: number, episode: number, emotion: Emotion | undefined) => void
   markSeasonWatched: (showId: number, season: number) => void
   markSeasonUnwatched: (showId: number, season: number) => void
@@ -313,6 +318,49 @@ export const useLibrary = create<LibraryState>()(
         })
         return nowWatched
       },
+
+      markUpTo: (showId, season, episode) => {
+        const st = get()
+        const show = st.shows[showId]
+        if (!show) return []
+        const watched = { ...show.watched }
+        const added: EpisodeKey[] = []
+        const stamp = now()
+        for (const sStr of Object.keys(show.snapshot.seasonEpisodeCounts)) {
+          const s = Number(sStr)
+          // Regular seasons only — a catch-up must not sweep in specials.
+          if (s < 1 || s > season) continue
+          const aired = airedEpisodeCount(show, s)
+          const maxE = s === season ? Math.min(episode, aired) : aired
+          for (let e = 1; e <= maxE; e++) {
+            const key = episodeKey(s, e)
+            if (!watched[key]) {
+              watched[key] = { watchedAt: stamp }
+              added.push(key)
+            }
+          }
+        }
+        if (added.length === 0) return []
+        set({
+          shows: { ...st.shows, [showId]: { ...show, watched, lastWatchedAt: stamp } },
+        })
+        return added
+      },
+
+      unmarkEpisodes: (showId, keys) =>
+        set((st) => {
+          const show = st.shows[showId]
+          if (!show || keys.length === 0) return st
+          const watched = { ...show.watched }
+          for (const k of keys) delete watched[k]
+          // Same rollback semantics as toggleEpisode's uncheck.
+          return {
+            shows: {
+              ...st.shows,
+              [showId]: { ...show, watched, lastWatchedAt: latestWatchStamp(watched) },
+            },
+          }
+        }),
 
       setEpisodeEmotion: (showId, season, episode, emotion) =>
         set((st) => {
@@ -722,6 +770,22 @@ if (typeof window !== 'undefined') {
 }
 
 // ---------- derived helpers (pure functions over store slices) ----------
+
+/** Aired regular-season episodes strictly BEFORE (season, episode) that are
+ *  still unwatched — the "seen all previous episodes?" gap. */
+export function unwatchedBefore(show: TrackedShow, season: number, episode: number): number {
+  let gap = 0
+  for (const sStr of Object.keys(show.snapshot.seasonEpisodeCounts)) {
+    const s = Number(sStr)
+    if (s < 1 || s > season) continue
+    const aired = airedEpisodeCount(show, s)
+    const maxE = s === season ? Math.min(episode - 1, aired) : aired
+    for (let e = 1; e <= maxE; e++) {
+      if (!show.watched[episodeKey(s, e)]) gap++
+    }
+  }
+  return gap
+}
 
 export function watchedCount(show: TrackedShow): number {
   return Object.keys(show.watched).length

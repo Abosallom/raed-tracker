@@ -442,7 +442,10 @@ const QueueRow = memo(function QueueRow({
     const streakBefore = computeStreaks(before.shows, before.movies)
 
     toggleEpisode(snap.id, s, e)
-    showToast(`${snap.name} · ${epCode(s, e)} watched ✓`, '📺')
+    showToast(`${snap.name} · ${epCode(s, e)} watched ✓`, '📺', {
+      label: 'Undo',
+      onClick: () => toggleEpisode(snap.id, s, e),
+    })
 
     const after = useLibrary.getState()
     const updated = after.shows[snap.id]

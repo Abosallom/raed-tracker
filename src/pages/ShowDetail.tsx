@@ -24,6 +24,7 @@ import {
   isSeriesPremiere,
   nextEpisode,
   showProgress,
+  unwatchedBefore,
   useLibrary,
   displayWatchedCount,
 } from '../store/library'
@@ -37,6 +38,7 @@ import {
   SkeletonDetail,
 } from '../components/shared'
 import { CommentsSection } from '../components/CommentsSection'
+import { confirm } from '../components/confirm'
 import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
 import { fireConfetti } from '../components/Confetti'
@@ -349,6 +351,8 @@ export default function ShowDetailPage() {
   const toggleFavoriteShow = useLibrary((s) => s.toggleFavoriteShow)
   const togglePauseShow = useLibrary((s) => s.togglePauseShow)
   const toggleEpisode = useLibrary((s) => s.toggleEpisode)
+  const markUpTo = useLibrary((s) => s.markUpTo)
+  const unmarkEpisodes = useLibrary((s) => s.unmarkEpisodes)
   const setEpisodeEmotion = useLibrary((s) => s.setEpisodeEmotion)
   const markSeasonWatched = useLibrary((s) => s.markSeasonWatched)
   const markSeasonUnwatched = useLibrary((s) => s.markSeasonUnwatched)
@@ -556,16 +560,41 @@ export default function ShowDetailPage() {
     return true
   }
 
-  const handleToggleEpisode = (s: number, e: number, episodeTitle?: string) => {
+  const handleToggleEpisode = async (s: number, e: number, episodeTitle?: string) => {
     const wasWatched = Boolean(tracked?.watched[episodeKey(s, e)])
     ensureFollowed()
+    // Checking mid-season/mid-show: offer to catch up everything before it.
+    if (!wasWatched) {
+      const current = useLibrary.getState().shows[id]
+      const gap = current ? unwatchedBefore(current, s, e) : 0
+      if (gap > 0) {
+        const catchUp = await confirm({
+          title: 'Seen all previous episodes?',
+          message: `${gap} earlier episode${gap === 1 ? ' is' : 's are'} still unmarked. Mark them watched too?`,
+          confirmLabel: `Mark all ${gap + 1} ✓`,
+          cancelLabel: 'Just this one',
+        })
+        if (catchUp) {
+          const keys = markUpTo(id, s, e)
+          showToast(`${keys.length} episodes marked watched ✓`, '🎬', {
+            label: 'Undo',
+            onClick: () => unmarkEpisodes(id, keys),
+          })
+          celebrateIfComplete(s)
+          return
+        }
+      }
+    }
     toggleEpisode(id, s, e)
     if (wasWatched) {
       // Unchecking stays silent — no reaction sheet.
       showToast(`${epCode(s, e)} unmarked`, '↩️')
       return
     }
-    showToast(`${epCode(s, e)} marked watched ✓`, '🎬')
+    showToast(`${epCode(s, e)} marked watched ✓`, '🎬', {
+      label: 'Undo',
+      onClick: () => toggleEpisode(id, s, e),
+    })
     const big = celebrateIfComplete(s)
     // Micro-burst on the premieres/finales users actually reach.
     const show = useLibrary.getState().shows[id]
