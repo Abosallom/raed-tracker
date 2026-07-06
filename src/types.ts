@@ -152,6 +152,8 @@ export interface TrackedShow {
   favorite: boolean
   /** Paused shows drop out of the Watch Next queue. */
   paused?: boolean
+  /** User's numeric rating, 1-10 (drives the Stats "voted ratings" section). */
+  rating?: number
 }
 
 export interface MovieSnapshot {
@@ -168,6 +170,8 @@ export interface TrackedMovie {
   addedAt: string
   watched: WatchRecord | null // null = tracked but not watched yet
   favorite: boolean
+  /** User's numeric rating, 1-10. */
+  rating?: number
 }
 
 export interface WatchlistItem {
@@ -210,6 +214,35 @@ export interface ListItem {
 export interface UserList {
   id: string
   name: string
+  description?: string
   items: ListItem[]
+  createdAt: string
+}
+
+// ---------- social graph (seeded local dataset; no backend) ----------
+
+export interface SocialUser {
+  id: string
+  name: string
+  avatar: string // emoji
+  bio?: string
+  joinedAt: string
+  showsWatched: number
+  followerCount: number
+}
+
+export type ActivityKind = 'watched' | 'favorited' | 'commented'
+
+export interface ActivityItem {
+  id: string
+  user: SocialUser
+  kind: ActivityKind
+  mediaType: MediaType
+  mediaId: number
+  mediaName: string
+  poster_path: string | null
+  season?: number
+  episode?: number
+  reaction?: Emotion
   createdAt: string
 }

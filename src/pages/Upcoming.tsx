@@ -13,10 +13,13 @@ import {
   nextEpisode,
   seasonComplete,
   useLibrary,
+  watchedCount,
 } from '../store/library'
+import { computeStreaks } from '../lib/streaks'
 import { ErrorBox, PosterCard, PosterImage, SkeletonRow } from '../components/shared'
 import { showToast } from '../components/toast'
 import { fireConfetti } from '../components/Confetti'
+import EpisodeSheet from '../components/EpisodeSheet'
 import './upcoming.css'
 
 // ---------- module-level cache (survives remounts, caps refetching) ----------
@@ -43,6 +46,8 @@ interface FilterPrefs {
   /** Single selected network; null = "All". */
   network: string | null
   hideTba: boolean
+  /** Drop already-checked-off episodes (also toggleable from Settings ▸ Upcoming). */
+  hideWatched: boolean
 }
 
 function loadFilters(): FilterPrefs {
@@ -58,12 +63,16 @@ function loadFilters(): FilterPrefs {
         const first = parsed.networks.find((n): n is string => typeof n === 'string')
         network = first ?? null
       }
-      return { network, hideTba: parsed.hideTba === true }
+      return {
+        network,
+        hideTba: parsed.hideTba === true,
+        hideWatched: parsed.hideWatched === true,
+      }
     }
   } catch {
     /* corrupted prefs — fall through to defaults */
   }
-  return { network: null, hideTba: false }
+  return { network: null, hideTba: false, hideWatched: false }
 }
 
 function saveFilters(prefs: FilterPrefs) {
@@ -81,6 +90,31 @@ function parseIsoDate(iso: string): Date {
   return new Date(y, (m || 1) - 1, d || 1)
 }
 
+// ---------- air-time heuristic ----------
+// TMDB doesn't give per-episode air *times*, so we approximate a plausible
+// local drop time from the network. These are HEURISTIC defaults (streamers
+// drop overnight/early-morning; linear channels air in primetime) — not real
+// schedule data — used purely to give each row a leading "HH:MM" cell.
+const NETWORK_AIRTIME: Record<string, string> = {
+  HBO: '04:00',
+  'HBO Max': '04:00',
+  Max: '04:00',
+  Netflix: '08:00',
+  'Apple TV+': '07:00',
+  'Apple TV Plus': '07:00',
+  'Prime Video': '06:00',
+  'Amazon Prime Video': '06:00',
+  'Disney+': '08:00',
+  'Disney Plus': '08:00',
+  AMC: '02:00',
+}
+const DEFAULT_AIRTIME = '20:00'
+
+function airTimeFor(network?: string): string {
+  if (!network) return DEFAULT_AIRTIME
+  return NETWORK_AIRTIME[network.trim()] ?? DEFAULT_AIRTIME
+}
+
 /** Whole days from today's local midnight (0 = today, negative = past). */
 function daysFromToday(iso: string): number {
   const target = parseIsoDate(iso)
@@ -91,10 +125,18 @@ function daysFromToday(iso: string): number {
 
 /** "Today" / "Tomorrow" / weekday for the next week / "JUL 12" beyond. */
 function groupLabel(days: number, iso: string): string {
-  if (days < 0) return 'Earlier this week'
+  const date = parseIsoDate(iso)
+  // Past week gets named buckets instead of one lumped "Earlier this week":
+  // Yesterday, then "Last <Weekday>" back to -6d.
+  if (days < 0) {
+    if (days === -1) return 'Yesterday'
+    if (days >= -6) {
+      return `Last ${date.toLocaleDateString('en-US', { weekday: 'long' })}`
+    }
+    return 'Earlier'
+  }
   if (days === 0) return 'Today'
   if (days === 1) return 'Tomorrow'
-  const date = parseIsoDate(iso)
   if (days <= 7) return date.toLocaleDateString('en-US', { weekday: 'long' })
   const label = date
     .toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -121,6 +163,7 @@ interface UpcomingEntry {
   episode: number
   epName: string // '' when TBA
   airDate: string // ISO yyyy-mm-dd
+  airTime: string // heuristic "HH:MM" from network
   days: number
   network?: string
   sample: boolean
@@ -148,50 +191,167 @@ function badgeFor(e: UpcomingEntry): 'PREMIERE' | 'NEW' | null {
 
 // ---------- row ----------
 
-function CheckButton({ entry }: { entry: UpcomingEntry }) {
+// Upcoming check-offs share the unified check path with MyShows/ShowDetail:
+// milestone confetti + toasts (including lifetime hundreds/thousands and
+// streak bests), the stale 'pause-this' sheet, and the reactionPrompt
+// preference driving the deep-react EpisodeSheet.
+const STALE_MS = 14 * 86400000
+
+/** Most recent watch activity (falls back to when the show was added). */
+function lastActivity(show: TrackedShow): number {
+  let t = new Date(show.addedAt).getTime()
+  for (const rec of Object.values(show.watched)) {
+    const w = new Date(rec.watchedAt).getTime()
+    if (w > t) t = w
+  }
+  return t
+}
+
+interface SheetInfo {
+  showId: number
+  showName: string
+  season: number
+  episode: number
+  episodeTitle?: string
+  variant?: 'default' | 'pause-this'
+}
+
+function CheckButton({
+  entry,
+  onOpenSheet,
+}: {
+  entry: UpcomingEntry
+  onOpenSheet: (info: SheetInfo) => void
+}) {
   const shows = useLibrary((s) => s.shows)
   const toggleEpisode = useLibrary((s) => s.toggleEpisode)
+  const reactionPrompt = useLibrary((s) => s.reactionPrompt)
   const tracked = shows[entry.showId]
   if (!tracked) return null
   const watched = Boolean(tracked.watched[episodeKey(entry.season, entry.episode)])
+
+  const handleClick = () => {
+    // Snapshot pre-check state for milestone deltas (lifetime episode total,
+    // longest streak, staleness) — same recipe as the Keep Watching queue.
+    const before = useLibrary.getState()
+    const wasStale = Date.now() - lastActivity(tracked) > STALE_MS
+    let lifetimeBefore = 0
+    for (const sh of Object.values(before.shows)) lifetimeBefore += watchedCount(sh)
+    const streakBefore = computeStreaks(before.shows, before.movies)
+
+    const nowWatched = toggleEpisode(entry.showId, entry.season, entry.episode)
+    showToast(
+      nowWatched ? `${epCode(entry)} marked watched ✓` : `${epCode(entry)} marked unwatched`,
+      nowWatched ? '✅' : '↩️',
+    )
+    // Unchecking stays silent — no celebration, no reaction sheet.
+    if (!nowWatched) return
+
+    const after = useLibrary.getState()
+    const updated = after.shows[entry.showId]
+    let lifetimeAfter = 0
+    for (const sh of Object.values(after.shows)) lifetimeAfter += watchedCount(sh)
+    const streakAfter = computeStreaks(after.shows, after.movies)
+
+    const s = entry.season
+    const e = entry.episode
+    const tenth = lifetimeAfter > 0 && lifetimeAfter % 10 === 0
+    const hitHundred =
+      Math.floor(lifetimeAfter / 100) > Math.floor(lifetimeBefore / 100) && lifetimeAfter >= 100
+    const hitThousand =
+      Math.floor(lifetimeAfter / 1000) > Math.floor(lifetimeBefore / 1000) && lifetimeAfter >= 1000
+    const newBestStreak = streakAfter.longest > streakBefore.longest
+    let milestone = false
+
+    if (updated && nextEpisode(updated) === null) {
+      fireConfetti()
+      showToast(`All caught up on ${entry.showName} 🎉`, '🏆')
+      milestone = true
+    } else if (updated && seasonComplete(updated, s)) {
+      fireConfetti()
+      showToast(`Season ${s} complete! 🎉`, '🏆')
+      milestone = true
+    } else if (updated && isSeasonFinale(updated, s, e)) {
+      fireConfetti()
+      showToast(`Season ${s} finale watched 🎬`, '🏁')
+      milestone = true
+    } else if (hitThousand) {
+      fireConfetti()
+      showToast(`${lifetimeAfter.toLocaleString()} episodes watched! 🎉`, '🏆')
+      milestone = true
+    } else if (hitHundred) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${lifetimeAfter} episodes watched! 🎉`, '💯')
+      milestone = true
+    } else if (newBestStreak) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`New best streak — ${streakAfter.longest} days! 🔥`, '🔥')
+      milestone = true
+    } else if (updated && isSeriesPremiere(updated, s, e)) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${entry.showName} — series premiere! 🎉`, '🎬')
+      milestone = true
+    } else if (updated && isSeasonPremiere(updated, s, e)) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`Season ${s} premiere 🎬`, '🎬')
+      milestone = true
+    } else if (tenth) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${lifetimeAfter} episodes watched! 🎉`, '🔟')
+      milestone = true
+    }
+
+    const episodeTitle = isTba(entry) ? undefined : entry.epName
+
+    // Checking an episode of a STALE show (no activity for >2wk before this
+    // check) opens the EpisodeSheet in its 'pause-this' variant — takes
+    // precedence over the reaction-frequency preference.
+    if (wasStale && updated && nextEpisode(updated) !== null) {
+      onOpenSheet({
+        showId: entry.showId,
+        showName: entry.showName,
+        season: s,
+        episode: e,
+        episodeTitle,
+        variant: 'pause-this',
+      })
+      return
+    }
+
+    // Reaction-sheet frequency: 'always' opens the deep-react sheet on every
+    // check-off, 'milestones' only on the celebrations above, 'never' skips.
+    const openSheet =
+      reactionPrompt === 'always' || (reactionPrompt === 'milestones' && milestone)
+    if (openSheet) {
+      onOpenSheet({
+        showId: entry.showId,
+        showName: entry.showName,
+        season: s,
+        episode: e,
+        episodeTitle,
+      })
+    }
+  }
+
   return (
     <button
       className={`upcoming-check${watched ? ' on' : ''}`}
       title={watched ? `Mark ${epCode(entry)} unwatched` : `Mark ${epCode(entry)} watched`}
       aria-pressed={watched}
-      onClick={() => {
-        const nowWatched = toggleEpisode(entry.showId, entry.season, entry.episode)
-        showToast(
-          nowWatched ? `${epCode(entry)} marked watched ✓` : `${epCode(entry)} marked unwatched`,
-          nowWatched ? '✅' : '↩️',
-        )
-        if (nowWatched) {
-          const updated = useLibrary.getState().shows[entry.showId]
-          if (updated && nextEpisode(updated) === null) {
-            fireConfetti()
-            showToast(`All caught up on ${entry.showName} 🎉`, '🏆')
-          } else if (updated && seasonComplete(updated, entry.season)) {
-            fireConfetti()
-            showToast(`Season ${entry.season} complete! 🎉`, '🏆')
-          } else if (updated && isSeasonFinale(updated, entry.season, entry.episode)) {
-            fireConfetti({ intensity: 'micro' })
-            showToast(`Season ${entry.season} finale watched 🎬`, '🏁')
-          } else if (updated && isSeriesPremiere(updated, entry.season, entry.episode)) {
-            fireConfetti({ intensity: 'micro' })
-            showToast(`${entry.showName} — series premiere! 🎉`, '🎬')
-          } else if (updated && isSeasonPremiere(updated, entry.season, entry.episode)) {
-            fireConfetti({ intensity: 'micro' })
-            showToast(`Season ${entry.season} premiere 🎬`, '🎬')
-          }
-        }
-      }}
+      onClick={handleClick}
     >
       ✓
     </button>
   )
 }
 
-function EpisodeRow({ entry }: { entry: UpcomingEntry }) {
+function EpisodeRow({
+  entry,
+  onOpenSheet,
+}: {
+  entry: UpcomingEntry
+  onOpenSheet: (info: SheetInfo) => void
+}) {
   const badge = badgeFor(entry)
   return (
     <div className="upcoming-row">
@@ -200,6 +360,10 @@ function EpisodeRow({ entry }: { entry: UpcomingEntry }) {
       </Link>
       <div className="upcoming-info">
         <div className="upcoming-toprow">
+          <span className="upcoming-airtime" title="Approx. local air time (network default)">
+            {entry.airTime}
+          </span>
+          {entry.network && <span className="upcoming-net-badge">{entry.network}</span>}
           <Link className="upcoming-show-pill" to={`/show/${entry.showId}`}>
             <span className="upcoming-pill-name">{entry.showName}</span>
             <span className="upcoming-pill-arrow" aria-hidden="true">
@@ -221,7 +385,6 @@ function EpisodeRow({ entry }: { entry: UpcomingEntry }) {
         <div className="upcoming-ep-title">{isTba(entry) ? 'TBA' : entry.epName}</div>
       </div>
       <div className="upcoming-when">
-        {entry.network && <span className="chip upcoming-network">{entry.network}</span>}
         <span
           className={`chip upcoming-days${entry.days === 0 ? ' today' : ''}${
             entry.days < 0 ? ' past' : ''
@@ -229,7 +392,7 @@ function EpisodeRow({ entry }: { entry: UpcomingEntry }) {
         >
           {countdownLabel(entry.days)}
         </span>
-        {entry.recent && <CheckButton entry={entry} />}
+        {entry.recent && <CheckButton entry={entry} onOpenSheet={onOpenSheet} />}
       </div>
     </div>
   )
@@ -319,6 +482,9 @@ export default function Upcoming() {
   const [filters, setFilters] = useState<FilterPrefs>(loadFilters)
   useEffect(() => saveFilters(filters), [filters])
 
+  // Deep-react EpisodeSheet opened by check-offs (unified check path).
+  const [sheet, setSheet] = useState<SheetInfo | null>(null)
+
   useEffect(() => {
     let cancelled = false
     const ids = followKey ? followKey.split(',').map(Number) : []
@@ -361,6 +527,7 @@ export default function Upcoming() {
                 episode: next.episode_number,
                 epName: next.name,
                 airDate: next.air_date,
+                airTime: airTimeFor(network),
                 days,
                 network,
                 sample: false,
@@ -381,6 +548,7 @@ export default function Upcoming() {
                 episode: last.episode_number,
                 epName: last.name,
                 airDate: last.air_date,
+                airTime: airTimeFor(network),
                 days,
                 network,
                 sample: false,
@@ -405,6 +573,7 @@ export default function Upcoming() {
                 episode: ep.episode_number,
                 epName: ep.name,
                 airDate: ep.air_date,
+                airTime: airTimeFor(s.networks[0]?.name),
                 days: daysFromToday(ep.air_date),
                 network: s.networks[0]?.name,
                 sample: true,
@@ -468,6 +637,12 @@ export default function Upcoming() {
     if (!entries) return []
     const visible = entries.filter((e) => {
       if (filters.hideTba && isTba(e)) return false
+      if (
+        filters.hideWatched &&
+        shows[e.showId]?.watched[episodeKey(e.season, e.episode)]
+      ) {
+        return false
+      }
       if (activeNetwork && e.network !== activeNetwork) return false
       return true
     })
@@ -479,7 +654,7 @@ export default function Upcoming() {
       else out.push({ label, items: [e] })
     }
     return out
-  }, [entries, filters.hideTba, activeNetwork])
+  }, [entries, filters.hideTba, filters.hideWatched, shows, activeNetwork])
 
   // Single-select: tapping the active network clears it back to "All".
   const selectNetwork = (n: string) =>
@@ -502,21 +677,23 @@ export default function Upcoming() {
       </p>
 
       {showEmptyState ? (
-        <div className="empty-state card">
-          <div className="big">📡</div>
-          <div style={{ fontWeight: 700, fontSize: 17, color: 'var(--text)', marginBottom: 6 }}>
-            Nothing on the calendar yet
+        <div className="empty-state card upcoming-empty">
+          <div className="upcoming-popcorn" aria-hidden="true">
+            <span className="upcoming-popcorn-pop pop1">🍿</span>
+            <span className="upcoming-popcorn-box">🍿</span>
+            <span className="upcoming-popcorn-pop pop2">🍿</span>
           </div>
+          <div className="upcoming-empty-title">Your upcoming list is empty!</div>
           <p style={{ maxWidth: 420, margin: '0 auto' }}>
             When you follow shows, their upcoming episodes land on this schedule so you never
             miss an air date. Find something to track and hit follow.
           </p>
-          <div style={{ marginTop: 18, display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <div className="upcoming-empty-cta">
             <Link className="btn primary" to="/search">
-              Search shows
+              BROWSE ALL SHOWS
             </Link>
-            <Link className="btn" to="/">
-              Browse trending
+            <Link className="btn primary" to="/search">
+              BROWSE ALL MOVIES
             </Link>
           </div>
         </div>
@@ -555,6 +732,15 @@ export default function Upcoming() {
               >
                 Hide TBA
               </button>
+              <button
+                className={`chip upcoming-filter upcoming-filter-tba${
+                  filters.hideWatched ? ' on' : ''
+                }`}
+                aria-pressed={filters.hideWatched}
+                onClick={() => setFilters((f) => ({ ...f, hideWatched: !f.hideWatched }))}
+              >
+                Hide watched
+              </button>
             </div>
           )}
 
@@ -578,7 +764,11 @@ export default function Upcoming() {
                 </h2>
                 <div className="upcoming-list stagger">
                   {g.items.map((e) => (
-                    <EpisodeRow key={`${e.showId}:s${e.season}e${e.episode}`} entry={e} />
+                    <EpisodeRow
+                      key={`${e.showId}:s${e.season}e${e.episode}`}
+                      entry={e}
+                      onOpenSheet={setSheet}
+                    />
                   ))}
                 </div>
               </section>
@@ -613,6 +803,8 @@ export default function Upcoming() {
           ))}
         </div>
       )}
+
+      {sheet && <EpisodeSheet {...sheet} onClose={() => setSheet(null)} />}
     </div>
   )
 }

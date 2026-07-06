@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 
-export type ConfettiIntensity = 'full' | 'micro'
+export type ConfettiIntensity = 'full' | 'micro' | 'sparkle'
 
 interface BurstSpec {
   id: number
@@ -17,24 +17,44 @@ type Listener = (spec: BurstSpec) => void
 
 let listener: Listener | null = null
 let nextBurstId = 1
+// Guard against rapid-fire calls (e.g. a fast series of check-offs): while a
+// burst is on screen we ignore new requests rather than stacking overlapping
+// hosts. `busyUntil` is a wall-clock deadline so the guard self-clears even if
+// the host unmounts without notifying us.
+let busyUntil = 0
 
 /**
  * Fire a confetti burst (no-op if no host is mounted or reduced motion is on).
  * `intensity: 'micro'` is a smaller, faster celebration (~900ms) for the many
- * everyday check-off moments (premieres, finales, every-10th milestone); the
- * default 'full' burst stays reserved for big completions.
+ * everyday check-off moments (premieres, finales, every-10th milestone);
+ * `'sparkle'` is a tiny 12-particle twinkle (~700ms) for lightweight feedback;
+ * the default 'full' burst stays reserved for big completions.
+ *
+ * Safe to call rapidly: while a burst is already playing, extra calls are
+ * ignored (rather than stacking) until the active burst finishes.
  */
 export function fireConfetti(opts?: { intensity?: ConfettiIntensity }) {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  listener?.({ id: nextBurstId++, intensity: opts?.intensity ?? 'full' })
+  const now = Date.now()
+  if (now < busyUntil) return // a burst is already on screen — ignore
+  const intensity = opts?.intensity ?? 'full'
+  busyUntil = now + BURST_MS[intensity]
+  listener?.({ id: nextBurstId++, intensity })
 }
 
 const COLORS = ['var(--accent)', 'var(--green)', '#f472b6'] // accent / green / pink
 
-const FULL_PARTICLE_COUNT = 36
-const MICRO_PARTICLE_COUNT = 16
-const FULL_BURST_MS = 1600
-const MICRO_BURST_MS = 900
+const PARTICLE_COUNT: Record<ConfettiIntensity, number> = {
+  full: 36,
+  micro: 16,
+  sparkle: 12,
+}
+
+const BURST_MS: Record<ConfettiIntensity, number> = {
+  full: 1600,
+  micro: 900,
+  sparkle: 700,
+}
 
 interface Particle {
   left: number // vw-ish percent across the viewport
@@ -47,16 +67,21 @@ interface Particle {
 }
 
 function makeParticles(intensity: ConfettiIntensity): Particle[] {
-  const micro = intensity === 'micro'
-  const count = micro ? MICRO_PARTICLE_COUNT : FULL_PARTICLE_COUNT
+  const count = PARTICLE_COUNT[intensity]
+  const small = intensity !== 'full'
+  const sparkle = intensity === 'sparkle'
   return Array.from({ length: count }, (_, i) => ({
     left: Math.random() * 100,
-    size: 6 + Math.random() * 6,
+    size: sparkle ? 4 + Math.random() * 4 : 6 + Math.random() * 6,
     color: COLORS[i % COLORS.length]!,
-    delay: Math.random() * (micro ? 0.12 : 0.25),
+    delay: Math.random() * (sparkle ? 0.08 : small ? 0.12 : 0.25),
     // delay + duration stays within the burst window for each intensity.
-    duration: micro ? 0.6 + Math.random() * 0.2 : 1.0 + Math.random() * 0.35,
-    drift: (Math.random() - 0.5) * (micro ? 110 : 160),
+    duration: sparkle
+      ? 0.45 + Math.random() * 0.18
+      : small
+        ? 0.6 + Math.random() * 0.2
+        : 1.0 + Math.random() * 0.35,
+    drift: (Math.random() - 0.5) * (sparkle ? 80 : small ? 110 : 160),
     rot: (Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 540),
   }))
 }
@@ -65,7 +90,7 @@ function Burst({ intensity, onDone }: { intensity: ConfettiIntensity; onDone: ()
   const particles = useMemo(() => makeParticles(intensity), [intensity])
 
   useEffect(() => {
-    const t = window.setTimeout(onDone, intensity === 'micro' ? MICRO_BURST_MS : FULL_BURST_MS)
+    const t = window.setTimeout(onDone, BURST_MS[intensity])
     return () => window.clearTimeout(t)
   }, [onDone, intensity])
 
@@ -141,5 +166,15 @@ export function ConfettiHost() {
   }, [])
 
   if (burst == null) return null
-  return <Burst key={burst.id} intensity={burst.intensity} onDone={() => setBurst(null)} />
+  return (
+    <Burst
+      key={burst.id}
+      intensity={burst.intensity}
+      onDone={() => {
+        // Clear the busy guard so a subsequent celebration can fire immediately.
+        busyUntil = 0
+        setBurst(null)
+      }}
+    />
+  )
 }

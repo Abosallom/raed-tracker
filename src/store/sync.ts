@@ -36,7 +36,8 @@ import { isAbsorbingCrossTabWrite, useLibrary } from './library'
  * Sync metadata: tombstones for deletions and last-writer timestamps for
  * value fields. Keys are namespaced strings, e.g. `show:123`, `ep:123:s1e2`,
  * `emo:123:s1e2`, `emo:m:456`, `movie:456`, `movie-watched:456`,
- * `fav:123`, `fav:m:456`, `wl:tv:123`, `comment:c_1`, `like:c_1`, `profile`.
+ * `fav:123`, `fav:m:456`, `rate:123`, `rate:m:456`, `follow:userId`,
+ * `listdesc:l_1`, `wl:tv:123`, `comment:c_1`, `like:c_1`, `profile`.
  */
 export interface SyncMeta {
   /** key -> ISO time the item/field was deleted or cleared. */
@@ -54,6 +55,8 @@ export interface LibraryData {
   profile: Profile
   /** Custom lists; absent on docs written by older versions. */
   lists?: UserList[]
+  /** Followed social user ids; absent on docs written by older versions. */
+  following?: string[]
   /** Sync metadata; absent on docs written by older versions. */
   sync?: SyncMeta
 }
@@ -209,6 +212,12 @@ function recordChanges(
     if (p.snapshot !== n.snapshot) touch(`snap:${id}`)
     if ((p.paused ?? false) !== (n.paused ?? false)) touch(`pause:${id}`)
     if ((p.favorite ?? false) !== (n.favorite ?? false)) touch(`fav:${id}`)
+    // Rating LWW: a new/changed value touches, a cleared value tombstones so
+    // the clear cannot be resurrected by a remote copy still holding a rating.
+    if (p.rating !== n.rating) {
+      if (n.rating === undefined) kill(`rate:${id}`)
+      else touch(`rate:${id}`)
+    }
     for (const [key, pr] of Object.entries(p.watched ?? {})) {
       const nr = n.watched?.[key]
       if (!nr) kill(`ep:${id}:${key}`)
@@ -239,6 +248,10 @@ function recordChanges(
     }
     if (p === n) continue
     if ((p.favorite ?? false) !== (n.favorite ?? false)) touch(`fav:m:${id}`)
+    if (p.rating !== n.rating) {
+      if (n.rating === undefined) kill(`rate:m:${id}`)
+      else touch(`rate:m:${id}`)
+    }
     if (p.watched && !n.watched) kill(`movie-watched:${id}`)
     if (!p.watched && n.watched) revive(`movie-watched:${id}`)
     if (p.watched?.emotion && n.watched && !n.watched.emotion) kill(`emo:m:${id}`)
@@ -280,6 +293,8 @@ function recordChanges(
     }
     if (p === n) continue
     if (p.name !== n.name) touch(`listname:${id}`)
+    // Description is LWW on its own touch-time, same pattern as the name.
+    if ((p.description ?? '') !== (n.description ?? '')) touch(`listdesc:${id}`)
     const nItems = new Set(n.items.map((it) => `${it.type}:${it.id}`))
     const pItems = new Set(p.items.map((it) => `${it.type}:${it.id}`))
     for (const k of pItems) {
@@ -288,6 +303,17 @@ function recordChanges(
     for (const k of nItems) {
       if (!pItems.has(k)) touch(`li:${id}:${k}`)
     }
+  }
+
+  // Following is a set of user ids; adds touch, removes tombstone so an
+  // unfollow on one device is not resurrected by the remote union.
+  const pFollow = new Set(prev.following ?? [])
+  const nFollow = new Set(next.following ?? [])
+  for (const uid of pFollow) {
+    if (!nFollow.has(uid)) kill(`follow:${uid}`)
+  }
+  for (const uid of nFollow) {
+    if (!pFollow.has(uid)) revive(`follow:${uid}`)
   }
 
   if (prev.profile !== next.profile) touch('profile')
@@ -325,6 +351,7 @@ export function noteLibraryReplaced(next: {
   comments?: Comment[]
   profile?: Profile
   lists?: UserList[]
+  following?: string[]
 }) {
   const prev = pickData()
   recordChanges(prev, {
@@ -336,6 +363,8 @@ export function noteLibraryReplaced(next: {
     // Backups from older versions have no lists; keep the current ones rather
     // than tombstoning every list the backup predates.
     lists: next.lists ?? prev.lists,
+    // Same for following: older backups omit it, so keep the current set.
+    following: next.following ?? prev.following,
   }, { reviveAll: true })
 }
 
@@ -348,6 +377,7 @@ function pickData(): LibraryData {
     comments: s.comments,
     profile: s.profile,
     lists: s.lists,
+    following: s.following,
     sync: loadMeta(),
   }
 }
@@ -443,12 +473,16 @@ function mergeShows(
         : ls.snapshot.totalEpisodes >= rs.snapshot.totalEpisodes
           ? ls.snapshot
           : rs.snapshot
+    // Rating is LWW on rate:<id>; the tombstone-aware clear is handled later
+    // by applyDeletions, so here we just pick the surviving value.
+    const rating = pickLww(`rate:${id}`, ls.rating, rs.rating, localMeta, remoteMeta)
     out[id] = {
       snapshot,
       addedAt: earlier(ls.addedAt, rs.addedAt),
       watched,
       favorite,
       paused,
+      ...(rating !== undefined ? { rating } : {}),
     }
   }
   return out
@@ -475,6 +509,7 @@ function mergeMovies(
     const frt = remoteMeta.set[fk] ?? ''
     const favorite =
       flt || frt ? (frt > flt ? rm.favorite : lm.favorite) : lm.favorite || rm.favorite
+    const rating = pickLww(`rate:m:${id}`, lm.rating, rm.rating, localMeta, remoteMeta)
     out[id] = {
       snapshot: lm.snapshot,
       addedAt: earlier(lm.addedAt, rm.addedAt),
@@ -483,6 +518,7 @@ function mergeMovies(
           ? mergeWatchRecord(lm.watched, rm.watched, `emo:m:${id}`, `fc:m:${id}`, localMeta, remoteMeta)
           : lm.watched ?? rm.watched,
       favorite,
+      ...(rating !== undefined ? { rating } : {}),
     }
   }
   return out
@@ -546,6 +582,12 @@ function mergeLists(
     const lt = localMeta.set[nk] ?? ''
     const rt = remoteMeta.set[nk] ?? ''
     const name = lt > rt ? ll.name : rl.name
+    // Description is LWW on listdesc:<id>, same tie-break as the name (remote
+    // wins ties / untouched docs). undefined when neither side has one.
+    const dk = `listdesc:${ll.id}`
+    const dlt = localMeta.set[dk] ?? ''
+    const drt = remoteMeta.set[dk] ?? ''
+    const description = dlt > drt ? ll.description : rl.description
     // Items: union per list, earliest addedAt wins for duplicates.
     const items = new Map<string, ListItem>()
     for (const it of [...rl.items, ...ll.items]) {
@@ -558,12 +600,37 @@ function mergeLists(
       name,
       items: [...items.values()].sort((a, b) => (a.addedAt < b.addedAt ? -1 : 1)),
       createdAt: earlier(ll.createdAt, rl.createdAt),
+      ...(description !== undefined ? { description } : {}),
     })
   }
   for (const rl of remote) {
     if (!seen.has(rl.id)) out.push(rl)
   }
   return out.sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
+}
+
+/**
+ * Union of followed user ids across both devices, minus anything a
+ * `follow:<userId>` tombstone marks as unfollowed. The tombstone is honoured
+ * unless the follow was re-added afterwards (isDeleted's set-time escape hatch,
+ * armed by recordChanges' revive() on a re-follow) — so an unfollow on one
+ * device is not resurrected by the other device's stale copy, in either merge
+ * direction.
+ */
+function mergeFollowing(
+  local: string[] | undefined,
+  remote: string[] | undefined,
+  meta: SyncMeta,
+): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const uid of [...(local ?? []), ...(remote ?? [])]) {
+    if (seen.has(uid)) continue
+    seen.add(uid)
+    if (isDeleted(meta, `follow:${uid}`)) continue
+    out.push(uid)
+  }
+  return out
 }
 
 function mergeProfile(
@@ -615,7 +682,14 @@ function applyDeletions(data: LibraryData, meta: SyncMeta): LibraryData {
       }
       watched[key] = out
     }
-    shows[id] = changed ? { ...s, watched } : s
+    // Rating clear tombstone: a rate:<id> kill strips a rating still held by
+    // the other side, unless it was re-set afterwards (isDeleted checks set).
+    if (s.rating !== undefined && isDeleted(meta, `rate:${id}`)) {
+      const { rating: _r, ...rest } = s
+      shows[id] = changed ? { ...rest, watched } : rest
+    } else {
+      shows[id] = changed ? { ...s, watched } : s
+    }
   }
 
   const movies: Record<number, TrackedMovie> = {}
@@ -633,6 +707,10 @@ function applyDeletions(data: LibraryData, meta: SyncMeta): LibraryData {
     if (out.watched?.favoriteCast && isDeleted(meta, `fc:m:${id}`)) {
       const { favoriteCast: _fc, ...rest } = out.watched
       out = { ...out, watched: rest }
+    }
+    if (out.rating !== undefined && isDeleted(meta, `rate:m:${id}`)) {
+      const { rating: _r, ...rest } = out
+      out = rest
     }
     movies[id] = out
   }
@@ -697,6 +775,9 @@ export function mergeLibraries(local: LibraryData, remote: LibraryData): Library
     profile: mergeProfile(l.profile, r.profile, localMeta, remoteMeta),
     // Older docs have no lists; treat as empty so they merge cleanly.
     lists: mergeLists(l.lists ?? [], r.lists ?? [], localMeta, remoteMeta),
+    // Union of follows across devices, minus unfollow tombstones. Uses the
+    // pre-applyDeletions copies (applyDeletions leaves following untouched).
+    following: mergeFollowing(local.following, remote.following, meta),
     sync: meta,
   }
 }

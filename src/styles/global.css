@@ -10,9 +10,11 @@
   /* 4.7:1+ on every dark surface incl. --bg-elev-2 (#737373 was 3.4–3.9:1 on
      cards — below WCAG AA for the small text this token is used for) */
   --text-faint: #8a8a8a;
-  --accent: #fbbf24;
-  --accent-hover: #fcd34d;
-  --accent-soft: rgba(251, 191, 36, 0.14);
+  /* Purer TV-forward yellow; --yellow stays amber for star ratings and the
+     NEW badge so they read independently of the accent. */
+  --accent: #ffd614;
+  --accent-hover: #ffe14d;
+  --accent-soft: rgba(255, 214, 20, 0.14);
   --green: #34d399;
   --yellow: #fbbf24;
   --red: #f87171;

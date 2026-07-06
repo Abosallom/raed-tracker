@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import type { Emotion, SearchResult, SeasonDetail, ShowDetail } from '../types'
 import { EMOTIONS, episodeKey } from '../types'
+import { compactNumber, watchedByCount, watcherCluster } from '../api/social'
 import {
   backdropUrl,
   getRecommendations,
@@ -39,6 +40,7 @@ import { CommentsSection } from '../components/CommentsSection'
 import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
 import { fireConfetti } from '../components/Confetti'
+import EpisodeSheet from '../components/EpisodeSheet'
 import './show-detail.css'
 
 function epCode(season: number, episode: number): string {
@@ -143,6 +145,186 @@ function SeasonSkeleton() {
   )
 }
 
+/** Stacked emoji-avatar cluster + "Watched by +NNN" — a chip-sized social
+    proof cue on the hero. Links nowhere (yet). */
+function WatchedByChip({ mediaId, voteCount }: { mediaId: number; voteCount?: number }) {
+  const cluster = watcherCluster(mediaId, 3)
+  const total = watchedByCount(mediaId, voteCount)
+  return (
+    <span className="detail-watchedby" title={`Watched by ${total.toLocaleString()} people`}>
+      <span className="detail-watchedby-avatars" aria-hidden="true">
+        {cluster.map((u, i) => (
+          <span key={u.id} className="detail-watchedby-avatar" style={{ zIndex: cluster.length - i }}>
+            {u.avatar}
+          </span>
+        ))}
+      </span>
+      <span className="detail-watchedby-label">Watched by +{compactNumber(total)}</span>
+    </span>
+  )
+}
+
+/** 10-star personal rating row (shown when the title is tracked). Tapping a
+    star sets that rating; tapping the same star again clears it. */
+function StarRating({
+  value,
+  onRate,
+}: {
+  value: number | undefined
+  onRate: (rating: number | undefined) => void
+}) {
+  const [hover, setHover] = useState(0)
+  const [popped, setPopped] = useState(0)
+  return (
+    <div className="detail-rating" role="group" aria-label="Your rating out of 10">
+      <span className="detail-rating-label">Your rating</span>
+      <div className="detail-rating-stars" onMouseLeave={() => setHover(0)}>
+        {Array.from({ length: 10 }, (_, i) => {
+          const n = i + 1
+          const active = (hover || value || 0) >= n
+          return (
+            <button
+              key={n}
+              type="button"
+              className={`detail-rating-star${active ? ' on' : ''}${popped === n ? ' pop' : ''}`}
+              aria-label={`Rate ${n} of 10`}
+              aria-pressed={value === n}
+              onMouseEnter={() => setHover(n)}
+              onClick={() => {
+                const next = value === n ? undefined : n
+                onRate(next)
+                setPopped(n)
+                window.setTimeout(() => setPopped(0), 260)
+              }}
+            >
+              ★
+            </button>
+          )
+        })}
+      </div>
+      <span className="detail-rating-value">{value ? `${value}/10` : '—'}</span>
+    </div>
+  )
+}
+
+/** Slide-up "Add to list" sheet: toggle the title in/out of existing lists,
+    or quick-create a new list. Self-contained (mirrors EpisodeSheet/confirm). */
+function AddToListSheet({
+  item,
+  onClose,
+}: {
+  item: { type: 'tv' | 'movie'; id: number; name: string; poster_path: string | null }
+  onClose: () => void
+}) {
+  const lists = useLibrary((s) => s.lists)
+  const toggleListItem = useLibrary((s) => s.toggleListItem)
+  const createList = useLibrary((s) => s.createList)
+  const [newName, setNewName] = useState('')
+  const [closing, setClosing] = useState(false)
+  const sheetRef = useRef<HTMLDivElement>(null)
+
+  const close = () => {
+    setClosing(true)
+    window.setTimeout(onClose, 200)
+  }
+
+  useEffect(() => {
+    sheetRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const inList = (id: string) =>
+    lists.find((l) => l.id === id)?.items.some((i) => i.type === item.type && i.id === item.id) ??
+    false
+
+  const handleToggle = (listId: string, listName: string) => {
+    const was = inList(listId)
+    toggleListItem(listId, item)
+    showToast(was ? `Removed from ${listName}` : `Added to ${listName}`, was ? '↩️' : '📋')
+  }
+
+  const handleCreate = () => {
+    const name = newName.trim()
+    if (!name) return
+    const listId = createList(name)
+    toggleListItem(listId, item)
+    setNewName('')
+    showToast(`Added to ${name}`, '📋')
+  }
+
+  return (
+    <div className={`addlist-backdrop${closing ? ' closing' : ''}`} onClick={close}>
+      <div
+        ref={sheetRef}
+        tabIndex={-1}
+        className={`addlist-sheet${closing ? ' closing' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Add ${item.name} to a list`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="addlist-grip" aria-hidden="true" />
+        <div className="addlist-head">
+          <div className="addlist-title">Add to list</div>
+          <button className="addlist-close" onClick={close} aria-label="Close" title="Close">
+            ✕
+          </button>
+        </div>
+
+        {lists.length > 0 ? (
+          <div className="addlist-items">
+            {lists.map((l) => {
+              const checked = inList(l.id)
+              return (
+                <button
+                  key={l.id}
+                  className={`addlist-item${checked ? ' checked' : ''}`}
+                  aria-pressed={checked}
+                  onClick={() => handleToggle(l.id, l.name)}
+                >
+                  <span className="addlist-check" aria-hidden="true">
+                    {checked ? '✓' : ''}
+                  </span>
+                  <span className="addlist-name">{l.name}</span>
+                  <span className="addlist-count">{l.items.length}</span>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="addlist-empty">No lists yet — create one below.</div>
+        )}
+
+        <div className="addlist-create">
+          <input
+            className="addlist-input"
+            type="text"
+            value={newName}
+            placeholder="New list name…"
+            maxLength={60}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreate()
+            }}
+          />
+          <button
+            className="btn primary small"
+            disabled={!newName.trim()}
+            onClick={handleCreate}
+          >
+            Create
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ShowDetailPage() {
   const { id: idParam } = useParams()
   const id = Number(idParam)
@@ -173,6 +355,16 @@ export default function ShowDetailPage() {
   const markShowWatched = useLibrary((s) => s.markShowWatched)
   const addToWatchlist = useLibrary((s) => s.addToWatchlist)
   const removeFromWatchlist = useLibrary((s) => s.removeFromWatchlist)
+  const setShowRating = useLibrary((s) => s.setShowRating)
+  const reactionPrompt = useLibrary((s) => s.reactionPrompt)
+
+  // Post-check reaction sheet (same one the queue uses) + add-to-list sheet.
+  const [sheet, setSheet] = useState<{
+    season: number
+    episode: number
+    episodeTitle?: string
+  } | null>(null)
+  const [addListOpen, setAddListOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -363,30 +555,41 @@ export default function ShowDetailPage() {
     return true
   }
 
-  const handleToggleEpisode = (s: number, e: number) => {
+  const handleToggleEpisode = (s: number, e: number, episodeTitle?: string) => {
     const wasWatched = Boolean(tracked?.watched[episodeKey(s, e)])
     ensureFollowed()
     toggleEpisode(id, s, e)
     if (wasWatched) {
+      // Unchecking stays silent — no reaction sheet.
       showToast(`${epCode(s, e)} unmarked`, '↩️')
       return
     }
     showToast(`${epCode(s, e)} marked watched ✓`, '🎬')
     const big = celebrateIfComplete(s)
-    if (big) return
     // Micro-burst on the premieres/finales users actually reach.
     const show = useLibrary.getState().shows[id]
-    if (!show) return
-    if (isSeasonFinale(show, s, e)) {
-      fireConfetti({ intensity: 'micro' })
-      showToast(`Season ${s} finale watched 🎬`, '🏁')
-    } else if (isSeriesPremiere(show, s, e)) {
-      fireConfetti({ intensity: 'micro' })
-      showToast(`${detail.name} — series premiere! 🎉`, '🎬')
-    } else if (isSeasonPremiere(show, s, e)) {
-      fireConfetti({ intensity: 'micro' })
-      showToast(`Season ${s} premiere 🎬`, '🎬')
+    let milestone = big
+    if (!big && show) {
+      if (isSeasonFinale(show, s, e)) {
+        fireConfetti({ intensity: 'micro' })
+        showToast(`Season ${s} finale watched 🎬`, '🏁')
+        milestone = true
+      } else if (isSeriesPremiere(show, s, e)) {
+        fireConfetti({ intensity: 'micro' })
+        showToast(`${detail.name} — series premiere! 🎉`, '🎬')
+        milestone = true
+      } else if (isSeasonPremiere(show, s, e)) {
+        fireConfetti({ intensity: 'micro' })
+        showToast(`Season ${s} premiere 🎬`, '🎬')
+        milestone = true
+      }
     }
+    // Fire the same deep-react EpisodeSheet the queue uses, honoring the store
+    // pref: 'always' every check, 'milestones' only premieres/finales/completions,
+    // 'never' skips.
+    const openSheet =
+      reactionPrompt === 'always' || (reactionPrompt === 'milestones' && milestone)
+    if (openSheet) setSheet({ season: s, episode: e, episodeTitle })
   }
 
   const handleMarkSeason = (s: number) => {
@@ -442,6 +645,7 @@ export default function ShowDetailPage() {
               {year && <span className="chip">{year}</span>}
               {detail.status && <span className="chip">{detail.status}</span>}
               <Rating value={detail.vote_average} />
+              <WatchedByChip mediaId={id} />
               <span className="chip">
                 {detail.number_of_seasons} season{detail.number_of_seasons === 1 ? '' : 's'} ·{' '}
                 {detail.number_of_episodes} ep
@@ -533,6 +737,9 @@ export default function ShowDetailPage() {
                   {tracked.paused ? '▶ Resume' : '⏸ Pause'}
                 </button>
               )}
+              <button className="btn" onClick={() => setAddListOpen(true)} title="Add to a list">
+                📋 Add to list
+              </button>
               {trailerKey && (
                 <a
                   className="btn show-detail-trailer-btn"
@@ -606,6 +813,14 @@ export default function ShowDetailPage() {
             )}
           </div>
           <ProgressBar value={progress} />
+          <StarRating
+            value={tracked.rating}
+            onRate={(rating) => {
+              setShowRating(id, rating)
+              if (rating) showToast(`Rated ${rating}/10 ★`, '⭐')
+              else showToast('Rating cleared', '↩️')
+            }}
+          />
         </div>
       )}
 
@@ -723,7 +938,9 @@ export default function ShowDetailPage() {
                     <button
                       className={`show-detail-ep-toggle${isWatched ? ' on' : ''}`}
                       title={isWatched ? 'Mark unwatched' : 'Mark watched'}
-                      onClick={() => handleToggleEpisode(ep.season_number, ep.episode_number)}
+                      onClick={() =>
+                        handleToggleEpisode(ep.season_number, ep.episode_number, ep.name)
+                      }
                     >
                       ✓
                     </button>
@@ -792,6 +1009,24 @@ export default function ShowDetailPage() {
               : `Continue ${epCode(upNext.season, upNext.episode)} →`}
           </button>
         </div>
+      )}
+
+      {sheet && (
+        <EpisodeSheet
+          showId={id}
+          showName={detail.name}
+          season={sheet.season}
+          episode={sheet.episode}
+          episodeTitle={sheet.episodeTitle}
+          onClose={() => setSheet(null)}
+        />
+      )}
+
+      {addListOpen && (
+        <AddToListSheet
+          item={{ type: 'tv', id, name: detail.name, poster_path: detail.poster_path }}
+          onClose={() => setAddListOpen(false)}
+        />
       )}
     </div>
   )

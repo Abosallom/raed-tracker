@@ -235,6 +235,19 @@
   transition: height 0.4s ease;
 }
 
+/* Grow-in: bars scale up from the baseline when the chart scrolls into view.
+   Default (pre-view) state is collapsed; `.grown` on the container releases
+   them, staggered by inline transition-delay. */
+.stats-weeks-bar.grow {
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.stats-weeks.grown .stats-weeks-bar.grow {
+  transform: scaleY(1);
+}
+
 .stats-weeks-bar.current,
 .stats-weeks-bar.upcoming {
   background: linear-gradient(180deg, var(--accent-hover), var(--accent));
@@ -425,6 +438,126 @@
   font-weight: 700;
 }
 
+/* ---------- streak dot strip ---------- */
+
+.stats-streak-strip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 2px;
+}
+
+.stats-streak-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  /* Fill-in sequence: dots scale + fade from the resting (dim) state into their
+     final color once the strip is in view, staggered by inline delay. */
+  transform: scale(0.4);
+  opacity: 0;
+  transition: transform 0.3s ease, opacity 0.3s ease, background 0.3s ease,
+    border-color 0.3s ease;
+}
+
+.stats-streak-strip.filled .stats-streak-dot {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.stats-streak-dot.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.stats-streak-dot.today {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- voted ratings (P7a) ---------- */
+
+.stats-ratings-headline {
+  margin-bottom: 4px;
+}
+
+.stats-ratings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.stats-rating-row {
+  display: grid;
+  grid-template-columns: 1fr 88px 68px;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats-rating-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s;
+}
+
+.stats-rating-name:hover {
+  color: var(--accent-hover);
+}
+
+.stats-rating-track {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  overflow: hidden;
+}
+
+.stats-rating-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-hover), var(--accent));
+  transition: width 0.5s ease;
+}
+
+.stats-rating-value {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.stats-rating-star {
+  color: var(--yellow);
+}
+
+/* ---------- badge categories (P7b) ---------- */
+
+.stats-badges-wrap {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.stats-badges-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 800;
+  margin: 4px 0 0;
+}
+
+.stats-badges-card {
+  margin-top: 0;
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 900px) {
@@ -435,5 +568,34 @@
 
   .stats-weeks {
     gap: 3px;
+  }
+}
+
+@media (max-width: 460px) {
+  .stats-rating-row {
+    grid-template-columns: 1fr 60px 60px;
+    gap: 7px;
+  }
+}
+
+/* ---------- reduced motion: render final states instantly ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .stats-weeks-bar,
+  .stats-weeks-bar.grow,
+  .stats-streak-dot,
+  .stats-rating-fill,
+  .stats-bar-fill,
+  .stats-badge-hex {
+    transition: none !important;
+  }
+
+  .stats-weeks-bar.grow {
+    transform: none !important;
+  }
+
+  .stats-streak-dot {
+    transform: none !important;
+    opacity: 1 !important;
   }
 }

@@ -85,23 +85,32 @@
   }
 
   .tabbar-icon {
-    font-size: 20px;
-    line-height: 1.1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
     transition: transform 0.15s;
   }
 
+  /* Line icons: fixed 24px box, stroke inherits the tab's color so the active
+     tab tints accent automatically. */
+  .tabbar-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+
   .tabbar-label {
-    font-size: 10px;
+    font-size: 9.5px;
     font-weight: 600;
-    letter-spacing: 0.1px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
   }
 
-  /* Five tabs at 375px: shave the active-indicator width and letter spacing
-     so no label truncates mid-word. */
+  /* Four tabs: keep the active indicator centered over the icon. */
   .tabbar-item.active::before {
     width: 26px;
   }
@@ -114,11 +123,38 @@
     font-weight: 800;
     letter-spacing: -0.4px;
     margin: -4px 0 16px;
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
   }
 
   .mobile-brand span {
     color: var(--accent);
   }
+}
+
+/* ---------- sidebar line icons (desktop) ----------
+   Fixed-size box keeps every label left edge aligned regardless of glyph.
+   stroke=currentColor means .nav-item.active (accent color) tints the icon
+   with no extra rules. */
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  line-height: 0;
+}
+
+.nav-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* Label takes the remaining space so the badge/dot (margin-left:auto) hug the
+   right edge exactly as before. */
+.nav-item .nav-label {
+  min-width: 0;
 }
 
 /* ---------- freshness badges (both themes via variables) ---------- */
@@ -194,30 +230,53 @@
   border: 2px solid var(--bg);
 }
 
-/* ---------- route transitions ---------- */
-
-/* In-app navigations (the common case): a near-instant fade that never dips
-   below fully-legible. Starting at opacity 0.6 with NO translateY means any
-   mid-animation frame is already readable — no more "ghost frame" where the
-   whole page renders at low opacity. fill-mode backwards (not both/forwards):
-   a persistent transform would make this wrapper the containing block for
-   position:fixed descendants (show-detail quickbar, episode sheet, profile
-   emoji backdrop). */
+/* ---------- route transitions ----------
+   Directional page-enter, keyed off data-transition (set in App.tsx from the
+   previous path + router navigation type):
+     fade         tab-to-tab: a fast, always-legible cross-fade.
+     push-detail  pushing into /show,/movie,/user,/list: slight slide-from-right.
+     back         browser back (POP): no motion — returning shouldn't "advance".
+     first        initial app mount: the fuller deliberate fade-up.
+   fill-mode is ALWAYS 'backwards', never both/forwards: a transform that
+   persisted to the final frame would make this wrapper the containing block
+   for position:fixed descendants (show-detail quickbar, episode sheet, profile
+   emoji backdrop) and break them. Backwards applies the from-frame only before
+   the animation starts, then the element settles to its untransformed self. */
 .page-enter {
-  animation: page-enter-fast 80ms ease-out backwards;
+  animation: page-fade 120ms ease-out backwards;
 }
 
-/* First app mount only: the fuller, more deliberate fade-up. */
-.page-enter[data-first] {
+.page-enter[data-transition='push-detail'] {
+  animation: page-slide-right 190ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+.page-enter[data-transition='back'] {
+  animation: none;
+}
+
+.page-enter[data-transition='first'] {
   animation: page-enter 180ms ease-out backwards;
 }
 
-@keyframes page-enter-fast {
+/* Fast cross-fade that never dips below fully legible: starting at opacity 0.6
+   with no translate means every mid-animation frame is already readable. */
+@keyframes page-fade {
   from {
     opacity: 0.6;
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes page-slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
@@ -232,6 +291,53 @@
   }
 }
 
+/* ---------- 404 / catch-all empty state ---------- */
+
+.notfound {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 12vh 20px 40px;
+  gap: 6px;
+}
+
+.notfound-emoji {
+  font-size: 72px;
+  line-height: 1;
+  margin-bottom: 8px;
+  animation: notfound-drift 5s ease-in-out infinite;
+}
+
+.notfound-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+}
+
+.notfound-sub {
+  color: var(--text-dim);
+  max-width: 340px;
+  margin-bottom: 20px;
+}
+
+.notfound-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@keyframes notfound-drift {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(4deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tabbar-item,
   .tabbar-icon {
@@ -241,7 +347,10 @@
     transform: none;
   }
   .page-enter,
-  .page-enter[data-first] {
+  .page-enter[data-transition] {
     animation: none !important;
+  }
+  .notfound-emoji {
+    animation: none;
   }
 }

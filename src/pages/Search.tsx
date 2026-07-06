@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { Link } from 'react-router-dom'
-import type { Genre, MediaType, SearchResult } from '../types'
+import type {
+  ActivityItem,
+  Genre,
+  MediaType,
+  SearchResult,
+  TrackedMovie,
+  TrackedShow,
+} from '../types'
+import { EMOTIONS } from '../types'
 import {
   backdropUrl,
   discoverByGenre,
@@ -9,6 +17,7 @@ import {
   getTrailerKey,
   isDemoMode,
   popularShows,
+  posterUrl,
   searchMulti,
   topRatedMovies,
   topRatedShows,
@@ -18,11 +27,19 @@ import {
 } from '../api/tmdb'
 import { useLibrary } from '../store/library'
 import { showToast } from '../components/toast'
-import { ErrorBox, PosterCard, SkeletonGrid, SkeletonRow } from '../components/shared'
+import { ErrorBox, PosterCard, SkeletonGrid, SkeletonRow, timeAgo } from '../components/shared'
+import {
+  compactNumber as compactNum,
+  generateActivityFeed,
+  watchedByCount,
+  watcherCluster,
+} from '../api/social'
+import type { GroupSort } from '../api/groups'
+import { GROUPS, loadJoined, saveJoined, sortGroups } from '../api/groups'
 import './search.css'
 
 type Filter = 'all' | MediaType
-type Tab = 'feed' | 'discover' | 'foryou' | 'genres'
+type Tab = 'feed' | 'discover' | 'groups' | 'activity'
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -33,8 +50,8 @@ const FILTERS: { key: Filter; label: string }[] = [
 const TABS: { key: Tab; label: string; emoji: string }[] = [
   { key: 'feed', label: 'Feed', emoji: '📡' },
   { key: 'discover', label: 'Discover', emoji: '🧭' },
-  { key: 'foryou', label: 'For you', emoji: '✨' },
-  { key: 'genres', label: 'Genres', emoji: '🎭' },
+  { key: 'groups', label: 'Groups', emoji: '👥' },
+  { key: 'activity', label: 'Activity', emoji: '✨' },
 ]
 
 // ---------- last active tab (sessionStorage, best-effort) ----------
@@ -44,7 +61,7 @@ const TAB_KEY = 'showtrackr_explore_tab'
 function loadTab(): Tab {
   try {
     const t = sessionStorage.getItem(TAB_KEY)
-    return t === 'feed' || t === 'discover' || t === 'foryou' || t === 'genres' ? t : 'feed'
+    return t === 'feed' || t === 'discover' || t === 'groups' || t === 'activity' ? t : 'feed'
   } catch {
     return 'feed'
   }
@@ -581,24 +598,59 @@ function BrowseBanner({ type, onClick }: { type: MediaType; onClick: () => void 
   )
 }
 
-function DiscoverTab({ onBrowse }: { onBrowse: (t: MediaType) => void }) {
+function DiscoverTab({
+  topGenres,
+  genreType,
+  onGenreType,
+  selectedGenre,
+  onSelectGenre,
+}: {
+  topGenres: string[]
+  genreType: MediaType
+  onGenreType: (t: MediaType) => void
+  selectedGenre: Genre | null
+  onSelectGenre: (g: Genre | null) => void
+}) {
   const trendTv = useCached<SearchResult[]>('trending:tv', trendingShows)
   const trendMv = useCached<SearchResult[]>('trending:movie', trendingMovies)
   const topTv = useCached<SearchResult[]>('top:tv', topRatedShows)
   const topMv = useCached<SearchResult[]>('top:movie', topRatedMovies)
+
+  // "Browse all" CTAs now just jump straight into the folded-in genre hub,
+  // pre-selecting the media type so the grid below is scrolled into view.
+  const jumpToGenreHub = (t: MediaType) => {
+    onGenreType(t)
+    onSelectGenre(null)
+  }
+
   return (
     <div className="fade-in">
       <ExploreRow title="🔥 Trending shows" res={trendTv} />
       <ExploreRow title="🍿 Trending movies" res={trendMv} />
-      <BrowseBanner type="tv" onClick={() => onBrowse('tv')} />
+      <BrowseBanner type="tv" onClick={() => jumpToGenreHub('tv')} />
       <ExploreRow title="🏆 Top rated shows" res={topTv} />
       <ExploreRow title="🎖️ Top rated movies" res={topMv} />
-      <BrowseBanner type="movie" onClick={() => onBrowse('movie')} />
+      <BrowseBanner type="movie" onClick={() => jumpToGenreHub('movie')} />
+
+      <ForYouSection topGenres={topGenres} />
+
+      <section className="discover-genre-hub">
+        <h2 className="section-title">🎭 Browse by genre</h2>
+        <GenresTab
+          type={genreType}
+          onType={(t) => {
+            onGenreType(t)
+            onSelectGenre(null)
+          }}
+          selected={selectedGenre}
+          onSelect={onSelectGenre}
+        />
+      </section>
     </div>
   )
 }
 
-// ---------- For you tab ----------
+// ---------- "For you" section (folded into Discover) ----------
 
 interface MatchedGenre {
   name: string
@@ -613,11 +665,15 @@ function GenreRow({ type, id, name }: MatchedGenre) {
   return <ExploreRow title={`Because you watch ${name}`} res={res} />
 }
 
-function ForYouTab({ topGenres }: { topGenres: string[] }) {
+/**
+ * "Because you watch …" rows for the current library's top genres. Renders
+ * nothing when there's no personalization signal — Discover already surfaces
+ * trending titles above this section, so there's no empty-state to show.
+ */
+function ForYouSection({ topGenres }: { topGenres: string[] }) {
   const needGenres = topGenres.length > 0
   const tvGenres = useCached<Genre[]>(needGenres ? 'genres:tv' : null, () => getGenres('tv'))
   const mvGenres = useCached<Genre[]>(needGenres ? 'genres:movie' : null, () => getGenres('movie'))
-  const listsLoaded = tvGenres.data != null && mvGenres.data != null
 
   // Map genre names from library snapshots to TMDB ids (tv list first, then movie).
   const matched = useMemo<MatchedGenre[]>(() => {
@@ -637,46 +693,262 @@ function ForYouTab({ topGenres }: { topGenres: string[] }) {
     return out
   }, [tvGenres.data, mvGenres.data, topGenres])
 
-  const needFallback = !needGenres || (listsLoaded && matched.length === 0)
-  const trendTv = useCached<SearchResult[]>(needFallback ? 'trending:tv' : null, trendingShows)
-  const trendMv = useCached<SearchResult[]>(needFallback ? 'trending:movie' : null, trendingMovies)
-
-  if (needFallback) {
-    return (
-      <div className="fade-in">
-        <div className="explore-foryou-empty">
-          <span className="explore-foryou-emoji">✨</span>
-          <div>
-            <b>Nothing personal yet</b>
-            <p>
-              Track a few shows or movies and this tab fills with rows tailored to your taste.
-              Meanwhile, here’s what everyone’s watching.
-            </p>
-          </div>
-        </div>
-        <ExploreRow title="🔥 Trending shows" res={trendTv} />
-        <ExploreRow title="🍿 Trending movies" res={trendMv} />
-      </div>
-    )
-  }
-
-  if (!listsLoaded) {
-    return (
-      <div aria-hidden="true">
-        <SkeletonRow />
-        <SkeletonRow />
-      </div>
-    )
-  }
+  if (!needGenres || matched.length === 0) return null
 
   return (
-    <div className="fade-in">
+    <section>
+      <h2 className="section-title">✨ For you</h2>
       <p className="explore-foryou-sub">
         Based on your top genres: {matched.map((m) => m.name).join(', ')}.
       </p>
       {matched.map((m) => (
         <GenreRow key={`${m.type}:${m.id}`} type={m.type} id={m.id} name={m.name} />
       ))}
+    </section>
+  )
+}
+
+// ---------- Activity tab ----------
+
+type FeedSource = {
+  mediaType: MediaType
+  mediaId: number
+  mediaName: string
+  poster_path: string | null
+}
+
+const KIND_VERB: Record<string, string> = {
+  watched: 'watched',
+  favorited: 'favorited',
+  commented: 'commented on',
+}
+
+function emotionEmoji(key: string | undefined): string | null {
+  if (!key) return null
+  return EMOTIONS.find((e) => e.key === key)?.emoji ?? null
+}
+
+function ActivityCard({
+  item,
+  voteCount,
+  delay,
+}: {
+  item: ActivityItem
+  voteCount?: number
+  delay: number
+}) {
+  const { user } = item
+  const to = item.mediaType === 'tv' ? `/show/${item.mediaId}` : `/movie/${item.mediaId}`
+  const poster = posterUrl(item.poster_path, 'w185')
+  const cluster = watcherCluster(item.mediaId, 3)
+  const watchers = watchedByCount(item.mediaId, voteCount)
+  const reaction = emotionEmoji(item.reaction)
+
+  const epLabel =
+    item.kind === 'watched' && item.mediaType === 'tv' && item.season && item.episode
+      ? `S${item.season}E${item.episode} of `
+      : ''
+  const verb = KIND_VERB[item.kind] ?? 'watched'
+
+  return (
+    <article className="activity-card" style={{ animationDelay: `${delay}ms` }}>
+      <Link
+        to={`/user/${user.id}`}
+        className="activity-avatar"
+        aria-label={`${user.name}'s profile`}
+      >
+        {user.avatar}
+      </Link>
+      <div className="activity-body">
+        <p className="activity-line">
+          <Link to={`/user/${user.id}`} className="activity-user">
+            {user.name}
+          </Link>{' '}
+          <span className="activity-verb">{verb}</span>{' '}
+          {epLabel && <span className="activity-ep">{epLabel}</span>}
+          <Link to={to} className="activity-media">
+            {item.mediaName}
+          </Link>
+          {reaction && (
+            <span className="activity-reaction" aria-hidden="true">
+              {' '}
+              {reaction}
+            </span>
+          )}
+        </p>
+        <div className="activity-meta">
+          <span className="activity-cluster" aria-hidden="true">
+            {cluster.map((u, i) => (
+              <span key={u.id} className="activity-cluster-avatar" style={{ zIndex: 3 - i }}>
+                {u.avatar}
+              </span>
+            ))}
+          </span>
+          <span className="activity-watchers">Watched by +{compactNum(watchers)}</span>
+          <span className="activity-dot" aria-hidden="true">
+            ·
+          </span>
+          <span className="activity-time">{timeAgo(item.createdAt)}</span>
+        </div>
+      </div>
+      <Link to={to} className="activity-poster" aria-label={item.mediaName}>
+        {poster ? (
+          <img src={poster} alt="" loading="lazy" />
+        ) : (
+          <span className="activity-poster-fallback" aria-hidden="true">
+            {item.mediaType === 'tv' ? '📺' : '🎬'}
+          </span>
+        )}
+      </Link>
+    </article>
+  )
+}
+
+function ActivityTab({
+  shows,
+  movies,
+}: {
+  shows: Record<number, TrackedShow>
+  movies: Record<number, TrackedMovie>
+}) {
+  // Trending titles seed the feed when the library is thin, and also supply
+  // vote counts so "Watched by +NNN" scales with a title's real popularity.
+  const trendTv = useCached<SearchResult[]>('trending:tv', trendingShows)
+  const trendMv = useCached<SearchResult[]>('trending:movie', trendingMovies)
+
+  const fallback = useMemo<FeedSource[]>(() => {
+    const src: FeedSource[] = []
+    for (const s of [...(trendTv.data ?? []), ...(trendMv.data ?? [])]) {
+      src.push({
+        mediaType: s.media_type,
+        mediaId: s.id,
+        mediaName: s.name,
+        poster_path: s.poster_path,
+      })
+    }
+    return src
+  }, [trendTv.data, trendMv.data])
+
+  const voteCounts = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const s of [...(trendTv.data ?? []), ...(trendMv.data ?? [])])
+      if (s.vote_count != null) m.set(s.id, s.vote_count)
+    return m
+  }, [trendTv.data, trendMv.data])
+
+  const feed = useMemo(
+    () => generateActivityFeed(shows, movies, fallback, 24),
+    [shows, movies, fallback],
+  )
+
+  const hasLibrary = Object.keys(shows).length + Object.keys(movies).length > 0
+
+  if (feed.length === 0) {
+    // Library empty AND trending not yet loaded (or unavailable).
+    if (!hasLibrary && (trendTv.error || trendMv.error))
+      return <ErrorBox message={trendTv.error ?? trendMv.error ?? 'Could not load activity.'} />
+    return (
+      <div className="feed-list" aria-hidden="true">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="skeleton activity-skel" />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="fade-in">
+      <div className="activity-list">
+        {feed.map((it, i) => (
+          <ActivityCard
+            key={it.id}
+            item={it}
+            voteCount={voteCounts.get(it.mediaId)}
+            delay={Math.min(i, 8) * 55}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ---------- Groups tab ----------
+
+const GROUP_SORTS: { key: GroupSort; label: string }[] = [
+  { key: 'popular', label: 'Popular' },
+  { key: 'az', label: 'A–Z' },
+  { key: 'members', label: 'Most members' },
+]
+
+function GroupsTab() {
+  const [joined, setJoined] = useState<Set<string>>(loadJoined)
+  const [sort, setSort] = useState<GroupSort>('popular')
+
+  const toggleJoin = (id: string) => {
+    // Side effects (toast, persistence) must stay OUT of the setState updater:
+    // React may invoke updaters during render, and showToast() sets Toaster
+    // state ("Cannot update a component while rendering a different one").
+    const group = GROUPS.find((g) => g.id === id)
+    const leaving = joined.has(id)
+    const next = new Set(joined)
+    if (leaving) next.delete(id)
+    else next.add(id)
+    setJoined(next)
+    saveJoined(next)
+    showToast(
+      leaving ? `Left ${group?.name ?? 'group'}` : `Joined ${group?.name ?? 'group'}`,
+      leaving ? '👋' : '🎉',
+    )
+  }
+
+  const ordered = useMemo(() => sortGroups(GROUPS, sort, joined), [sort, joined])
+
+  return (
+    <div className="fade-in">
+      <div className="search-filters groups-sort">
+        <span className="groups-sort-label">Sort</span>
+        {GROUP_SORTS.map((s) => (
+          <button
+            key={s.key}
+            className={`search-chip${sort === s.key ? ' active' : ''}`}
+            onClick={() => setSort(s.key)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+      <div className="groups-grid stagger">
+        {ordered.map((g) => {
+          const isJoined = joined.has(g.id)
+          return (
+            <div key={g.id} className="group-card">
+              <span
+                className="group-tile"
+                style={{
+                  background: `linear-gradient(135deg, ${g.gradient[0]}, ${g.gradient[1]})`,
+                }}
+                aria-hidden="true"
+              >
+                {g.emoji}
+              </span>
+              <div className="group-body">
+                <h3 className="group-name">{g.name}</h3>
+                <p className="group-stats">
+                  {compactNum(g.members)} members · {compactNum(g.discussions)} discussions
+                </p>
+                <p className="group-blurb">{g.blurb}</p>
+              </div>
+              <button
+                className={`group-join${isJoined ? ' joined' : ''}`}
+                aria-pressed={isJoined}
+                onClick={() => toggleJoin(g.id)}
+              >
+                {isJoined ? '✓ Joined' : 'Join'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -867,28 +1139,22 @@ export default function Search() {
       .map(([name]) => name)
   }, [shows, movies])
 
-  const goBrowse = (t: MediaType) => {
-    setGenreType(t)
-    setSelectedGenre(null)
-    setTab('genres')
-  }
-
   const q = query.trim()
 
-  /** Remember a successful search; newer entries first, prefixes collapsed. */
+  /** Remember a successful search; newer entries first, prefixes collapsed.
+      Persistence stays outside the setState updater (updaters can run twice
+      / during render — side effects there are a React violation). */
   const rememberSearch = (term: string) => {
-    setRecent((prev) => {
-      const lower = term.toLowerCase()
-      // Drop exact duplicates and shorter prefixes typed on the way here
-      // ("bre" → "break" keeps only "break").
-      const kept = prev.filter((r) => {
-        const rl = r.toLowerCase()
-        return rl !== lower && !lower.startsWith(rl)
-      })
-      const next = [term, ...kept].slice(0, RECENT_MAX)
-      saveRecent(next)
-      return next
+    const lower = term.toLowerCase()
+    // Drop exact duplicates and shorter prefixes typed on the way here
+    // ("bre" → "break" keeps only "break").
+    const kept = recent.filter((r) => {
+      const rl = r.toLowerCase()
+      return rl !== lower && !lower.startsWith(rl)
     })
+    const next = [term, ...kept].slice(0, RECENT_MAX)
+    setRecent(next)
+    saveRecent(next)
   }
 
   const clearRecent = () => {
@@ -1013,19 +1279,17 @@ export default function Search() {
           </div>
 
           {tab === 'feed' && <FeedTab />}
-          {tab === 'discover' && <DiscoverTab onBrowse={goBrowse} />}
-          {tab === 'foryou' && <ForYouTab topGenres={topGenres} />}
-          {tab === 'genres' && (
-            <GenresTab
-              type={genreType}
-              onType={(t) => {
-                setGenreType(t)
-                setSelectedGenre(null)
-              }}
-              selected={selectedGenre}
-              onSelect={setSelectedGenre}
+          {tab === 'discover' && (
+            <DiscoverTab
+              topGenres={topGenres}
+              genreType={genreType}
+              onGenreType={setGenreType}
+              selectedGenre={selectedGenre}
+              onSelectGenre={setSelectedGenre}
             />
           )}
+          {tab === 'groups' && <GroupsTab />}
+          {tab === 'activity' && <ActivityTab shows={shows} movies={movies} />}
         </>
       ) : searching ? (
         <SkeletonGrid />

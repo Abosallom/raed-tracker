@@ -1,12 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import pkg from './package.json' with { type: 'json' }
 
 // https://vite.dev/config/
 export default defineConfig({
   // Relative asset paths so the build works at any URL (GitHub Pages serves
   // project sites from /<repo-name>/).
   base: './',
+  // Expose the real package.json version to the app (About card in Settings).
+  // Declared for TS in src/vite-env.d.ts.
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [
     react(),
     VitePWA({

@@ -25,6 +25,7 @@ import {
   refreshFollowedShows,
   subscribeFreshness,
 } from '../lib/freshness'
+import { computeStreaks } from '../lib/streaks'
 import { PosterImage, ProgressBar, timeAgo } from '../components/shared'
 import { showToast } from '../components/toast'
 import { fireConfetti } from '../components/Confetti'
@@ -93,6 +94,76 @@ interface SheetInfo {
   season: number
   episode: number
   episodeTitle?: string
+  variant?: 'default' | 'pause-this'
+}
+
+// ---------- grid filters (P4a) ----------
+
+type StatusFilter = 'all' | 'watching' | 'uptodate' | 'notstarted' | 'paused'
+type SortMode = 'az' | 'recent' | 'behind'
+
+interface ShowsFilters {
+  status: StatusFilter
+  genre: string // '' = any
+  network: string // '' = any
+  sort: SortMode
+}
+
+const FILTERS_KEY = 'raedtracker_shows_filters'
+const DEFAULT_FILTERS: ShowsFilters = { status: 'all', genre: '', network: '', sort: 'recent' }
+
+function loadFilters(): ShowsFilters {
+  try {
+    const raw = localStorage.getItem(FILTERS_KEY)
+    if (!raw) return { ...DEFAULT_FILTERS }
+    const parsed = JSON.parse(raw) as Partial<ShowsFilters>
+    return {
+      status: parsed.status ?? DEFAULT_FILTERS.status,
+      genre: typeof parsed.genre === 'string' ? parsed.genre : '',
+      network: typeof parsed.network === 'string' ? parsed.network : '',
+      sort: parsed.sort ?? DEFAULT_FILTERS.sort,
+    }
+  } catch {
+    return { ...DEFAULT_FILTERS }
+  }
+}
+
+function saveFilters(f: ShowsFilters) {
+  try {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify(f))
+  } catch {
+    /* filters just won't persist */
+  }
+}
+
+const filtersActive = (f: ShowsFilters) =>
+  f.status !== 'all' || f.genre !== '' || f.network !== '' || f.sort !== DEFAULT_FILTERS.sort
+
+/** Per-show status bucket used by grid badges + the status filter. */
+type ShowStatus = 'uptodate' | 'notstarted' | 'paused' | 'watching'
+function showStatus(show: TrackedShow): ShowStatus {
+  if (show.paused) return 'paused'
+  const seen = watchedCount(show)
+  if (seen === 0) return 'notstarted'
+  if (nextEpisode(show) === null) return 'uptodate'
+  return 'watching'
+}
+
+/** Does a non-paused show have a newly-aired (<=7d) unwatched episode? */
+function hasNewlyAired(show: TrackedShow): boolean {
+  if (show.paused) return false
+  const next = show.snapshot.nextEpisodeToAir
+  // Cheap heuristic on the snapshot: if the queue's next episode is unwatched
+  // and there is behind-count > 0 we can't know air dates here, so fall back to
+  // the freshness engine at the call site. This helper stays snapshot-only.
+  if (next?.airDate) {
+    const diff = Date.now() - new Date(next.airDate).getTime()
+    if (diff >= 0 && diff <= 7 * 86400000) {
+      const key = episodeKey(next.season, next.episode)
+      if (!show.watched[key]) return true
+    }
+  }
+  return false
 }
 
 // ---------- pull-to-refresh (touch) ----------
@@ -258,6 +329,7 @@ const QueueRow = memo(function QueueRow({
 
   const [pop, setPop] = useState(false)
   const [flash, setFlash] = useState(false)
+  const [checked, setChecked] = useState(false)
   const [epInfo, setEpInfo] = useState<{
     title: string
     airDate: string | null
@@ -292,11 +364,50 @@ const QueueRow = memo(function QueueRow({
     }
   }, [snap.id, season, episode, index])
 
-  if (!shown) return null
-
   // Episode still (16:9) crossfades over the poster once it has loaded.
   const stillSrc = stillUrl(epInfo?.still ?? null)
   const stillOn = stillSrc !== null && stillLoadedSrc === stillSrc
+
+  // P0g row-exit: when the row advances to a new episode, briefly render the
+  // OUTGOING poster+still as an absolute overlay that slides/fades out while
+  // the new art fades in underneath. `outgoing` holds the frozen last art.
+  const epKeyStr = shown ? `${shown.season}:${shown.episode}` : ''
+  const prevEpKeyRef = useRef(epKeyStr)
+  const [outgoing, setOutgoing] = useState<{ poster: string | null; still: string | null } | null>(
+    null,
+  )
+  const outgoingTimer = useRef<number | null>(null)
+  const checkFxTimer = useRef<number | null>(null)
+  const lastArtRef = useRef<{ poster: string | null; still: string | null }>({
+    poster: snap.poster_path,
+    still: null,
+  })
+  // Keep the "current art" ref fresh for the NEXT advance to reference.
+  lastArtRef.current = { poster: snap.poster_path, still: stillOn ? stillSrc : null }
+
+  useEffect(() => {
+    if (prevEpKeyRef.current === epKeyStr) return
+    // Freeze the art that was on screen for the episode we just left.
+    setOutgoing(lastArtRef.current)
+    prevEpKeyRef.current = epKeyStr
+    // NOTE: `checked` is deliberately NOT reset here. toggleEpisode() advances
+    // the episode synchronously inside handleCheck, so this effect fires in the
+    // same commit as setChecked(true) — clearing it here killed the tick-draw
+    // animation before it ever painted. handleCheck's own timer resets it.
+    if (outgoingTimer.current) window.clearTimeout(outgoingTimer.current)
+    outgoingTimer.current = window.setTimeout(() => setOutgoing(null), 420)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [epKeyStr])
+
+  useEffect(
+    () => () => {
+      if (outgoingTimer.current) window.clearTimeout(outgoingTimer.current)
+      if (checkFxTimer.current) window.clearTimeout(checkFxTimer.current)
+    },
+    [],
+  )
+
+  if (!shown) return null
 
   const behind = behindCount(show)
   const isNew = (() => {
@@ -316,23 +427,51 @@ const QueueRow = memo(function QueueRow({
     }
     const { season: s, episode: e } = shown
     setPop(true)
+    setChecked(true)
     setFlash(true)
-    window.setTimeout(() => {
+    // One timer clears all three transient classes; keep a ref so a rapid
+    // second check restarts the window instead of truncating its animation.
+    if (checkFxTimer.current) window.clearTimeout(checkFxTimer.current)
+    checkFxTimer.current = window.setTimeout(() => {
       setPop(false)
       setFlash(false)
+      // Reset the tick to idle for the next (already-shown) episode.
+      setChecked(false)
     }, 700)
+
+    // Snapshot pre-check state for milestone deltas: lifetime episode total
+    // across ALL shows and the longest-streak length, both compared after the
+    // toggle so we only celebrate a genuine increase.
+    const before = useLibrary.getState()
+    const wasStale = Date.now() - lastActivity(show) > STALE_MS
+    let lifetimeBefore = 0
+    for (const sh of Object.values(before.shows)) lifetimeBefore += watchedCount(sh)
+    const streakBefore = computeStreaks(before.shows, before.movies)
+
     toggleEpisode(snap.id, s, e)
     showToast(`${snap.name} · ${epCode(s, e)} watched ✓`, '📺')
-    const updated = useLibrary.getState().shows[snap.id]
+
+    const after = useLibrary.getState()
+    const updated = after.shows[snap.id]
+
+    let lifetimeAfter = 0
+    for (const sh of Object.values(after.shows)) lifetimeAfter += watchedCount(sh)
+    const streakAfter = computeStreaks(after.shows, after.movies)
 
     // Milestone detection on the check-offs users actually reach: series/season
-    // premieres, season finales, and every 10th lifetime episode. Big
-    // completions keep the full burst; the rest get a quick micro-burst.
-    const lifetimeEps = updated ? watchedCount(updated) : 0
+    // premieres, season finales, lifetime hundreds/thousands, new best streak,
+    // and every 10th lifetime episode. Big completions keep the full burst;
+    // the rest get a quick micro-burst.
     const seriesPremiere = updated ? isSeriesPremiere(updated, s, e) : false
     const seasonPremiere = updated ? isSeasonPremiere(updated, s, e) : false
     const seasonFinale = updated ? isSeasonFinale(updated, s, e) : false
-    const tenth = lifetimeEps > 0 && lifetimeEps % 10 === 0
+    const tenth = lifetimeAfter > 0 && lifetimeAfter % 10 === 0
+    // Crossed a hundred/thousand boundary on THIS check (compare before/after).
+    const hitHundred =
+      Math.floor(lifetimeAfter / 100) > Math.floor(lifetimeBefore / 100) && lifetimeAfter >= 100
+    const hitThousand =
+      Math.floor(lifetimeAfter / 1000) > Math.floor(lifetimeBefore / 1000) && lifetimeAfter >= 1000
+    const newBestStreak = streakAfter.longest > streakBefore.longest
     let milestone = false
 
     if (updated && nextEpisode(updated) === null) {
@@ -341,12 +480,28 @@ const QueueRow = memo(function QueueRow({
       onCaughtUp(snap.id)
       milestone = true
     } else if (updated && seasonComplete(updated, s)) {
+      // Season finale / season complete — full burst.
       fireConfetti()
       showToast(`Season ${s} complete! 🎉`, '🏆')
       milestone = true
     } else if (seasonFinale) {
-      fireConfetti({ intensity: 'micro' })
+      fireConfetti()
       showToast(`Season ${s} finale watched 🎬`, '🏁')
+      milestone = true
+    } else if (hitThousand) {
+      // Lifetime 1000th — full burst.
+      fireConfetti()
+      showToast(`${lifetimeAfter.toLocaleString()} episodes watched! 🎉`, '🏆')
+      milestone = true
+    } else if (hitHundred) {
+      // Lifetime 100th (and every following hundred) — micro-burst.
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${lifetimeAfter} episodes watched! 🎉`, '💯')
+      milestone = true
+    } else if (newBestStreak) {
+      // Extended the streak to a new personal best — micro-burst.
+      fireConfetti({ intensity: 'micro' })
+      showToast(`New best streak — ${streakAfter.longest} days! 🔥`, '🔥')
       milestone = true
     } else if (seriesPremiere) {
       fireConfetti({ intensity: 'micro' })
@@ -358,8 +513,24 @@ const QueueRow = memo(function QueueRow({
       milestone = true
     } else if (tenth) {
       fireConfetti({ intensity: 'micro' })
-      showToast(`${lifetimeEps} episodes watched! 🎉`, '🔟')
+      showToast(`${lifetimeAfter} episodes watched! 🎉`, '🔟')
       milestone = true
+    }
+
+    // P5b: checking an episode of a STALE show (no activity for >2wk before
+    // this check) opens the EpisodeSheet in its 'pause-this' variant instead of
+    // the normal reaction sheet — nudging the user to pause or resume in
+    // earnest. Takes precedence over the reaction-frequency preference.
+    if (wasStale && updated && nextEpisode(updated) !== null) {
+      onOpenSheet({
+        showId: snap.id,
+        showName: snap.name,
+        season: s,
+        episode: e,
+        episodeTitle: epInfo?.title,
+        variant: 'pause-this',
+      })
+      return
     }
 
     // Reaction-sheet frequency: 'always' opens the deep-react sheet on every
@@ -389,19 +560,32 @@ const QueueRow = memo(function QueueRow({
         className={`queue-poster${stillOn ? ' has-still' : ''}`}
         title={snap.name}
       >
-        <PosterImage path={snap.poster_path} title={snap.name} />
-        {stillSrc && (
-          <img
-            className={`queue-still${stillOn ? ' on' : ''}`}
-            src={stillSrc}
-            alt=""
-            loading="lazy"
-            ref={(img) => {
-              // Cached stills can complete before onLoad is attached.
-              if (img && img.complete && img.naturalWidth > 0) setStillLoadedSrc(stillSrc)
-            }}
-            onLoad={() => setStillLoadedSrc(stillSrc)}
-          />
+        {/* Incoming art (keyed on episode so it re-mounts + fades in). */}
+        <div key={epKeyStr} className="queue-art-in">
+          <PosterImage path={snap.poster_path} title={snap.name} />
+          {stillSrc && (
+            <img
+              className={`queue-still${stillOn ? ' on' : ''}`}
+              src={stillSrc}
+              alt=""
+              loading="lazy"
+              ref={(img) => {
+                // Cached stills can complete before onLoad is attached.
+                if (img && img.complete && img.naturalWidth > 0) setStillLoadedSrc(stillSrc)
+              }}
+              onLoad={() => setStillLoadedSrc(stillSrc)}
+            />
+          )}
+        </div>
+        {/* Outgoing art — frozen copy of the episode we just left, fading out. */}
+        {outgoing && (
+          <div className="queue-art-out" aria-hidden="true">
+            {outgoing.still ? (
+              <img className="queue-still on" src={outgoing.still} alt="" />
+            ) : (
+              <PosterImage path={outgoing.poster} title="" />
+            )}
+          </div>
         )}
       </Link>
 
@@ -435,12 +619,25 @@ const QueueRow = memo(function QueueRow({
       </div>
 
       <button
-        className={`queue-check${pop ? ' pop' : ''}`}
+        className={`queue-check${pop ? ' pop' : ''}${checked ? ' checked' : ''}`}
         onClick={handleCheck}
         title={`Mark ${epCode(shown.season, shown.episode)} watched`}
         aria-label={`Mark ${snap.name} ${epCode(shown.season, shown.episode)} watched`}
       >
-        ✓
+        <svg
+          className="queue-check-svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M5 12.5l4.2 4.2L19 7"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </button>
     </div>
   )
@@ -479,11 +676,13 @@ type Layout = 'list' | 'grid'
 
 const LAYOUT_KEY = 'raedtracker_shows_view'
 
+// P4c: the poster grid is the PRIMARY landing view. First-time visitors (no
+// stored preference) get grid; the list/grid toggle still switches and persists.
 function loadLayout(): Layout {
   try {
-    return localStorage.getItem(LAYOUT_KEY) === 'grid' ? 'grid' : 'list'
+    return localStorage.getItem(LAYOUT_KEY) === 'list' ? 'list' : 'grid'
   } catch {
-    return 'list'
+    return 'grid'
   }
 }
 
@@ -530,6 +729,19 @@ function RefreshIcon() {
   )
 }
 
+function FilterIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M2 3.5h12M4 8h8M6.5 12.5h3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 export default function MyShows() {
   const shows = useLibrary((s) => s.shows)
   const toggleEpisode = useLibrary((s) => s.toggleEpisode)
@@ -538,6 +750,8 @@ export default function MyShows() {
   const [view, setView] = useState<View>('queue')
   const [layout, setLayout] = useState<Layout>(loadLayout)
   const [favOnly, setFavOnly] = useState(false)
+  const [filters, setFilters] = useState<ShowsFilters>(loadFilters)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [sheet, setSheet] = useState<SheetInfo | null>(null)
   const [leavingIds, setLeavingIds] = useState<number[]>([])
@@ -565,57 +779,110 @@ export default function MyShows() {
   // All derived lists in one memo: sorting ~150 shows and scanning thousands
   // of watch records on every unrelated state change (sheet open, PTR phase,
   // freshness emits) caused 100ms+ renders per tap on large libraries.
-  const { all, pool, gridPool, fresh, stale, paused, notStarted, upToDate, recent, totalEps } =
-    useMemo(() => {
-      const all = Object.values(shows)
-      const pool = favOnly ? all.filter((s) => s.favorite) : all
-      const nowMs = Date.now()
+  const {
+    all,
+    pool,
+    gridPool,
+    fresh,
+    stale,
+    paused,
+    notStarted,
+    upToDate,
+    recent,
+    totalEps,
+    genreOptions,
+    networkOptions,
+  } = useMemo(() => {
+    const all = Object.values(shows)
+    const pool = favOnly ? all.filter((s) => s.favorite) : all
+    const nowMs = Date.now()
 
-      let nextRank = layoutRef.current.size
-      for (const s of [...all].sort((a, b) => lastActivity(b) - lastActivity(a))) {
-        if (!layoutRef.current.has(s.snapshot.id)) {
-          layoutRef.current.set(s.snapshot.id, {
-            rank: nextRank++,
-            stale: nowMs - lastActivity(s) > STALE_MS,
-          })
-        }
+    let nextRank = layoutRef.current.size
+    for (const s of [...all].sort((a, b) => lastActivity(b) - lastActivity(a))) {
+      if (!layoutRef.current.has(s.snapshot.id)) {
+        layoutRef.current.set(s.snapshot.id, {
+          rank: nextRank++,
+          stale: nowMs - lastActivity(s) > STALE_MS,
+        })
       }
-      const meta = (s: TrackedShow) =>
-        layoutRef.current.get(s.snapshot.id) ?? { rank: 1e9, stale: false }
-      const byRank = (a: TrackedShow, b: TrackedShow) => meta(a).rank - meta(b).rank
+    }
+    const meta = (s: TrackedShow) =>
+      layoutRef.current.get(s.snapshot.id) ?? { rank: 1e9, stale: false }
+    const byRank = (a: TrackedShow, b: TrackedShow) => meta(a).rank - meta(b).rank
 
-      const queueable = pool.filter(
-        (s) => !s.paused && (nextEpisode(s) !== null || leavingIds.includes(s.snapshot.id)),
-      )
-      // "To Watch" = shows the user STOPPED recently: real watch activity
-      // inside the recency window. Everything else queueable (stale momentum
-      // or never started) belongs to "Haven't seen in a while".
-      const stoppedRecently = (s: TrackedShow) => watchedCount(s) > 0 && !meta(s).stale
-      const fresh = queueable.filter(stoppedRecently).sort(byRank)
-      const stale = queueable.filter((s) => !stoppedRecently(s)).sort(byRank)
-      const paused = pool.filter((s) => s.paused).sort(byRank)
-      const notStarted = pool.filter((s) => watchedCount(s) === 0).sort(byRank)
-      const upToDate = pool
-        .filter((s) => !s.paused && watchedCount(s) > 0 && nextEpisode(s) === null)
-        .sort(byRank)
+    const queueable = pool.filter(
+      (s) => !s.paused && (nextEpisode(s) !== null || leavingIds.includes(s.snapshot.id)),
+    )
+    // "To Watch" = shows the user STOPPED recently: real watch activity
+    // inside the recency window. Everything else queueable (stale momentum
+    // or never started) belongs to "Haven't seen in a while".
+    const stoppedRecently = (s: TrackedShow) => watchedCount(s) > 0 && !meta(s).stale
+    const fresh = queueable.filter(stoppedRecently).sort(byRank)
+    const stale = queueable.filter((s) => !stoppedRecently(s)).sort(byRank)
+    const paused = pool.filter((s) => s.paused).sort(byRank)
+    const notStarted = pool.filter((s) => watchedCount(s) === 0).sort(byRank)
+    const upToDate = pool
+      .filter((s) => !s.paused && watchedCount(s) > 0 && nextEpisode(s) === null)
+      .sort(byRank)
 
-      // Last 10 checks across every show, newest first.
-      const history: { show: TrackedShow; season: number; episode: number; watchedAt: string }[] =
-        []
-      for (const show of pool) {
-        for (const [key, rec] of Object.entries(show.watched)) {
-          const pe = parseEpKey(key)
-          if (pe) history.push({ show, ...pe, watchedAt: rec.watchedAt })
-        }
+    // Last 10 checks across every show, newest first.
+    const history: { show: TrackedShow; season: number; episode: number; watchedAt: string }[] = []
+    for (const show of pool) {
+      for (const [key, rec] of Object.entries(show.watched)) {
+        const pe = parseEpKey(key)
+        if (pe) history.push({ show, ...pe, watchedAt: rec.watchedAt })
       }
-      history.sort((a, b) => b.watchedAt.localeCompare(a.watchedAt))
-      const recent = history.slice(0, 10)
+    }
+    history.sort((a, b) => b.watchedAt.localeCompare(a.watchedAt))
+    const recent = history.slice(0, 10)
 
-      const totalEps = all.reduce((n, s) => n + watchedCount(s), 0)
-      const gridPool = [...pool].sort(byRank)
+    const totalEps = all.reduce((n, s) => n + watchedCount(s), 0)
 
-      return { all, pool, gridPool, fresh, stale, paused, notStarted, upToDate, recent, totalEps }
-    }, [shows, favOnly, leavingIds])
+    // ----- P4a filter option sets (from snapshots) -----
+    const genreSet = new Set<string>()
+    const networkSet = new Set<string>()
+    for (const s of pool) {
+      for (const g of s.snapshot.genres) genreSet.add(g)
+      if (s.snapshot.network) networkSet.add(s.snapshot.network)
+    }
+    const genreOptions = [...genreSet].sort((a, b) => a.localeCompare(b))
+    const networkOptions = [...networkSet].sort((a, b) => a.localeCompare(b))
+
+    // ----- P4a/P4c: build the filtered + sorted grid pool -----
+    let gridPool = pool.filter((s) => {
+      if (filters.status !== 'all' && showStatus(s) !== filters.status) return false
+      if (filters.genre && !s.snapshot.genres.includes(filters.genre)) return false
+      if (filters.network && s.snapshot.network !== filters.network) return false
+      return true
+    })
+    if (filters.sort === 'az') {
+      gridPool = gridPool
+        .slice()
+        .sort((a, b) => a.snapshot.name.localeCompare(b.snapshot.name))
+    } else if (filters.sort === 'behind') {
+      // Most behind first (unwatched aired count, tie-break by rank).
+      gridPool = gridPool
+        .slice()
+        .sort((a, b) => behindCount(b) - behindCount(a) || meta(a).rank - meta(b).rank)
+    } else {
+      gridPool = gridPool.slice().sort(byRank) // recently added / activity order
+    }
+
+    return {
+      all,
+      pool,
+      gridPool,
+      fresh,
+      stale,
+      paused,
+      notStarted,
+      upToDate,
+      recent,
+      totalEps,
+      genreOptions,
+      networkOptions,
+    }
+  }, [shows, favOnly, leavingIds, filters])
 
   const handleCaughtUp = useCallback((id: number) => {
     setLeavingIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
@@ -640,16 +907,36 @@ export default function MyShows() {
   )
   const queueCount = fresh.length + stale.length
 
-  const toggleLayout = () =>
-    setLayout((l) => {
-      const next: Layout = l === 'list' ? 'grid' : 'list'
-      try {
-        localStorage.setItem(LAYOUT_KEY, next)
-      } catch {
-        /* view preference just won't persist */
-      }
-      return next
-    })
+  // Persistence stays outside the setState updaters (updaters can run twice
+  // / during render — side effects there are a React violation).
+  const toggleLayout = () => {
+    const next: Layout = layout === 'list' ? 'grid' : 'list'
+    setLayout(next)
+    try {
+      localStorage.setItem(LAYOUT_KEY, next)
+    } catch {
+      /* view preference just won't persist */
+    }
+  }
+
+  const patchFilters = (patch: Partial<ShowsFilters>) => {
+    const next = { ...filters, ...patch }
+    setFilters(next)
+    saveFilters(next)
+  }
+  const resetFilters = () => {
+    const next = { ...DEFAULT_FILTERS }
+    setFilters(next)
+    saveFilters(next)
+  }
+  const hasActiveFilters = filtersActive(filters)
+
+  // Show IDs that just gained episodes on the last refresh (drives the grid
+  // NEW badge alongside the persistent snapshot heuristic).
+  const freshShowIds = useMemo(
+    () => new Set(freshness.newlyAired.map((g) => g.showId)),
+    [freshness.newlyAired],
+  )
 
   const browseChips = (
     <div className="queue-browse">
@@ -716,6 +1003,16 @@ export default function MyShows() {
             aria-pressed={favOnly}
           >
             ★ Favorites
+          </button>
+          <button
+            className={`queue-chip queue-filters-btn${hasActiveFilters ? ' active' : ''}`}
+            onClick={() => setFiltersOpen(true)}
+            title="Filter & sort the grid"
+            aria-haspopup="dialog"
+          >
+            <FilterIcon />
+            <span className="queue-filters-label">Filters</span>
+            {hasActiveFilters && <span className="queue-filters-dot" aria-hidden="true" />}
           </button>
           <button
             className={`view-toggle queue-refresh-btn${freshness.refreshing ? ' spinning' : ''}`}
@@ -814,10 +1111,25 @@ export default function MyShows() {
             <div className="big">☆</div>
             <p>No favorites yet — hit the ★ star on any show.</p>
           </div>
+        ) : gridPool.length === 0 ? (
+          <div className="empty-state fade-in">
+            <div className="big">🔍</div>
+            <p>No shows match these filters.</p>
+            <button className="btn primary" onClick={resetFilters} style={{ marginTop: 18 }}>
+              Clear filters
+            </button>
+          </div>
         ) : (
           <div className="poster-grid stagger">
             {gridPool.map((s) => {
               const seen = watchedCount(s)
+              const status = showStatus(s)
+              const behind = status === 'watching' ? behindCount(s) + 1 : 0
+              // NEW badge: snapshot heuristic (aired within 7d, unwatched) OR a
+              // fresh hit from the last refresh (before the ribbon is dismissed).
+              const newlyAired =
+                status !== 'paused' &&
+                (hasNewlyAired(s) || freshShowIds.has(s.snapshot.id))
               return (
                 <Link
                   key={s.snapshot.id}
@@ -827,6 +1139,29 @@ export default function MyShows() {
                 >
                   <div className="queue-grid-poster">
                     <PosterImage path={s.snapshot.poster_path} title={s.snapshot.name} />
+                    {/* P4b status/behind badges overlaid on the poster. */}
+                    <div className="queue-grid-badges" aria-hidden="true">
+                      {status === 'paused' && (
+                        <span className="grid-badge paused" title="Paused">
+                          ⏸
+                        </span>
+                      )}
+                      {status === 'uptodate' && (
+                        <span className="grid-badge uptodate" title="Up to date">
+                          ✓
+                        </span>
+                      )}
+                      {status === 'watching' && behind > 0 && (
+                        <span className="grid-badge behind" title={`${behind} to watch`}>
+                          +{behind}
+                        </span>
+                      )}
+                      {newlyAired && (
+                        <span className="grid-badge new" title="New episode aired">
+                          NEW
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="queue-grid-name">{s.snapshot.name}</div>
                   <div className="queue-grid-progress">
@@ -966,6 +1301,168 @@ export default function MyShows() {
       )}
 
       {sheet && <EpisodeSheet {...sheet} onClose={() => setSheet(null)} />}
+
+      {filtersOpen && (
+        <FiltersSheet
+          filters={filters}
+          genreOptions={genreOptions}
+          networkOptions={networkOptions}
+          matchCount={gridPool.length}
+          onPatch={patchFilters}
+          onReset={resetFilters}
+          onClose={() => setFiltersOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ---------- filters sheet (P4a) — slide-up, EpisodeSheet-styled ----------
+
+const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'watching', label: 'Watching' },
+  { value: 'uptodate', label: 'Up to date' },
+  { value: 'notstarted', label: 'Not started' },
+  { value: 'paused', label: 'Paused' },
+]
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: 'az', label: 'A–Z' },
+  { value: 'recent', label: 'Recently added' },
+  { value: 'behind', label: 'Most behind' },
+]
+
+function FiltersSheet({
+  filters,
+  genreOptions,
+  networkOptions,
+  matchCount,
+  onPatch,
+  onReset,
+  onClose,
+}: {
+  filters: ShowsFilters
+  genreOptions: string[]
+  networkOptions: string[]
+  matchCount: number
+  onPatch: (patch: Partial<ShowsFilters>) => void
+  onReset: () => void
+  onClose: () => void
+}) {
+  // Close on Escape; lock body scroll while the sheet is open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  return (
+    <div className="shfilters-backdrop" onClick={onClose}>
+      <div
+        className="shfilters"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Filter and sort shows"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="shfilters-grip" aria-hidden="true" />
+        <div className="shfilters-head">
+          <h2 className="shfilters-title">Filters</h2>
+          <button className="shfilters-reset" onClick={onReset} disabled={!filtersActive(filters)}>
+            Reset
+          </button>
+        </div>
+
+        <div className="shfilters-body">
+          <div className="shfilters-group">
+            <div className="shfilters-label">Status</div>
+            <div className="shfilters-chips">
+              {STATUS_OPTIONS.map((o) => (
+                <button
+                  key={o.value}
+                  className={`shfilters-chip${filters.status === o.value ? ' active' : ''}`}
+                  onClick={() => onPatch({ status: o.value })}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {genreOptions.length > 0 && (
+            <div className="shfilters-group">
+              <div className="shfilters-label">Genre</div>
+              <div className="shfilters-chips">
+                <button
+                  className={`shfilters-chip${filters.genre === '' ? ' active' : ''}`}
+                  onClick={() => onPatch({ genre: '' })}
+                >
+                  Any
+                </button>
+                {genreOptions.map((g) => (
+                  <button
+                    key={g}
+                    className={`shfilters-chip${filters.genre === g ? ' active' : ''}`}
+                    onClick={() => onPatch({ genre: filters.genre === g ? '' : g })}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {networkOptions.length > 0 && (
+            <div className="shfilters-group">
+              <div className="shfilters-label">Network</div>
+              <div className="shfilters-chips">
+                <button
+                  className={`shfilters-chip${filters.network === '' ? ' active' : ''}`}
+                  onClick={() => onPatch({ network: '' })}
+                >
+                  Any
+                </button>
+                {networkOptions.map((n) => (
+                  <button
+                    key={n}
+                    className={`shfilters-chip${filters.network === n ? ' active' : ''}`}
+                    onClick={() => onPatch({ network: filters.network === n ? '' : n })}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="shfilters-group">
+            <div className="shfilters-label">Sort</div>
+            <div className="shfilters-chips">
+              {SORT_OPTIONS.map((o) => (
+                <button
+                  key={o.value}
+                  className={`shfilters-chip${filters.sort === o.value ? ' active' : ''}`}
+                  onClick={() => onPatch({ sort: o.value })}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <button className="shfilters-apply" onClick={onClose}>
+          Show {matchCount} {matchCount === 1 ? 'show' : 'shows'}
+        </button>
+      </div>
     </div>
   )
 }

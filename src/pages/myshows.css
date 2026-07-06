@@ -218,13 +218,14 @@
   animation: queue-flash 0.7s ease;
 }
 
+/* P0a: the check-off confirm flashes GREEN (success), not amber. */
 @keyframes queue-flash {
   0% {
     background: var(--bg-elev);
   }
   22% {
-    background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev));
-    border-color: var(--accent);
+    background: color-mix(in srgb, var(--green) 16%, var(--bg-elev));
+    border-color: var(--green);
   }
   100% {
     background: var(--bg-elev);
@@ -286,6 +287,57 @@
   height: 100%;
   object-fit: cover;
   border-radius: 8px;
+}
+
+/* P0g row-exit crossfade: incoming art re-mounts (keyed on episode) and fades
+   in; the outgoing frozen copy sits on top and slides + fades out. */
+.queue-art-in,
+.queue-art-out {
+  position: absolute;
+  inset: 0;
+}
+
+.queue-art-in {
+  animation: queue-art-in 0.42s ease both;
+}
+
+.queue-art-out {
+  z-index: 2;
+  animation: queue-art-out 0.42s ease both;
+  pointer-events: none;
+}
+
+.queue-art-out .poster-img,
+.queue-art-out .poster-fallback,
+.queue-art-out .queue-still {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+@keyframes queue-art-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes queue-art-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-12px) scale(0.94);
+  }
 }
 
 .queue-poster:hover {
@@ -448,8 +500,6 @@
   border: 2px solid var(--text-faint);
   background: transparent;
   color: var(--text-dim);
-  font-size: 18px;
-  font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -464,19 +514,55 @@
   transform: scale(1.06);
 }
 
-.queue-check.pop {
-  animation: queue-pop 0.4s cubic-bezier(0.2, 0.7, 0.3, 1.4);
+/* P0a: inline SVG checkmark. Its stroke is hidden by default (fully dashed
+   off) and draws in when checked. */
+.queue-check-svg {
+  width: 22px;
+  height: 22px;
+}
+
+.queue-check-svg path {
+  stroke-dasharray: 26;
+  stroke-dashoffset: 26;
+}
+
+/* Idle: show a static tick (no draw animation until first check). */
+.queue-check:not(.checked) .queue-check-svg path {
+  stroke-dashoffset: 0;
+}
+
+/* Checked: fill accent, draw the stroke in (~250ms) + spring pop overshoot. */
+.queue-check.checked {
   background: var(--accent);
   border-color: var(--accent);
   color: #171717;
 }
 
+.queue-check.checked .queue-check-svg path {
+  stroke-dashoffset: 0;
+  animation: queue-check-draw 0.25s ease forwards;
+}
+
+@keyframes queue-check-draw {
+  from {
+    stroke-dashoffset: 26;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.queue-check.pop {
+  animation: queue-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Spring pop: 1 -> 1.15 overshoot -> settle back to 1. */
 @keyframes queue-pop {
   0% {
     transform: scale(1);
   }
-  40% {
-    transform: scale(1.28);
+  45% {
+    transform: scale(1.15);
   }
   100% {
     transform: scale(1);
@@ -643,9 +729,66 @@
 }
 
 .queue-grid-poster {
+  position: relative;
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--bg-elev-2);
+}
+
+/* P4b: status badges overlaid on the poster (top-right stack). */
+.queue-grid-badges {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  z-index: 2;
+}
+
+.grid-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+/* Up to date — solid green tick. */
+.grid-badge.uptodate {
+  background: var(--green);
+  color: #052e1a;
+}
+
+/* Behind count — solid accent. */
+.grid-badge.behind {
+  background: var(--accent);
+  color: #171717;
+}
+
+/* Paused — muted glassy chip. */
+.grid-badge.paused {
+  background: color-mix(in srgb, var(--bg-elev-2) 82%, transparent);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  backdrop-filter: blur(2px);
+}
+
+/* NEW — amber (var(--yellow)), independent of the accent. */
+.grid-badge.new {
+  background: var(--yellow);
+  color: #171717;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .queue-grid-name {
@@ -823,6 +966,181 @@
   color: var(--text);
 }
 
+/* ---------- filters button (toptabs actions) ---------- */
+
+.queue-filters-btn {
+  position: relative;
+  height: 34px;
+  padding: 0 12px;
+  gap: 6px;
+}
+
+.queue-filters-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.queue-filters-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ---------- filters sheet (P4a slide-up) ---------- */
+
+.shfilters-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  animation: shfilters-fade 0.2s ease;
+}
+
+.shfilters {
+  width: 100%;
+  max-width: 560px;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 10px 20px calc(18px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+  animation: shfilters-up 0.28s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.shfilters-grip {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  margin: 0 auto 12px;
+  flex-shrink: 0;
+}
+
+.shfilters-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.shfilters-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+}
+
+.shfilters-reset {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent-hover);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s, opacity 0.15s;
+}
+
+.shfilters-reset:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.shfilters-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 2px 0 4px;
+}
+
+.shfilters-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shfilters-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  color: var(--text-dim);
+}
+
+.shfilters-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.shfilters-chip {
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.shfilters-chip:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.shfilters-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.shfilters-apply {
+  flex-shrink: 0;
+  margin-top: 16px;
+  width: 100%;
+  padding: 13px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #171717;
+  font-size: 14.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.shfilters-apply:hover {
+  filter: brightness(1.05);
+}
+
+@keyframes shfilters-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes shfilters-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
 /* ---------- responsive + reduced motion ---------- */
 
 @media (max-width: 560px) {
@@ -852,6 +1170,13 @@
   /* Small screens pull to refresh instead. */
   .queue-refresh-btn {
     display: none;
+  }
+  /* Compact the Filters button to just its icon on narrow screens. */
+  .queue-filters-label {
+    display: none;
+  }
+  .queue-filters-btn {
+    padding: 0 10px;
   }
 }
 
@@ -886,11 +1211,24 @@
   .queue-row.leaving,
   .queue-row.resuming,
   .queue-ep,
-  .queue-check.pop {
+  .queue-check.pop,
+  .queue-art-in,
+  .queue-art-out,
+  .shfilters-backdrop,
+  .shfilters {
     animation: none;
   }
   .queue-row.leaving {
     opacity: 0;
+  }
+  /* No stroke-draw: the tick appears fully formed on check. */
+  .queue-check.checked .queue-check-svg path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  /* Outgoing art just disappears rather than sliding. */
+  .queue-art-out {
+    display: none;
   }
   .queue-poster,
   .queue-still,

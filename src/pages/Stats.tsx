@@ -1,14 +1,15 @@
 // Stats dashboard (/stats) — deep, tabbed dashboard computed purely from the
 // library store. All charts are CSS bars (divs), no chart libraries.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Emotion } from '../types'
 import { EMOTIONS } from '../types'
 import { useLibrary } from '../store/library'
-import type { Badge, MovieStats, ShowStats } from '../lib/stats'
+import type { BadgeCategory, MovieStats, RatingRow, ShowStats } from '../lib/stats'
 import {
-  computeBadges,
+  computeBadgeCategories,
+  computeEngagement,
   computeMovieStats,
   computeShowStats,
   fmtDate,
@@ -16,10 +17,85 @@ import {
   fmtMonthYear,
 } from '../lib/stats'
 import { formatMinutes } from '../components/shared'
+import { isStandalone } from '../lib/install'
 import type { StreakInfo } from '../lib/streaks'
 import { computeStreaks, localDayKey, watchDaySet } from '../lib/streaks'
 import { BackBar } from '../components/BackBar'
 import './stats.css'
+
+// ---------- motion + count-up plumbing (local to Stats) ----------
+
+/** True when the user asked for reduced motion — animations render instantly. */
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
+
+/**
+ * Fire `true` once the returned ref's element scrolls into view. One shared
+ * IntersectionObserver hook — every count-up / grow-in animation on the page
+ * keys off an element becoming visible so nothing animates off-screen.
+ */
+function useInView<T extends Element>(rootMargin = '0px 0px -10% 0px'): [React.RefObject<T | null>, boolean] {
+  const ref = useRef<T>(null)
+  const [inView, setInView] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setInView(true)
+      return
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            setInView(true)
+            obs.disconnect()
+            break
+          }
+        }
+      },
+      { rootMargin, threshold: 0.15 },
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [rootMargin])
+  return [ref, inView]
+}
+
+/**
+ * Count a number up from 0 to `target` over ~700ms once `active` is true.
+ * Reduced-motion (or a non-finite target) renders the final value instantly.
+ * Returns the current display value (rounded).
+ */
+function useCountUp(target: number, active: boolean, durationMs = 700): number {
+  const [value, setValue] = useState(() => (prefersReducedMotion() ? target : 0))
+  const rafRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!active || prefersReducedMotion() || !Number.isFinite(target)) {
+      setValue(target)
+      return
+    }
+    const start = performance.now()
+    const from = 0
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / durationMs)
+      // easeOutCubic — quick start, gentle settle.
+      const eased = 1 - Math.pow(1 - p, 3)
+      setValue(from + (target - from) * eased)
+      if (p < 1) rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+    }
+  }, [target, active, durationMs])
+  return value
+}
 
 const BAR_COLORS = [
   '#fbbf24',
@@ -45,6 +121,53 @@ const EMOTION_COLORS: Record<Emotion, string> = {
 
 function num(n: number): string {
   return n.toLocaleString('en-US')
+}
+
+/**
+ * Heuristic for the "Migrator" APP badge: no importer flag is persisted, so we
+ * infer a bulk import from its signature — a watch record dated well before
+ * (>7 days) the show was added to the library. Organic check-offs are always
+ * on/after addedAt, so a comfortable back-date gap means the data came from an
+ * export (TV Time etc.).
+ */
+function libraryLooksImported(shows: Record<number, import('../types').TrackedShow>): boolean {
+  const GAP = 7 * 86_400_000
+  for (const show of Object.values(shows)) {
+    const added = new Date(show.addedAt).getTime()
+    if (Number.isNaN(added)) continue
+    for (const rec of Object.values(show.watched)) {
+      const w = new Date(rec.watchedAt).getTime()
+      if (!Number.isNaN(w) && w < added - GAP) return true
+    }
+  }
+  return false
+}
+
+/**
+ * Count-up number span. Animates 0 -> `value` once its own element scrolls
+ * into view (or immediately under reduced motion). `format` styles the running
+ * value; the final render always shows the exact target.
+ */
+function CountNumber({
+  value,
+  format = num,
+  className,
+  style,
+}: {
+  value: number
+  format?: (n: number) => string
+  className?: string
+  style?: React.CSSProperties
+}) {
+  const [ref, inView] = useInView<HTMLSpanElement>()
+  const display = useCountUp(value, inView)
+  // Snap to the exact integer target at the tail so we never show "999" for 1,000.
+  const shown = inView && display < value ? Math.round(display) : value
+  return (
+    <span ref={ref} className={className} style={style}>
+      {format(shown)}
+    </span>
+  )
 }
 
 /** Unit labels for the segments formatMinutes emits ("3d 4h", "11h 20m"…). */
@@ -92,7 +215,7 @@ function DurationHero({
             const [singular, plural] = DURATION_UNIT_LABEL[seg.unit] ?? ['', '']
             return (
               <div className="stats-duration-unit" key={seg.unit}>
-                <span className="stats-duration-n">{num(Number(seg.n))}</span>
+                <CountNumber className="stats-duration-n" value={Number(seg.n)} />
                 <span className="stats-duration-l">{seg.n === '1' ? singular : plural}</span>
               </div>
             )
@@ -103,7 +226,7 @@ function DurationHero({
   )
 }
 
-/** Hero card: big count + subtitle. */
+/** Hero card: big count-up number + subtitle. */
 function CountHero({
   icon,
   title,
@@ -112,7 +235,7 @@ function CountHero({
 }: {
   icon: string
   title: string
-  value: string
+  value: number
   sub: string
 }) {
   return (
@@ -120,7 +243,7 @@ function CountHero({
       <h2 className="stats-section-h">
         {icon} {title}
       </h2>
-      <div className="stats-hero-value">{value}</div>
+      <CountNumber className="stats-hero-value" value={value} />
       <div className="stats-hero-sub">{sub}</div>
     </section>
   )
@@ -157,37 +280,33 @@ function StreakCard({ streaks, activeDays }: { streaks: StreakInfo; activeDays: 
     const key = localDayKey(d)
     strip.push({ key, active: activeDays.has(key), today: i === 0 })
   }
+  const [ref, inView] = useInView<HTMLDivElement>()
   return (
     <section className="card stats-hero" style={{ marginBottom: 18 }}>
       <h2 className="stats-section-h">🔥 Streak</h2>
       {streaks.lastActiveDay === null ? (
         <p className="stats-empty-note">Watch something to start a streak.</p>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
+        <div
+          ref={ref}
+          style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}
+        >
           <div>
             <div className="stats-hero-value" style={{ color: 'var(--accent)' }}>
-              {num(streaks.current)} {streaks.current === 1 ? 'day' : 'days'}
+              <CountNumber value={streaks.current} /> {streaks.current === 1 ? 'day' : 'days'}
             </div>
             <div className="stats-hero-sub">Longest: {num(streaks.longest)}</div>
           </div>
           <div
-            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 2px' }}
+            className={`stats-streak-strip${inView ? ' filled' : ''}`}
             aria-label="Watch activity, last 14 days"
           >
-            {strip.map((d) => (
+            {strip.map((d, i) => (
               <span
                 key={d.key}
+                className={`stats-streak-dot${d.active ? ' active' : ''}${d.today ? ' today' : ''}`}
                 title={`${fmtDayKey(d.key)}${d.today ? ' (today)' : ''}${d.active ? ' — watched' : ''}`}
-                style={{
-                  width: 11,
-                  height: 11,
-                  borderRadius: '50%',
-                  boxSizing: 'border-box',
-                  background: d.active ? 'var(--accent)' : 'var(--bg-elev-2)',
-                  border: `1px solid ${d.active ? 'var(--accent)' : 'var(--border)'}`,
-                  outline: d.today ? '2px solid var(--accent)' : 'none',
-                  outlineOffset: 2,
-                }}
+                style={{ transitionDelay: `${i * 45}ms` }}
               />
             ))}
           </div>
@@ -213,22 +332,22 @@ function WeekChart({
 }) {
   const max = Math.max(1, ...weeks.map((w) => w.count))
   const empty = weeks.every((w) => w.count === 0)
+  const [ref, inView] = useInView<HTMLDivElement>()
   return (
     <>
       {caption && <p className="stats-chart-caption">{caption}</p>}
-      <div className="stats-weeks">
+      <div className={`stats-weeks${inView ? ' grown' : ''}`} ref={ref}>
         {weeks.map((w, i) => (
           <div className="stats-weeks-col" key={w.key}>
             <span className="stats-weeks-count" style={{ opacity: w.count > 0 ? 1 : 0.3 }}>
               {w.count}
             </span>
             <div
-              className={`stats-weeks-bar${w.current ? ' current' : ''}`}
-              style={
-                w.count > 0
-                  ? { height: Math.max(8, Math.round((w.count / max) * 96)) }
-                  : { height: 4 }
-              }
+              className={`stats-weeks-bar grow${w.current ? ' current' : ''}`}
+              style={{
+                height: w.count > 0 ? Math.max(8, Math.round((w.count / max) * 96)) : 4,
+                transitionDelay: `${Math.min(i, 12) * 35}ms`,
+              }}
             />
             <span className="stats-weeks-label">
               {w.current ? nowLabel : i % 2 === 0 ? w.label : ' '}
@@ -276,6 +395,66 @@ function BarTable({
   )
 }
 
+/**
+ * Voted-ratings card (P7a). Reads the user's 1-10 ratings and shows a count
+ * headline plus a "rating per {title}" table with a 10-segment bar. `noun`
+ * pluralizes the copy for shows vs movies.
+ */
+function RatingsCard({
+  ratings,
+  ratedCount,
+  avgRating,
+  noun,
+  linkPrefix,
+  emptyNote,
+}: {
+  ratings: RatingRow[]
+  ratedCount: number
+  avgRating: number
+  noun: 'show' | 'movie'
+  linkPrefix: string
+  emptyNote: string
+}) {
+  const nounPlural = noun === 'show' ? 'shows' : 'movies'
+  return (
+    <section className="card stats-hero">
+      <h2 className="stats-section-h">⭐ Voted ratings</h2>
+      {ratedCount === 0 ? (
+        <p className="stats-empty-note">{emptyNote}</p>
+      ) : (
+        <>
+          <div className="stats-ratings-headline">
+            <CountNumber className="stats-hero-value" value={ratedCount} />
+            <div className="stats-hero-sub">
+              {ratedCount === 1 ? `rating on 1 ${noun}` : `ratings across ${num(ratedCount)} ${nounPlural}`}
+              {avgRating > 0 && ` · avg ${avgRating.toFixed(1)}/10`}
+            </div>
+          </div>
+          <div className="stats-subhead">Your rating per {noun}</div>
+          <div className="stats-ratings-list">
+            {ratings.slice(0, 12).map((r) => (
+              <div className="stats-rating-row" key={r.id}>
+                <Link className="stats-rating-name" to={`${linkPrefix}/${r.id}`} title={r.name}>
+                  {r.name}
+                </Link>
+                <div className="stats-rating-track" aria-hidden="true">
+                  <div
+                    className="stats-rating-fill"
+                    style={{ width: `${(r.rating / 10) * 100}%` }}
+                  />
+                </div>
+                <span className="stats-rating-value">
+                  {r.rating}/10 <span className="stats-rating-star">★</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
 function ReactionBars({
   reactions,
   total,
@@ -313,18 +492,18 @@ function ReactionBars({
   )
 }
 
-function BadgeSection({ badges }: { badges: Badge[] }) {
-  const earned = badges.filter((b) => b.earned).length
+/** One labeled hexagonal category grid with an "N of M earned" count-up headline. */
+function BadgeCategoryGrid({ category }: { category: BadgeCategory }) {
   return (
     <section className="card stats-badges-card">
       <h2 className="stats-section-h">
-        🎖️ Badges
+        {category.icon} {category.title}
         <span className="stats-badges-headline">
-          {earned} of {badges.length} earned
+          <CountNumber value={category.earned} /> of {category.badges.length} earned
         </span>
       </h2>
       <div className="stats-badge-grid">
-        {badges.map((b) => (
+        {category.badges.map((b) => (
           <div
             className={`stats-badge${b.earned ? ' earned' : ' locked'}`}
             key={b.key}
@@ -342,16 +521,37 @@ function BadgeSection({ badges }: { badges: Badge[] }) {
   )
 }
 
+/** All badge categories, split into labeled hexagonal grids (P7b). */
+function BadgeSection({ categories }: { categories: BadgeCategory[] }) {
+  const totalEarned = categories.reduce((a, c) => a + c.earned, 0)
+  const total = categories.reduce((a, c) => a + c.badges.length, 0)
+  return (
+    <div className="stats-badges-wrap">
+      <h2 className="stats-badges-title">
+        🎖️ Badges
+        <span className="stats-badges-headline">
+          <CountNumber value={totalEarned} /> of {total} earned
+        </span>
+      </h2>
+      {categories.map((c) => (
+        <BadgeCategoryGrid category={c} key={c.key} />
+      ))}
+    </div>
+  )
+}
+
 // ---------- shows tab ----------
 
 function ShowsTab({
   stats,
   streaks,
   activeDays,
+  engagement,
 }: {
   stats: ShowStats
   streaks: StreakInfo
   activeDays: Set<string>
+  engagement: ReturnType<typeof computeEngagement>
 }) {
   return (
     <div className="fade-in">
@@ -365,7 +565,7 @@ function ShowsTab({
         <CountHero
           icon="📺"
           title="Episodes watched"
-          value={num(stats.episodes)}
+          value={stats.episodes}
           sub={
             stats.episodes === 0
               ? 'None yet — your next binge starts here.'
@@ -489,6 +689,40 @@ function ShowsTab({
         </section>
       </div>
 
+      <div className="stats-grid">
+        <RatingsCard
+          ratings={stats.ratings}
+          ratedCount={stats.ratedCount}
+          avgRating={stats.avgRating}
+          noun="show"
+          linkPrefix="/show"
+          emptyNote="Rate a show on its detail page and your scores get charted here."
+        />
+        <section className="card">
+          <h2 className="stats-section-h">💬 Engagement</h2>
+          <div className="stats-mini-row" style={{ marginBottom: 0 }}>
+            <MiniStat
+              icon="📺"
+              value={num(engagement.showComments)}
+              label="Show comments"
+              sub="on show / movie threads"
+            />
+            <MiniStat
+              icon="🎞️"
+              value={num(engagement.episodeComments)}
+              label="Episode comments"
+              sub="on episode threads"
+            />
+            <MiniStat
+              icon="❤️"
+              value={num(engagement.earnedLikes)}
+              label="Earned likes"
+              sub="across your comments"
+            />
+          </div>
+        </section>
+      </div>
+
       <div className="stats-mini-row">
         <MiniStat
           icon="📌"
@@ -609,7 +843,7 @@ function MoviesTab({ stats }: { stats: MovieStats }) {
         <CountHero
           icon="🎬"
           title="Movies watched"
-          value={num(stats.watched)}
+          value={stats.watched}
           sub={
             stats.watched === 0
               ? 'None yet — movie night awaits.'
@@ -678,6 +912,17 @@ function MoviesTab({ stats }: { stats: MovieStats }) {
           />
         </div>
       </div>
+
+      <div className="stats-grid">
+        <RatingsCard
+          ratings={stats.ratings}
+          ratedCount={stats.ratedCount}
+          avgRating={stats.avgRating}
+          noun="movie"
+          linkPrefix="/movie"
+          emptyNote="Rate a movie on its detail page and your scores get charted here."
+        />
+      </div>
     </div>
   )
 }
@@ -689,25 +934,43 @@ export default function Stats() {
   const movies = useLibrary((s) => s.movies)
   const watchlist = useLibrary((s) => s.watchlist)
   const comments = useLibrary((s) => s.comments)
+  const following = useLibrary((s) => s.following)
   const [tab, setTab] = useState<'shows' | 'movies'>('shows')
 
   const showStats = useMemo(() => computeShowStats(shows), [shows])
   const movieStats = useMemo(() => computeMovieStats(movies, watchlist), [movies, watchlist])
   const streaks = useMemo(() => computeStreaks(shows, movies), [shows, movies])
   const activeDays = useMemo(() => watchDaySet(shows, movies), [shows, movies])
+  const engagement = useMemo(() => computeEngagement(comments), [comments])
+
+  const ratingsGiven = showStats.ratedCount + movieStats.ratedCount
+
   const badges = useMemo(
     () =>
-      computeBadges({
+      computeBadgeCategories({
         episodes: showStats.episodes,
         maxDayEpisodes: showStats.maxDayEpisodes,
         completedShows: showStats.completedShows,
         premieres: showStats.premieres,
-        reactions: showStats.totalReactions + movieStats.totalReactions,
+        specials: showStats.specials,
         votes: showStats.characterVotes,
-        comments: comments.filter((c) => c.isMine).length,
         moviesWatched: movieStats.watched,
+        genreEpMap: showStats.genreEpMap,
+        ratingsGiven,
+        showComments: engagement.showComments,
+        episodeComments: engagement.episodeComments,
+        totalComments: engagement.myComments,
+        earnedLikes: engagement.earnedLikes,
+        following: following.length,
+        // APP badges — derived from real localStorage flags where they exist,
+        // else lifetime library facts (no importer flag is stored, so infer it
+        // from back-dated watch records, the signature of a migration import).
+        installed: isStandalone(),
+        themeSwitched:
+          typeof localStorage !== 'undefined' && localStorage.getItem('raedtracker_theme') != null,
+        importerUsed: libraryLooksImported(shows),
       }),
-    [showStats, movieStats, comments],
+    [showStats, movieStats, engagement, ratingsGiven, following, shows],
   )
 
   const libraryEmpty =
@@ -765,12 +1028,17 @@ export default function Stats() {
       </div>
 
       {tab === 'shows' ? (
-        <ShowsTab stats={showStats} streaks={streaks} activeDays={activeDays} />
+        <ShowsTab
+          stats={showStats}
+          streaks={streaks}
+          activeDays={activeDays}
+          engagement={engagement}
+        />
       ) : (
         <MoviesTab stats={movieStats} />
       )}
 
-      <BadgeSection badges={badges} />
+      <BadgeSection categories={badges} />
     </div>
   )
 }

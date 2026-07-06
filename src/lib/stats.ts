@@ -1,7 +1,7 @@
 // Pure stat computations for the Stats dashboard.
 // No React, no fetching — everything derives from the library store in one pass.
 
-import type { Emotion, TrackedMovie, TrackedShow, WatchlistItem } from '../types'
+import type { Comment, Emotion, TrackedMovie, TrackedShow, WatchlistItem } from '../types'
 import { airedEpisodeCount, showProgress, watchedCount } from '../store/library'
 
 const DAY = 86_400_000
@@ -147,6 +147,13 @@ export interface UpcomingBucket {
   count: number
 }
 
+/** One rated title: name + user's 1-10 rating, for the ratings table. */
+export interface RatingRow {
+  id: number
+  name: string
+  rating: number
+}
+
 export interface ShowStats {
   totalMinutes: number
   episodes: number
@@ -162,6 +169,10 @@ export interface ShowStats {
   addedShows: number
   inProduction: number
   genres: [string, number][] // episodes watched per genre, top 6
+  /** Full episodes-per-genre map (for per-genre "century" badges). */
+  genreEpMap: [string, number][]
+  /** Specials (season-0) episodes watched — from watch-record keys. */
+  specials: number
   networks: [string, number][] // shows tracked per network, top 5
   reactions: ReactionCounts
   totalReactions: number
@@ -183,6 +194,12 @@ export interface ShowStats {
   busiestWeekday: { name: string; count: number } | null
   /** Derived: average episodes/day across days watched this calendar month. */
   avgEpisodesPerDayThisMonth: number
+  /** Shows the user gave a 1-10 rating, highest first (for the ratings table). */
+  ratings: RatingRow[]
+  /** How many shows carry a rating. */
+  ratedCount: number
+  /** Average of all show ratings (0 when none). */
+  avgRating: number
 }
 
 export function computeShowStats(
@@ -215,6 +232,7 @@ export function computeShowStats(
   let maxDayEpisodes = 0
   let premieres = 0
   let completedShows = 0
+  let specials = 0
   let remainingEpisodes = 0
   let startedShows = 0
   let remainingMinutes = 0
@@ -226,6 +244,7 @@ export function computeShowStats(
   const charVotes = new Map<string, number>()
   const marathons: MarathonRow[] = []
   const showTopCharacters: ShowCharacterRow[] = []
+  const ratings: RatingRow[] = []
   const upcoming: UpcomingBucket[] = [
     { label: 'This week', count: 0 },
     { label: 'Next week', count: 0 },
@@ -241,6 +260,9 @@ export function computeShowStats(
 
     if (/Returning|In Production/i.test(snap.status)) inProduction++
     if (snap.totalEpisodes > 0 && showProgress(show) >= 1) completedShows++
+    if (typeof show.rating === 'number' && show.rating > 0) {
+      ratings.push({ id: snap.id, name: snap.name, rating: show.rating })
+    }
     if (snap.network) networkShows.set(snap.network, (networkShows.get(snap.network) ?? 0) + 1)
     if (n > 0) for (const g of snap.genres) genreEps.set(g, (genreEps.get(g) ?? 0) + n)
 
@@ -273,7 +295,10 @@ export function computeShowStats(
         showChars.set(rec.favoriteCast.name, (showChars.get(rec.favoriteCast.name) ?? 0) + 1)
       }
       const m = EP_KEY_RE.exec(key)
-      if (m && Number(m[2]) === 1) premieres++
+      if (m) {
+        if (Number(m[1]) === 0) specials++
+        else if (Number(m[2]) === 1) premieres++
+      }
     }
 
     let best = 0
@@ -334,6 +359,8 @@ export function computeShowStats(
 
   marathons.sort((a, b) => b.episodes - a.episodes || b.date.localeCompare(a.date))
   showTopCharacters.sort((a, b) => b.votes - a.votes)
+  ratings.sort((a, b) => b.rating - a.rating || a.name.localeCompare(b.name))
+  const ratingSum = ratings.reduce((a, r) => a + r.rating, 0)
 
   // Young-account detection: if >80% of all charted week activity falls in the
   // newest (current) week, the 12-week chart is 11 empty gridlines — switch the
@@ -395,6 +422,8 @@ export function computeShowStats(
     addedShows: list.length,
     inProduction,
     genres: [...genreEps.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6),
+    genreEpMap: [...genreEps.entries()].sort((a, b) => b[1] - a[1]),
+    specials,
     networks: [...networkShows.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5),
     reactions,
     totalReactions: Object.values(reactions).reduce((a, b) => a + b, 0),
@@ -416,6 +445,9 @@ export function computeShowStats(
     completedShows,
     busiestWeekday,
     avgEpisodesPerDayThisMonth,
+    ratings,
+    ratedCount: ratings.length,
+    avgRating: ratings.length > 0 ? ratingSum / ratings.length : 0,
   }
 }
 
@@ -434,6 +466,10 @@ export interface MovieStats {
   remaining: number // watchlist movies + tracked-but-unwatched
   ratePerWeek: number
   finishDate: Date | null
+  /** Movies the user gave a 1-10 rating, highest first. */
+  ratings: RatingRow[]
+  ratedCount: number
+  avgRating: number
 }
 
 export function computeMovieStats(
@@ -454,8 +490,12 @@ export function computeMovieStats(
   let trackedUnwatched = 0
   const reactions = emptyReactions()
   const genreCount = new Map<string, number>()
+  const ratings: RatingRow[] = []
 
   for (const m of list) {
+    if (typeof m.rating === 'number' && m.rating > 0) {
+      ratings.push({ id: m.snapshot.id, name: m.snapshot.title, rating: m.rating })
+    }
     if (!m.watched) {
       trackedUnwatched++
       continue
@@ -473,6 +513,9 @@ export function computeMovieStats(
       if (bucket) bucket.count++
     }
   }
+
+  ratings.sort((a, b) => b.rating - a.rating || a.name.localeCompare(b.name))
+  const ratingSum = ratings.reduce((a, r) => a + r.rating, 0)
 
   const watchlistMovies = watchlist.filter((w) => w.type === 'movie').length
   const remaining = watchlistMovies + trackedUnwatched
@@ -495,21 +538,49 @@ export function computeMovieStats(
     remaining,
     ratePerWeek: ratePerDay * 7,
     finishDate,
+    ratings,
+    ratedCount: ratings.length,
+    avgRating: ratings.length > 0 ? ratingSum / ratings.length : 0,
+  }
+}
+
+// ---------- engagement (comments + likes) ----------
+
+export interface EngagementStats {
+  /** Comments I wrote on a show/movie root thread (no season/episode segment). */
+  showComments: number
+  /** Comments I wrote on a specific episode thread ("tv:ID:sXeY"). */
+  episodeComments: number
+  /** Total comments I wrote. */
+  myComments: number
+  /** Likes earned across all my comments. */
+  earnedLikes: number
+}
+
+// An episode-level thread key looks like "tv:1399:s1e1" — three colon segments
+// where the third is the sXeY suffix. Root threads ("tv:1399", "movie:27205")
+// have only two segments.
+const EP_THREAD_RE = /^tv:\d+:s\d+e\d+$/i
+
+export function computeEngagement(comments: Comment[]): EngagementStats {
+  let showComments = 0
+  let episodeComments = 0
+  let earnedLikes = 0
+  for (const c of comments) {
+    if (!c.isMine) continue
+    if (EP_THREAD_RE.test(c.mediaKey)) episodeComments++
+    else showComments++
+    earnedLikes += c.likes
+  }
+  return {
+    showComments,
+    episodeComments,
+    myComments: showComments + episodeComments,
+    earnedLikes,
   }
 }
 
 // ---------- badges ----------
-
-export interface BadgeInput {
-  episodes: number
-  maxDayEpisodes: number
-  completedShows: number
-  premieres: number
-  reactions: number
-  votes: number
-  comments: number
-  moviesWatched: number
-}
 
 export interface Badge {
   key: string
@@ -518,6 +589,15 @@ export interface Badge {
   desc: string
   earned: boolean
   progress: string // "412 / 1,000"
+}
+
+/** A labeled group of related badges. */
+export interface BadgeCategory {
+  key: string
+  title: string
+  icon: string
+  badges: Badge[]
+  earned: number // convenience: how many earned in this group
 }
 
 function badge(
@@ -538,19 +618,130 @@ function badge(
   }
 }
 
-export function computeBadges(i: BadgeInput): Badge[] {
-  return [
-    badge('first', '📺', 'First Episode', 'Watch your first episode', i.episodes, 1),
-    badge('binge', '🍿', 'Binge Curious', 'Watch 100 episodes', i.episodes, 100),
-    badge('serial', '🛋️', 'Serial Watcher', 'Watch 1,000 episodes', i.episodes, 1000),
-    badge('couch', '🏆', 'Couch Marathon', 'Watch 5,000 episodes', i.episodes, 5000),
-    badge('finisher', '🏁', 'Finisher', 'Finish a show 100%', i.completedShows, 1),
-    badge('completionist', '💯', 'Completionist', 'Finish 5 shows', i.completedShows, 5),
-    badge('premiere', '🎬', 'Premiere Fan', 'Watch 5 first episodes', i.premieres, 5),
-    badge('critic', '🧐', 'Critic', 'React 10 times', i.reactions, 10),
-    badge('voter', '🗳️', 'Voter', 'Vote 10 favorite characters', i.votes, 10),
-    badge('chatterbox', '💬', 'Chatterbox', 'Write 10 comments', i.comments, 10),
-    badge('moviebuff', '🎥', 'Movie Buff', 'Watch 50 movies', i.moviesWatched, 50),
-    badge('weekend', '⚡', 'Weekend Marathoner', 'Watch 5+ episodes in one day', i.maxDayEpisodes, 5),
+/** A boolean (achievement-style) badge: earned or not, no numeric goal. */
+function flagBadge(
+  key: string,
+  emoji: string,
+  name: string,
+  desc: string,
+  earned: boolean,
+): Badge {
+  return { key, emoji, name, desc, earned, progress: earned ? 'Earned' : 'Locked' }
+}
+
+export interface BadgeInput {
+  episodes: number
+  maxDayEpisodes: number
+  completedShows: number
+  premieres: number
+  specials: number
+  votes: number
+  moviesWatched: number
+  /** Full episodes-per-genre map, for per-genre "century" badges. */
+  genreEpMap: [string, number][]
+  // ratings
+  ratingsGiven: number
+  // comments / engagement
+  showComments: number
+  episodeComments: number
+  totalComments: number
+  earnedLikes: number
+  // follows
+  following: number
+  // app usage (derived from localStorage flags / lifetime facts)
+  installed: boolean
+  themeSwitched: boolean
+  importerUsed: boolean
+}
+
+/**
+ * Categorized badge grid for the Stats page. Each category is titled and can
+ * report "N of M earned". Locked badges still render (greyed out) so the grid
+ * doubles as a checklist.
+ */
+export function computeBadgeCategories(i: BadgeInput): BadgeCategory[] {
+  // Per-genre centuries: one badge for each genre where the user has watched
+  // 100+ episodes (a "century"). Only surfaces genres they actually watch.
+  const genreCenturies: Badge[] = i.genreEpMap
+    .filter(([, n]) => n >= 50) // show near-misses too, so the badge has a target
+    .slice(0, 6)
+    .map(([g, n]) =>
+      badge(`genre-${g}`, '🧬', `${g} Century`, `Watch 100 ${g} episodes`, n, 100),
+    )
+
+  const cats: Omit<BadgeCategory, 'earned'>[] = [
+    {
+      key: 'app',
+      title: 'App',
+      icon: '📱',
+      badges: [
+        flagBadge('installed', '📲', 'Installed', 'Install Raed Tracker as an app', i.installed),
+        flagBadge('themer', '🎨', 'Theme Switcher', 'Pick a light/dark theme', i.themeSwitched),
+        flagBadge('importer', '📥', 'Migrator', 'Import a library from another app', i.importerUsed),
+      ],
+    },
+    {
+      key: 'watch',
+      title: 'Watch',
+      icon: '📺',
+      badges: [
+        badge('ep-1', '📺', 'First Episode', 'Watch your first episode', i.episodes, 1),
+        badge('ep-10', '🌱', 'Getting Started', 'Watch 10 episodes', i.episodes, 10),
+        badge('ep-50', '🍿', 'Binge Curious', 'Watch 50 episodes', i.episodes, 50),
+        badge('ep-100', '💯', 'Centurion', 'Watch 100 episodes', i.episodes, 100),
+        badge('ep-250', '📼', 'Devotee', 'Watch 250 episodes', i.episodes, 250),
+        badge('ep-500', '🛋️', 'Couch Regular', 'Watch 500 episodes', i.episodes, 500),
+        badge('ep-1000', '🏅', 'Serial Watcher', 'Watch 1,000 episodes', i.episodes, 1000),
+        badge('ep-2500', '🎖️', 'Screen Veteran', 'Watch 2,500 episodes', i.episodes, 2500),
+        badge('ep-5000', '🏆', 'Living Legend', 'Watch 5,000 episodes', i.episodes, 5000),
+        badge('mv-1', '🎬', 'First Movie', 'Watch your first movie', i.moviesWatched, 1),
+        badge('mv-10', '🎟️', 'Movie Night', 'Watch 10 movies', i.moviesWatched, 10),
+        badge('mv-50', '🎥', 'Movie Buff', 'Watch 50 movies', i.moviesWatched, 50),
+        badge('mv-100', '📽️', 'Cinephile', 'Watch 100 movies', i.moviesWatched, 100),
+        badge('mv-250', '🍿', 'Film Scholar', 'Watch 250 movies', i.moviesWatched, 250),
+        badge('marathon', '⚡', 'Marathoner', 'Watch 5+ episodes in one day', i.maxDayEpisodes, 5),
+        badge('mega-marathon', '🔥', 'Ultramarathoner', 'Watch 10+ episodes in one day', i.maxDayEpisodes, 10),
+        badge('premiere', '🎉', 'Premiere Fan', 'Watch 10 first episodes', i.premieres, 10),
+        badge('specials', '✨', 'Completionist', 'Watch 5 specials', i.specials, 5),
+        badge('finisher', '🏁', 'Finisher', 'Finish a show 100%', i.completedShows, 1),
+        badge('finisher-5', '🎯', 'Serial Finisher', 'Finish 5 shows', i.completedShows, 5),
+        badge('finisher-10', '👑', 'Untouchable', 'Finish 10 shows', i.completedShows, 10),
+        ...genreCenturies,
+      ],
+    },
+    {
+      key: 'ratings',
+      title: 'Ratings',
+      icon: '⭐',
+      badges: [
+        badge('rate-1', '⭐', 'First Rating', 'Rate 1 title', i.ratingsGiven, 1),
+        badge('rate-10', '🌟', 'Rater', 'Rate 10 titles', i.ratingsGiven, 10),
+        badge('rate-25', '💫', 'Critic', 'Rate 25 titles', i.ratingsGiven, 25),
+        badge('rate-50', '🏆', 'Tastemaker', 'Rate 50 titles', i.ratingsGiven, 50),
+      ],
+    },
+    {
+      key: 'comment',
+      title: 'Comments',
+      icon: '💬',
+      badges: [
+        badge('cm-1', '💬', 'First Word', 'Write 1 comment', i.totalComments, 1),
+        badge('cm-10', '🗣️', 'Chatterbox', 'Write 10 comments', i.totalComments, 10),
+        badge('cm-25', '📣', 'Loud & Proud', 'Write 25 comments', i.totalComments, 25),
+        badge('liked', '❤️', 'Well Liked', 'Earn your first like', i.earnedLikes, 1),
+      ],
+    },
+    {
+      key: 'follow',
+      title: 'Follow',
+      icon: '👥',
+      badges: [
+        badge('fl-1', '👤', 'Making Friends', 'Follow 1 person', i.following, 1),
+        badge('fl-5', '👥', 'Social Circle', 'Follow 5 people', i.following, 5),
+        badge('fl-10', '🌐', 'Well Connected', 'Follow 10 people', i.following, 10),
+      ],
+    },
   ]
+
+  return cats.map((c) => ({ ...c, earned: c.badges.filter((b) => b.earned).length }))
 }

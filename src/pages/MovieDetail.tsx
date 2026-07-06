@@ -2,7 +2,7 @@
 // Backdrop hero, watched toggle + emotion reaction, watchlist, favorite,
 // IMDb link, cast strip and comments. Works in demo mode (ids 800001-800006).
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import type {
   CastMember,
@@ -11,6 +11,7 @@ import type {
   SearchResult,
 } from '../types'
 import { EMOTIONS } from '../types'
+import { compactNumber, watchedByCount, watcherCluster } from '../api/social'
 import {
   backdropUrl,
   getMovieDetail,
@@ -70,6 +71,186 @@ function CastStrip({ cast }: { cast: CastMember[] }) {
   )
 }
 
+/** Stacked emoji-avatar cluster + "Watched by +NNN" — a chip-sized social
+    proof cue on the hero. Links nowhere (yet). */
+function WatchedByChip({ mediaId, voteCount }: { mediaId: number; voteCount?: number }) {
+  const cluster = watcherCluster(mediaId, 3)
+  const total = watchedByCount(mediaId, voteCount)
+  return (
+    <span className="detail-watchedby" title={`Watched by ${total.toLocaleString()} people`}>
+      <span className="detail-watchedby-avatars" aria-hidden="true">
+        {cluster.map((u, i) => (
+          <span key={u.id} className="detail-watchedby-avatar" style={{ zIndex: cluster.length - i }}>
+            {u.avatar}
+          </span>
+        ))}
+      </span>
+      <span className="detail-watchedby-label">Watched by +{compactNumber(total)}</span>
+    </span>
+  )
+}
+
+/** 10-star personal rating row (shown when the title is tracked). Tapping a
+    star sets that rating; tapping the same star again clears it. */
+function StarRating({
+  value,
+  onRate,
+}: {
+  value: number | undefined
+  onRate: (rating: number | undefined) => void
+}) {
+  const [hover, setHover] = useState(0)
+  const [popped, setPopped] = useState(0)
+  return (
+    <div className="detail-rating" role="group" aria-label="Your rating out of 10">
+      <span className="detail-rating-label">Your rating</span>
+      <div className="detail-rating-stars" onMouseLeave={() => setHover(0)}>
+        {Array.from({ length: 10 }, (_, i) => {
+          const n = i + 1
+          const active = (hover || value || 0) >= n
+          return (
+            <button
+              key={n}
+              type="button"
+              className={`detail-rating-star${active ? ' on' : ''}${popped === n ? ' pop' : ''}`}
+              aria-label={`Rate ${n} of 10`}
+              aria-pressed={value === n}
+              onMouseEnter={() => setHover(n)}
+              onClick={() => {
+                const next = value === n ? undefined : n
+                onRate(next)
+                setPopped(n)
+                window.setTimeout(() => setPopped(0), 260)
+              }}
+            >
+              ★
+            </button>
+          )
+        })}
+      </div>
+      <span className="detail-rating-value">{value ? `${value}/10` : '—'}</span>
+    </div>
+  )
+}
+
+/** Slide-up "Add to list" sheet: toggle the title in/out of existing lists,
+    or quick-create a new list. Self-contained (mirrors EpisodeSheet/confirm). */
+function AddToListSheet({
+  item,
+  onClose,
+}: {
+  item: { type: 'tv' | 'movie'; id: number; name: string; poster_path: string | null }
+  onClose: () => void
+}) {
+  const lists = useLibrary((s) => s.lists)
+  const toggleListItem = useLibrary((s) => s.toggleListItem)
+  const createList = useLibrary((s) => s.createList)
+  const [newName, setNewName] = useState('')
+  const [closing, setClosing] = useState(false)
+  const sheetRef = useRef<HTMLDivElement>(null)
+
+  const close = () => {
+    setClosing(true)
+    window.setTimeout(onClose, 200)
+  }
+
+  useEffect(() => {
+    sheetRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const inList = (id: string) =>
+    lists.find((l) => l.id === id)?.items.some((i) => i.type === item.type && i.id === item.id) ??
+    false
+
+  const handleToggle = (listId: string, listName: string) => {
+    const was = inList(listId)
+    toggleListItem(listId, item)
+    showToast(was ? `Removed from ${listName}` : `Added to ${listName}`, was ? '↩️' : '📋')
+  }
+
+  const handleCreate = () => {
+    const name = newName.trim()
+    if (!name) return
+    const listId = createList(name)
+    toggleListItem(listId, item)
+    setNewName('')
+    showToast(`Added to ${name}`, '📋')
+  }
+
+  return (
+    <div className={`addlist-backdrop${closing ? ' closing' : ''}`} onClick={close}>
+      <div
+        ref={sheetRef}
+        tabIndex={-1}
+        className={`addlist-sheet${closing ? ' closing' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Add ${item.name} to a list`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="addlist-grip" aria-hidden="true" />
+        <div className="addlist-head">
+          <div className="addlist-title">Add to list</div>
+          <button className="addlist-close" onClick={close} aria-label="Close" title="Close">
+            ✕
+          </button>
+        </div>
+
+        {lists.length > 0 ? (
+          <div className="addlist-items">
+            {lists.map((l) => {
+              const checked = inList(l.id)
+              return (
+                <button
+                  key={l.id}
+                  className={`addlist-item${checked ? ' checked' : ''}`}
+                  aria-pressed={checked}
+                  onClick={() => handleToggle(l.id, l.name)}
+                >
+                  <span className="addlist-check" aria-hidden="true">
+                    {checked ? '✓' : ''}
+                  </span>
+                  <span className="addlist-name">{l.name}</span>
+                  <span className="addlist-count">{l.items.length}</span>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="addlist-empty">No lists yet — create one below.</div>
+        )}
+
+        <div className="addlist-create">
+          <input
+            className="addlist-input"
+            type="text"
+            value={newName}
+            placeholder="New list name…"
+            maxLength={60}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreate()
+            }}
+          />
+          <button
+            className="btn primary small"
+            disabled={!newName.trim()}
+            onClick={handleCreate}
+          >
+            Create
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function MovieDetail() {
   const { id } = useParams()
   const movieId = Number(id)
@@ -90,6 +271,8 @@ export default function MovieDetail() {
   const toggleFavoriteMovie = useLibrary((s) => s.toggleFavoriteMovie)
   const addToWatchlist = useLibrary((s) => s.addToWatchlist)
   const removeFromWatchlist = useLibrary((s) => s.removeFromWatchlist)
+  const setMovieRating = useLibrary((s) => s.setMovieRating)
+  const [addListOpen, setAddListOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -214,6 +397,7 @@ export default function MovieDetail() {
                 <span className="chip">{formatMinutes(detail.runtime)}</span>
               )}
               <Rating value={detail.vote_average} />
+              <WatchedByChip mediaId={movieId} />
               {detail.genres.map((g) => (
                 <span key={g.id} className="chip">
                   {g.name}
@@ -231,6 +415,10 @@ export default function MovieDetail() {
 
               <button className="btn" onClick={handleWatchlistToggle}>
                 {onWatchlist ? '🔖 On watchlist' : '🔖 Add to watchlist'}
+              </button>
+
+              <button className="btn" onClick={() => setAddListOpen(true)} title="Add to a list">
+                📋 Add to list
               </button>
 
               {tracked && (
@@ -288,6 +476,14 @@ export default function MovieDetail() {
               <div className="moviedetail-feel-card">
                 <span className="moviedetail-feel-label">How did it make you feel?</span>
                 <ReactionPicker value={watched.emotion} onChange={handleEmotionChange} />
+                <StarRating
+                  value={tracked?.rating}
+                  onRate={(rating) => {
+                    setMovieRating(movieId, rating)
+                    if (rating) showToast(`Rated ${rating}/10 ★`, '⭐')
+                    else showToast('Rating cleared', '↩️')
+                  }}
+                />
                 <span className="moviedetail-feel-date">
                   {emotionMeta ? `${emotionMeta.label} · ` : ''}
                   Watched{' '}
@@ -323,6 +519,13 @@ export default function MovieDetail() {
           </div>
           <MediaRow items={recs} />
         </>
+      )}
+
+      {addListOpen && (
+        <AddToListSheet
+          item={{ type: 'movie', id: movieId, name: detail.title, poster_path: detail.poster_path }}
+          onClose={() => setAddListOpen(false)}
+        />
       )}
     </div>
   )

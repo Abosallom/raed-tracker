@@ -96,6 +96,8 @@ interface LibraryState {
   watchlist: WatchlistItem[]
   comments: Comment[] // user's own + likes state on seeded ones
   lists: UserList[]
+  /** Ids of seeded SocialUsers the user follows (local social graph). */
+  following: string[]
   profile: Profile
   /** Reaction-sheet frequency (Settings > App). Defaults to 'always'. */
   reactionPrompt: ReactionPrompt
@@ -151,9 +153,18 @@ interface LibraryState {
   // ----- custom lists -----
   createList: (name: string) => string
   renameList: (id: string, name: string) => void
+  setListDescription: (id: string, description: string) => void
   deleteList: (id: string) => void
   /** Add if absent, remove if present. */
   toggleListItem: (listId: string, item: Omit<ListItem, 'addedAt'>) => void
+
+  // ----- social graph -----
+  /** Follow/unfollow a seeded SocialUser. */
+  toggleFollow: (userId: string) => void
+
+  // ----- numeric ratings (1-10; undefined clears) -----
+  setShowRating: (id: number, rating: number | undefined) => void
+  setMovieRating: (id: number, rating: number | undefined) => void
 
   // ----- movies -----
   addMovie: (detail: MovieDetail) => void
@@ -209,6 +220,7 @@ const EMPTY = {
   watchlist: [] as WatchlistItem[],
   comments: [] as Comment[],
   lists: [] as UserList[],
+  following: [] as string[],
   profile: { name: 'Watcher', avatar: '🍿', joinedAt: now() } as Profile,
   reactionPrompt: 'always' as ReactionPrompt,
 }
@@ -453,6 +465,32 @@ export const useLibrary = create<LibraryState>()(
           lists: st.lists.map((l) => (l.id === id ? { ...l, name } : l)),
         })),
 
+      setListDescription: (id, description) =>
+        set((st) => ({
+          lists: st.lists.map((l) => (l.id === id ? { ...l, description } : l)),
+        })),
+
+      toggleFollow: (userId) =>
+        set((st) => ({
+          following: st.following.includes(userId)
+            ? st.following.filter((id) => id !== userId)
+            : [...st.following, userId],
+        })),
+
+      setShowRating: (id, rating) =>
+        set((st) => {
+          const show = st.shows[id]
+          if (!show) return st
+          return { shows: { ...st.shows, [id]: { ...show, rating } } }
+        }),
+
+      setMovieRating: (id, rating) =>
+        set((st) => {
+          const m = st.movies[id]
+          if (!m) return st
+          return { movies: { ...st.movies, [id]: { ...m, rating } } }
+        }),
+
       deleteList: (id) =>
         set((st) => ({ lists: st.lists.filter((l) => l.id !== id) })),
 
@@ -589,6 +627,7 @@ export const useLibrary = create<LibraryState>()(
         lists: st.lists,
         profile: st.profile,
         reactionPrompt: st.reactionPrompt,
+        following: st.following,
       }),
     },
   ),
