@@ -202,8 +202,9 @@ textarea:focus {
 }
 
 .nav-item.active {
-  background: var(--accent-soft);
-  color: var(--accent-hover);
+  /* Mono nav: active reads by brightness, accent stays for content. */
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
 }
 
 .nav-section {
