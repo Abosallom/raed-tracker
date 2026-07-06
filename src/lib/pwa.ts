@@ -26,9 +26,46 @@ export function onUpdateReady(l: Listener): () => void {
   }
 }
 
-/** Activate the waiting service worker and reload. No-op if none waiting. */
-export function applyUpdate(): void {
-  if (updateFn && updateReady) void updateFn(true)
+/** How long to wait for the new service worker to take control. */
+const APPLY_TIMEOUT_MS = 8000
+
+/**
+ * Activate the waiting service worker and reload once it takes control.
+ * Resolves 'reloading' when the reload has been scheduled, 'timeout' when the
+ * worker didn't take over in time (caller should ask for a manual reload),
+ * 'noop' when no update is waiting.
+ *
+ * The reload cannot be left to the plugin: vite-plugin-pwa's prompt-mode
+ * helper ignores its reloadPage argument and only reloads from its own
+ * 'controlling' listener when the event has isUpdate=true — workers found by
+ * our registration.update() polling can surface as external updates, which
+ * never reload and left the bar stuck on "Refreshing…".
+ */
+export function applyUpdate(): Promise<'reloading' | 'timeout' | 'noop'> {
+  const update = updateFn
+  if (!update || !updateReady) return Promise.resolve('noop')
+  return new Promise((resolve) => {
+    let settled = false
+    // Reload even on a takeover AFTER the timeout: SKIP_WAITING was already
+    // sent, so a late activation leaves this page running old hashed chunks
+    // the new worker's precache no longer serves — reloading is always the
+    // right outcome once the new worker controls the page. `settled` only
+    // guards the promise, never the reload; {once} guards re-entry.
+    const onTakeover = () => {
+      if (!settled) {
+        settled = true
+        resolve('reloading')
+      }
+      window.location.reload()
+    }
+    navigator.serviceWorker?.addEventListener('controllerchange', onTakeover, { once: true })
+    void update(true)
+    window.setTimeout(() => {
+      if (settled) return
+      settled = true
+      resolve('timeout')
+    }, APPLY_TIMEOUT_MS)
+  })
 }
 
 const BAR_ID = 'pwa-update-bar'
@@ -102,7 +139,14 @@ function mountUpdateBar() {
   btn.addEventListener('click', () => {
     btn.disabled = true
     btn.textContent = 'Refreshing…'
-    applyUpdate()
+    void applyUpdate().then((result) => {
+      if (result === 'reloading') return
+      // 'timeout' or 'noop': never leave the button dead at "Refreshing…".
+      btn.disabled = false
+      btn.textContent = 'Refresh'
+      msg.textContent = 'Update didn’t apply — reload the page'
+      showToast('Could not auto-refresh — please reload the page', '⚠️')
+    })
   })
 
   bar.append(msg, btn)

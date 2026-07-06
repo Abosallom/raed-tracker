@@ -62,6 +62,13 @@ export interface EpisodeSheetProps {
   episode: number
   episodeTitle?: string
   variant?: 'default' | 'pause-this'
+  /**
+   * What "Keep watching" does on the pause-this hero: 'continue' (default)
+   * flows into the reaction steps — right after a check, where they describe
+   * the just-checked episode. Pass 'close' when the prompt was opened without
+   * a fresh check (e.g. the show page's Pause button).
+   */
+  keepAction?: 'continue' | 'close'
   onClose: () => void
 }
 
@@ -76,6 +83,7 @@ export default function EpisodeSheet({
   episode,
   episodeTitle,
   variant = 'default',
+  keepAction = 'continue',
   onClose,
 }: EpisodeSheetProps) {
   const show = useLibrary((s) => s.shows[showId])
@@ -276,6 +284,9 @@ export default function EpisodeSheet({
         {isPauseHero ? (
           <PauseHero
             showName={showName}
+            // keepAction 'close' is only passed by the explicit hero Pause
+            // button — the sheet is then a confirm, not a drop-off prompt.
+            prompt={keepAction === 'close' ? 'requested' : 'detected'}
             onPause={() => {
               togglePauseShow(showId)
               showToast(`Paused ${showName}`, '⏸️')
@@ -283,9 +294,9 @@ export default function EpisodeSheet({
             }}
             onKeep={() => {
               // "Keep watching" continues into the default steps only if the
-              // user's reaction-prompt preference allows the deep-react sheet;
-              // otherwise it just closes.
-              if (reactionPrompt === 'never') {
+              // user's reaction-prompt preference allows the deep-react sheet
+              // AND the prompt followed a fresh check; otherwise just close.
+              if (keepAction === 'close' || reactionPrompt === 'never') {
                 close()
                 return
               }
@@ -367,11 +378,14 @@ export default function EpisodeSheet({
 
 function PauseHero({
   showName,
+  prompt,
   onPause,
   onKeep,
   onClose,
 }: {
   showName: string
+  /** 'detected': the app noticed a stale show. 'requested': the user clicked Pause. */
+  prompt: 'detected' | 'requested'
   onPause: () => void
   onKeep: () => void
   onClose: () => void
@@ -391,16 +405,20 @@ function PauseHero({
           <span key={i} className="epsheet-eq-bar" style={{ animationDelay: `${i * 0.12}s` }} />
         ))}
       </div>
-      <div className="epsheet-pause-headline">PAUSE THIS?</div>
+      <div className="epsheet-pause-headline">
+        {prompt === 'requested' ? `PAUSE ${showName.toUpperCase()}?` : 'PAUSE THIS?'}
+      </div>
       <div className="epsheet-pause-copy">
-        You haven't touched {showName} in a while
+        {prompt === 'requested'
+          ? 'It disappears from Watch Next until you resume'
+          : `You haven't touched ${showName} in a while`}
       </div>
       <div className="epsheet-pause-actions">
         <button className="btn primary" onClick={onPause}>
           ⏸ Pause it
         </button>
         <button className="btn" onClick={onKeep}>
-          Keep watching
+          {prompt === 'requested' ? 'Cancel' : 'Keep watching'}
         </button>
       </div>
     </div>

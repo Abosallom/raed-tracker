@@ -359,10 +359,12 @@ export default function ShowDetailPage() {
   const reactionPrompt = useLibrary((s) => s.reactionPrompt)
 
   // Post-check reaction sheet (same one the queue uses) + add-to-list sheet.
+  // variant 'pause-this' is the hero Pause button's confirm sheet.
   const [sheet, setSheet] = useState<{
     season: number
     episode: number
     episodeTitle?: string
+    variant?: 'default' | 'pause-this'
   } | null>(null)
   const [addListOpen, setAddListOpen] = useState(false)
 
@@ -727,10 +729,20 @@ export default function ShowDetailPage() {
                 <button
                   className="btn"
                   onClick={() => {
-                    const wasPaused = tracked.paused
-                    togglePauseShow(id)
-                    if (wasPaused) showToast('Resumed ▶', '▶️')
-                    else showToast('Paused — hidden from Watch Next', '⏸️')
+                    if (tracked.paused) {
+                      // Resuming is a plain toggle; the sheet is a pause prompt.
+                      togglePauseShow(id)
+                      showToast('Resumed ▶', '▶️')
+                      return
+                    }
+                    // TV Time-style "PAUSE THIS?" sheet (equalizer hero)
+                    // instead of an instant state flip.
+                    const next = nextEpisode(tracked)
+                    setSheet({
+                      season: next?.season ?? 1,
+                      episode: next?.episode ?? 1,
+                      variant: 'pause-this',
+                    })
                   }}
                   title={tracked.paused ? 'Resume this show' : 'Pause — hide from Watch Next'}
                 >
@@ -1018,6 +1030,10 @@ export default function ShowDetailPage() {
           season={sheet.season}
           episode={sheet.episode}
           episodeTitle={sheet.episodeTitle}
+          variant={sheet.variant}
+          // Hero-initiated pause prompt: "Keep watching" just closes — there
+          // is no freshly-checked episode for the reaction steps to describe.
+          keepAction={sheet.variant === 'pause-this' ? 'close' : undefined}
           onClose={() => setSheet(null)}
         />
       )}
