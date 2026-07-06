@@ -212,6 +212,9 @@ function recordChanges(
     if (p.snapshot !== n.snapshot) touch(`snap:${id}`)
     if ((p.paused ?? false) !== (n.paused ?? false)) touch(`pause:${id}`)
     if ((p.favorite ?? false) !== (n.favorite ?? false)) touch(`fav:${id}`)
+    // Any lastWatchedAt change touches — including uncheck ROLLBACKS, whose
+    // recomputed (older or absent) stamp must beat the remote's later value.
+    if ((p.lastWatchedAt ?? '') !== (n.lastWatchedAt ?? '')) touch(`lwa:${id}`)
     // Rating LWW: a new/changed value touches, a cleared value tombstones so
     // the clear cannot be resurrected by a remote copy still holding a rating.
     if (p.rating !== n.rating) {
@@ -388,6 +391,13 @@ function earlier(a: string, b: string): string {
   return a <= b ? a : b
 }
 
+/** Later-wins for optional activity stamps (recency signals, not provenance). */
+function later(a?: string, b?: string): string | undefined {
+  if (!a) return b
+  if (!b) return a
+  return a >= b ? a : b
+}
+
 /** Last-writer-wins pick between the local and remote value for one key. */
 function pickLww<T>(
   key: string,
@@ -476,6 +486,21 @@ function mergeShows(
     // Rating is LWW on rate:<id>; the tombstone-aware clear is handled later
     // by applyDeletions, so here we just pick the surviving value.
     const rating = pickLww(`rate:${id}`, ls.rating, rs.rating, localMeta, remoteMeta)
+    // LWW on the lwa:<id> touch-times so an uncheck rollback (an older or
+    // absent stamp, deliberately written) survives the merge. With no
+    // recorded touch on either side (older docs), fall back to later-wins:
+    // this is a recency signal, so the device that watched most recently
+    // must win — unlike the per-record earliest-wins above, which preserves
+    // import provenance.
+    const wk = `lwa:${id}`
+    const wlt = localMeta.set[wk] ?? ''
+    const wrt = remoteMeta.set[wk] ?? ''
+    const lastWatchedAt =
+      wlt || wrt
+        ? wrt > wlt
+          ? rs.lastWatchedAt
+          : ls.lastWatchedAt
+        : later(ls.lastWatchedAt, rs.lastWatchedAt)
     out[id] = {
       snapshot,
       addedAt: earlier(ls.addedAt, rs.addedAt),
@@ -483,6 +508,7 @@ function mergeShows(
       favorite,
       paused,
       ...(rating !== undefined ? { rating } : {}),
+      ...(lastWatchedAt !== undefined ? { lastWatchedAt } : {}),
     }
   }
   return out

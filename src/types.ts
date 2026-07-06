@@ -154,6 +154,12 @@ export interface TrackedShow {
   paused?: boolean
   /** User's numeric rating, 1-10 (drives the Stats "voted ratings" section). */
   rating?: number
+  /**
+   * When the user last CHECKED an episode of this show (ISO). Drives
+   * recent-activity ordering; deliberately not set by bulk imports so
+   * historical libraries keep their real watch dates. Merged later-wins.
+   */
+  lastWatchedAt?: string
 }
 
 export interface MovieSnapshot {

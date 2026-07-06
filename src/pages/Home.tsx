@@ -12,6 +12,7 @@ import {
   trendingShows,
 } from '../api/tmdb'
 import { nextEpisode, showProgress, useLibrary, watchedCount } from '../store/library'
+import { byRecentActivity } from '../lib/activity'
 import { computeStreaks } from '../lib/streaks'
 import {
   ErrorBox,
@@ -42,15 +43,6 @@ function greetingForHour(hour: number): string {
   return 'Good evening'
 }
 
-/** Most recent activity on a tracked show (last watch, falling back to when it was added). */
-function lastActivity(show: TrackedShow): number {
-  let latest = new Date(show.addedAt).getTime()
-  for (const rec of Object.values(show.watched)) {
-    const t = new Date(rec.watchedAt).getTime()
-    if (t > latest) latest = t
-  }
-  return latest
-}
 
 // ---------- hero carousel ----------
 
@@ -320,7 +312,7 @@ export default function Home() {
 
   const keepWatching = Object.values(shows)
     .filter((s) => !s.paused && nextEpisode(s) !== null)
-    .sort((a, b) => lastActivity(b) - lastActivity(a))
+    .sort(byRecentActivity)
     .slice(0, 6)
 
   // Top 5 trending shows, favoring ones with a backdrop image (stable sort keeps

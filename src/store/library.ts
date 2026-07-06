@@ -17,6 +17,7 @@ import type {
   TrackedShow,
   UserList,
   WatchlistItem,
+  WatchRecord,
 } from '../types'
 import { episodeKey } from '../types'
 
@@ -190,6 +191,15 @@ interface LibraryState {
   resetAll: () => void
 }
 
+/** Latest watchedAt among the remaining records (ISO compare), for undo rollbacks. */
+function latestWatchStamp(watched: Record<EpisodeKey, WatchRecord>): string | undefined {
+  let latest: string | undefined
+  for (const rec of Object.values(watched)) {
+    if (!latest || rec.watchedAt > latest) latest = rec.watchedAt
+  }
+  return latest
+}
+
 function now(): string {
   return new Date().toISOString()
 }
@@ -284,9 +294,23 @@ export const useLibrary = create<LibraryState>()(
         const key = episodeKey(season, episode)
         const watched = { ...show.watched }
         const nowWatched = !watched[key]
-        if (nowWatched) watched[key] = { watchedAt: now() }
+        const stamp = now()
+        if (nowWatched) watched[key] = { watchedAt: stamp }
         else delete watched[key]
-        set({ shows: { ...st.shows, [showId]: { ...show, watched } } })
+        set({
+          shows: {
+            ...st.shows,
+            [showId]: {
+              ...show,
+              watched,
+              // Checking bumps recent-activity ordering; unchecking is an
+              // undo, so roll the stamp back to the remaining records' truth
+              // (the lwa LWW touch-time in sync.ts keeps a merge from
+              // resurrecting the mistaken check's stamp).
+              lastWatchedAt: nowWatched ? stamp : latestWatchStamp(watched),
+            },
+          },
+        })
         return nowWatched
       },
 
@@ -312,11 +336,20 @@ export const useLibrary = create<LibraryState>()(
           // Only mark episodes that have actually aired.
           const count = airedEpisodeCount(show, season)
           const watched = { ...show.watched }
+          let marked = false
           for (let e = 1; e <= count; e++) {
             const key = episodeKey(season, e)
-            if (!watched[key]) watched[key] = { watchedAt: now() }
+            if (!watched[key]) {
+              watched[key] = { watchedAt: now() }
+              marked = true
+            }
           }
-          return { shows: { ...st.shows, [showId]: { ...show, watched } } }
+          return {
+            shows: {
+              ...st.shows,
+              [showId]: { ...show, watched, ...(marked ? { lastWatchedAt: now() } : {}) },
+            },
+          }
         }),
 
       markSeasonUnwatched: (showId, season) =>
@@ -327,7 +360,18 @@ export const useLibrary = create<LibraryState>()(
           for (const [k, v] of Object.entries(show.watched)) {
             if (!k.startsWith(`s${season}e`)) watched[k] = v
           }
-          return { shows: { ...st.shows, [showId]: { ...show, watched } } }
+          const removedAny = Object.keys(watched).length !== Object.keys(show.watched).length
+          return {
+            shows: {
+              ...st.shows,
+              [showId]: {
+                ...show,
+                watched,
+                // Undo semantics: same rollback as toggleEpisode's uncheck.
+                ...(removedAny ? { lastWatchedAt: latestWatchStamp(watched) } : {}),
+              },
+            },
+          }
         }),
 
       markShowWatched: (showId) =>
@@ -335,16 +379,25 @@ export const useLibrary = create<LibraryState>()(
           const show = st.shows[showId]
           if (!show) return st
           const watched = { ...show.watched }
+          let marked = false
           for (const seasonStr of Object.keys(show.snapshot.seasonEpisodeCounts)) {
             const season = Number(seasonStr)
             // Only mark episodes that have actually aired.
             const count = airedEpisodeCount(show, season)
             for (let e = 1; e <= count; e++) {
               const key = episodeKey(season, e)
-              if (!watched[key]) watched[key] = { watchedAt: now() }
+              if (!watched[key]) {
+                watched[key] = { watchedAt: now() }
+                marked = true
+              }
             }
           }
-          return { shows: { ...st.shows, [showId]: { ...show, watched } } }
+          return {
+            shows: {
+              ...st.shows,
+              [showId]: { ...show, watched, ...(marked ? { lastWatchedAt: now() } : {}) },
+            },
+          }
         }),
 
       togglePauseShow: (id) =>

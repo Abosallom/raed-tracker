@@ -15,6 +15,7 @@ import {
   useLibrary,
   watchedCount,
 } from '../store/library'
+import { lastActivity } from '../lib/activity'
 import { computeStreaks } from '../lib/streaks'
 import { ErrorBox, PosterCard, PosterImage, SkeletonRow } from '../components/shared'
 import { showToast } from '../components/toast'
@@ -196,16 +197,6 @@ function badgeFor(e: UpcomingEntry): 'PREMIERE' | 'NEW' | null {
 // streak bests), the stale 'pause-this' sheet, and the reactionPrompt
 // preference driving the deep-react EpisodeSheet.
 const STALE_MS = 14 * 86400000
-
-/** Most recent watch activity (falls back to when the show was added). */
-function lastActivity(show: TrackedShow): number {
-  let t = new Date(show.addedAt).getTime()
-  for (const rec of Object.values(show.watched)) {
-    const w = new Date(rec.watchedAt).getTime()
-    if (w > t) t = w
-  }
-  return t
-}
 
 interface SheetInfo {
   showId: number

@@ -25,6 +25,7 @@ import {
   refreshFollowedShows,
   subscribeFreshness,
 } from '../lib/freshness'
+import { byRecentActivity, lastActivity } from '../lib/activity'
 import { computeStreaks } from '../lib/streaks'
 import { PosterImage, ProgressBar, timeAgo } from '../components/shared'
 import { showToast } from '../components/toast'
@@ -58,15 +59,6 @@ function fetchSeason(showId: number, season: number): Promise<SeasonDetail> {
   return p
 }
 
-/** Most recent watch activity (falls back to when the show was added). */
-function lastActivity(show: TrackedShow): number {
-  let t = new Date(show.addedAt).getTime()
-  for (const rec of Object.values(show.watched)) {
-    const w = new Date(rec.watchedAt).getTime()
-    if (w > t) t = w
-  }
-  return t
-}
 
 /** Aired episodes still unwatched AFTER the current queue row. */
 function behindCount(show: TrackedShow): number {
@@ -798,7 +790,7 @@ export default function MyShows() {
     const nowMs = Date.now()
 
     let nextRank = layoutRef.current.size
-    for (const s of [...all].sort((a, b) => lastActivity(b) - lastActivity(a))) {
+    for (const s of [...all].sort(byRecentActivity)) {
       if (!layoutRef.current.has(s.snapshot.id)) {
         layoutRef.current.set(s.snapshot.id, {
           rank: nextRank++,
