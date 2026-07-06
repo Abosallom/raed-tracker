@@ -656,7 +656,7 @@ export default function Upcoming() {
   return (
     <div>
       <div className="toptabs" role="tablist" aria-label="Schedule view">
-        <Link className="toptab" to="/shows" role="tab" aria-selected="false">
+        <Link className="toptab" to="/" role="tab" aria-selected="false">
           Keep Watching
         </Link>
         <span className="toptab active" role="tab" aria-selected="true">

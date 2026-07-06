@@ -35,7 +35,6 @@ import './app-shell.css'
 
 // Route-level code splitting: each page loads on demand so the initial
 // bundle stays small. All pages ship default exports.
-const Home = lazy(() => import('./pages/Home'))
 const Search = lazy(() => import('./pages/Search'))
 const ShowDetail = lazy(() => import('./pages/ShowDetail'))
 const MovieDetail = lazy(() => import('./pages/MovieDetail'))
@@ -77,13 +76,6 @@ const svg = (paths: ReactNode) => (p: IconProps) =>
     </svg>
   )
 
-const IconHome = svg(
-  <>
-    <path d="M3 10.5 12 3l9 7.5" />
-    <path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5" />
-    <path d="M9.5 21v-6h5v6" />
-  </>,
-)
 const IconTv = svg(
   <>
     <rect x="3" y="7" width="18" height="12" rx="2" />
@@ -164,7 +156,7 @@ function NotFound() {
       <h1 className="notfound-title">Lost in the static</h1>
       <p className="notfound-sub">That page is off the air. Let’s get you back on channel.</p>
       <div className="notfound-actions">
-        <Link to="/shows" className="btn primary">
+        <Link to="/" className="btn primary">
           My Shows
         </Link>
         <Link to="/search" className="btn">
@@ -217,7 +209,8 @@ function Nav({
   showAdmin: boolean
 }) {
   const item = (to: string, Icon: IconComp, label: string, extra?: ReactNode) => (
-    <NavLink to={to} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+    // end on "/": the root NavLink would otherwise be active on every route.
+    <NavLink to={to} end={to === '/'} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
       <span className="nav-icon">
         <Icon />
       </span>
@@ -230,10 +223,9 @@ function Nav({
       <div className="sidebar-logo">
         Raed <span>Tracker</span>
       </div>
-      {item('/', IconHome, 'Home')}
       <div className="nav-section">Library</div>
       {item(
-        '/shows',
+        '/',
         IconTv,
         'Shows',
         showsBadge > 0 ? (
@@ -266,7 +258,8 @@ function Nav({
     via the .mobile-brand logo link and the desktop sidebar.) */
 function TabBar({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: boolean }) {
   const tab = (to: string, Icon: IconComp, label: string, extra?: ReactNode) => (
-    <NavLink to={to} className={({ isActive }) => `tabbar-item${isActive ? ' active' : ''}`}>
+    // end on "/": the root NavLink would otherwise be active on every route.
+    <NavLink to={to} end={to === '/'} className={({ isActive }) => `tabbar-item${isActive ? ' active' : ''}`}>
       {/* Icon is aria-hidden — the badge/dot carry aria-labels and must stay in
           the a11y tree, and inside .tabbar-icon (their position:relative anchor). */}
       <span className="tabbar-icon">
@@ -279,7 +272,7 @@ function TabBar({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: bo
   return (
     <nav className="tabbar" aria-label="Primary">
       {tab(
-        '/shows',
+        '/',
         IconTv,
         'Shows',
         showsBadge > 0 ? (
@@ -300,9 +293,8 @@ function TabBar({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: bo
   )
 }
 
-// Root tab pages that get the minimal mobile brand row. Home is excluded — it
-// has its own greeting page-title, so a brand row above it would double up.
-const TAB_ROOTS = ['/shows', '/movies', '/search', '/profile']
+// Root tab pages that get the minimal mobile brand row.
+const TAB_ROOTS = ['/', '/movies', '/search', '/profile']
 
 /** Mobile-only minimal brand row, shown on the four root tab pages only
     (sub-pages get a BackBar instead; desktop keeps the sidebar logo). */
@@ -399,13 +391,15 @@ export default function App() {
         <div key={location.pathname} className="page-enter" data-transition={transition}>
           <Suspense fallback={<RouteFallback />}>
             <Routes>
-              <Route path="/" element={<Home />} />
+              {/* My Shows IS the landing page (TV Time opens on its watch
+                  list); /shows stays as a redirect for old links. */}
+              <Route path="/" element={<MyShows />} />
+              <Route path="/shows" element={<Navigate to="/" replace />} />
               <Route path="/search" element={<Search />} />
               {/* Legacy/aliased path — Explore lives at /search. */}
               <Route path="/explore" element={<Navigate to="/search" replace />} />
               <Route path="/show/:id" element={<ShowDetail />} />
               <Route path="/movie/:id" element={<MovieDetail />} />
-              <Route path="/shows" element={<MyShows />} />
               <Route path="/movies" element={<Movies />} />
               <Route path="/watchlist" element={<Watchlist />} />
               <Route path="/upcoming" element={<Upcoming />} />

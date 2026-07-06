@@ -992,7 +992,7 @@ export default function Stats() {
           <p style={{ marginTop: 6 }}>
             Follow a show or track a movie and your numbers will light up here.
           </p>
-          <Link className="btn primary" to="/" style={{ marginTop: 20 }}>
+          <Link className="btn primary" to="/search" style={{ marginTop: 20 }}>
             Discover something to watch
           </Link>
         </div>

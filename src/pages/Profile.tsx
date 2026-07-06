@@ -434,7 +434,7 @@ export default function Profile() {
       {favShows.length === 0 ? (
         <div className="card profile-fav-empty fade-in">
           <span>No favorite shows yet — tap the heart on a show you love.</span>
-          <Link className="btn small" to="/shows">
+          <Link className="btn small" to="/">
             Add favorites
           </Link>
         </div>
@@ -484,7 +484,7 @@ export default function Profile() {
       <h2 className="section-title">
         <span>📺 Shows</span>
         {showList.length > 0 && (
-          <Link className="profile-viewall" to="/shows">
+          <Link className="profile-viewall" to="/">
             View all ({showList.length}) →
           </Link>
         )}

@@ -62,7 +62,7 @@ export default function Watchlist() {
     <div>
       <BackBar title="Watchlist" />
       <div className="toptabs" role="tablist" aria-label="My Shows sections">
-        <Link className="toptab" to="/shows" role="tab" aria-selected="false">
+        <Link className="toptab" to="/" role="tab" aria-selected="false">
           Keep Watching
         </Link>
         <Link className="toptab" to="/upcoming" role="tab" aria-selected="false">
@@ -93,7 +93,7 @@ export default function Watchlist() {
               🔍 Search titles
             </Link>
             <Link className="btn" to="/">
-              🏠 Discover
+              📺 My Shows
             </Link>
           </div>
         </div>
