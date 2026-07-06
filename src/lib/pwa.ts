@@ -157,6 +157,10 @@ function mountUpdateBar() {
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000
 const UPDATE_CHECK_MIN_GAP_MS = 60 * 1000
 
+/** Updates found within this window of module load auto-apply (launch feel). */
+const AUTO_APPLY_WINDOW_MS = 4000
+const LAUNCH_AT = Date.now()
+
 /** Register the service worker. Call once at startup (PROD only). */
 export function initPwa(): void {
   const updateSW = registerSW({
@@ -182,9 +186,23 @@ export function initPwa(): void {
     },
     onNeedRefresh() {
       updateReady = true
+      for (const l of listeners) l()
+      // An update discovered AT LAUNCH (a worker left waiting from a previous
+      // visit, or found by the initial check) applies itself silently — it
+      // just reads as a slightly longer app start. Users were living on
+      // stale bundles for days because the bar's Refresh never got tapped.
+      // Mid-session discoveries keep the polite prompt; if the silent apply
+      // times out, fall back to the prompt too.
+      if (Date.now() - LAUNCH_AT < AUTO_APPLY_WINDOW_MS) {
+        void applyUpdate().then((result) => {
+          if (result === 'reloading') return
+          showToast('Update ready — tap to refresh', '⬆️')
+          mountUpdateBar()
+        })
+        return
+      }
       showToast('Update ready — tap to refresh', '⬆️')
       mountUpdateBar()
-      for (const l of listeners) l()
     },
     onOfflineReady() {
       showToast('Ready to work offline', '📴')
