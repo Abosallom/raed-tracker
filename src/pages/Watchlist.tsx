@@ -61,7 +61,18 @@ export default function Watchlist() {
   return (
     <div>
       <BackBar title="Watchlist" />
-      <h1 className="page-title">Watchlist</h1>
+      <div className="toptabs" role="tablist" aria-label="My Shows sections">
+        <Link className="toptab" to="/shows" role="tab" aria-selected="false">
+          Keep Watching
+        </Link>
+        <Link className="toptab" to="/upcoming" role="tab" aria-selected="false">
+          Upcoming
+        </Link>
+        <span className="toptab active" role="tab" aria-selected="true">
+          Watch List
+          {watchlist.length > 0 && <span className="toptab-count">{watchlist.length}</span>}
+        </span>
+      </div>
       <p className="page-subtitle">
         {watchlist.length === 0
           ? 'Nothing saved for later yet'

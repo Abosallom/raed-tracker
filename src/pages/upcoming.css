@@ -581,3 +581,16 @@
     padding-bottom: 6px;
   }
 }
+
+/* Fit all three top tabs on one row on phones (duplicated in the other
+   toptabs stylesheets — keep in sync). */
+@media (max-width: 560px) {
+  .toptab {
+    padding: 8px 7px 10px;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+  }
+  .toptab-count {
+    padding: 1px 5px;
+  }
+}

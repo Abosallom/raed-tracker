@@ -1,7 +1,7 @@
 /* My Shows page (route /shows) — Watch Next queue, classes prefixed queue- */
 
 /* ---------- underline top tab bar (shared look with Upcoming) ----------
-   NOTE: .toptabs* rules are duplicated verbatim in upcoming.css — keep in sync. */
+   NOTE: .toptabs* rules are duplicated verbatim in upcoming.css and watchlist.css — keep in sync. */
 
 .toptabs {
   display: flex;
@@ -1242,5 +1242,18 @@
   }
   .queue-refresh-btn.spinning {
     opacity: 0.55;
+  }
+}
+
+/* Fit all three top tabs on one row on phones (duplicated in the other
+   toptabs stylesheets — keep in sync). */
+@media (max-width: 560px) {
+  .toptab {
+    padding: 8px 7px 10px;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+  }
+  .toptab-count {
+    padding: 1px 5px;
   }
 }

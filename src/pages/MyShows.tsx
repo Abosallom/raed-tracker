@@ -986,6 +986,9 @@ export default function MyShows() {
         <Link to="/upcoming" className="toptab" role="tab" aria-selected="false">
           Upcoming
         </Link>
+        <Link to="/watchlist" className="toptab" role="tab" aria-selected="false">
+          Watch List
+        </Link>
         <span className="toptabs-spacer" />
         <div className="toptabs-actions">
           <button

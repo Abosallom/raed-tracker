@@ -662,6 +662,9 @@ export default function Upcoming() {
         <span className="toptab active" role="tab" aria-selected="true">
           Upcoming
         </span>
+        <Link className="toptab" to="/watchlist" role="tab" aria-selected="false">
+          Watch List
+        </Link>
       </div>
       <p className="page-subtitle">
         Air dates for the shows you follow{demo ? ' — plus sample shows in demo mode' : ''}.
