@@ -12,7 +12,13 @@
 import type { TrackedShow } from '../types'
 
 export function lastActivity(show: TrackedShow): number {
-  let latest = new Date(show.addedAt).getTime()
+  const hasHistory = show.lastWatchedAt !== undefined || Object.keys(show.watched).length > 0
+  // addedAt is ONLY the fallback for shows with no watch history: imported
+  // libraries "add" every show at the import moment, so including addedAt in
+  // the max ties the whole library at that instant and buries real (older)
+  // watch dates — long-stopped shows then outrank genuinely recent watches.
+  if (!hasHistory) return new Date(show.addedAt).getTime()
+  let latest = 0
   if (show.lastWatchedAt) {
     const t = new Date(show.lastWatchedAt).getTime()
     if (t > latest) latest = t
