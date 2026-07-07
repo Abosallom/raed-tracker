@@ -6,13 +6,20 @@ import { invalidateLastPush } from './sync'
 
 const NOT_CONFIGURED = 'Sync is not configured in this build.'
 
-/** Email a 6-digit one-time code (creates the account on first use). */
+/** Email a 6-digit one-time code to an EXISTING account. */
 export async function sendOtp(email: string): Promise<string | null> {
   if (!supabase) return NOT_CONFIGURED
   const { error } = await supabase.auth.signInWithOtp({
     email,
-    options: { shouldCreateUser: true },
+    // MUST be false: project signups are disabled (members are provisioned
+    // by the admin), and Supabase rejects shouldCreateUser:true requests
+    // outright when signups are off — even for EXISTING accounts. This broke
+    // every OTP sign-in with "Signups not allowed for this instance".
+    options: { shouldCreateUser: false },
   })
+  if (error && /signups not allowed/i.test(error.message)) {
+    return 'No account with that email — accounts are created by the admin. Check the address or ask for an invite.'
+  }
   return error ? error.message : null
 }
 
