@@ -583,7 +583,9 @@ export default function Migrate() {
     setUnmatched(missed)
     setStep(4)
     showToast(
-      `Imported ${counts.showsAdded} shows, ${counts.episodesMarked} episodes, ${counts.moviesAdded} movies`,
+      counts.datesRepaired > 0
+        ? `Imported ${counts.showsAdded} shows, ${counts.episodesMarked} episodes — and repaired ${counts.datesRepaired} watch dates`
+        : `Imported ${counts.showsAdded} shows, ${counts.episodesMarked} episodes, ${counts.moviesAdded} movies`,
       '🚚',
     )
   }

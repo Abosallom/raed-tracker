@@ -154,6 +154,8 @@ interface LibraryState {
     moviesAdded: number
     watchlistAdded: number
     emotionsApplied: number
+    /** Existing records whose stamped date was healed to the real one. */
+    datesRepaired: number
   }
 
   // ----- custom lists -----
@@ -479,6 +481,7 @@ export const useLibrary = create<LibraryState>()(
         const movies = { ...st.movies }
         let showsAdded = 0
         let episodesMarked = 0
+        let datesRepaired = 0
         let moviesAdded = 0
         let watchlistAdded = 0
         let emotionsApplied = 0
@@ -495,9 +498,18 @@ export const useLibrary = create<LibraryState>()(
           const watched = { ...base.watched }
           for (const ep of item.watched) {
             const key = episodeKey(ep.season, ep.episode)
-            if (!watched[key]) {
+            const prior = watched[key]
+            if (!prior) {
               watched[key] = { watchedAt: ep.watchedAt ?? now() }
               episodesMarked++
+            } else if (ep.watchedAt && prior.watchedAt > ep.watchedAt) {
+              // REPAIR: a real historical date beats a later stamp. An earlier
+              // import without dates stamped records with the import moment,
+              // which wrecks recency ordering; re-importing a dated export
+              // now heals those records in place (earliest wins — the same
+              // provenance rule the sync merge uses). Reactions/votes kept.
+              watched[key] = { ...prior, watchedAt: ep.watchedAt }
+              datesRepaired++
             }
           }
           // Source-app emotions attach to (existing or just-created) watch records.
@@ -550,7 +562,7 @@ export const useLibrary = create<LibraryState>()(
         }
 
         set({ shows, movies, watchlist })
-        return { showsAdded, episodesMarked, moviesAdded, watchlistAdded, emotionsApplied }
+        return { showsAdded, episodesMarked, moviesAdded, watchlistAdded, emotionsApplied, datesRepaired }
       },
 
       createList: (name) => {
