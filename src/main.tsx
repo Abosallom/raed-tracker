@@ -14,8 +14,13 @@ window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', ap
 
 initSync()
 
-// Service worker only in production builds — it would fight Vite's dev server.
-if (import.meta.env.PROD) initPwa()
+// Service worker only in production WEB builds — it would fight Vite's dev
+// server, and inside the Capacitor native shell (which serves local files and
+// injects window.Capacitor) it would only confuse the update flow.
+const isNativeShell = Boolean(
+  (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.(),
+)
+if (import.meta.env.PROD && !isNativeShell) initPwa()
 initInstallUx()
 
 // HashRouter (#/shows) instead of BrowserRouter: GitHub Pages is static hosting

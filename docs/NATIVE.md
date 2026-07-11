@@ -6,14 +6,14 @@ below runs on Aziz's Mac; nothing here is needed for the GitHub Pages PWA.
 
 ## One-time setup
 
-```bash
-npm i -D @capacitor/cli
-npm i @capacitor/core @capacitor/ios @capacitor/android
-npx cap init "Raed Tracker" app.raedtracker --web-dir dist
-npm run build
-npx cap add ios       # needs Xcode installed
-npx cap add android   # needs Android Studio (optional)
-```
+DONE (committed): Capacitor installed, `ios/` project generated (SPM, no
+CocoaPods), icons + dark splash generated from the PWA artwork, privacy
+manifest (PrivacyInfo.xcprivacy) wired into the bundle, export-compliance
+key set (ITSAppUsesNonExemptEncryption=false), service worker disabled
+inside the native shell. Simulator build verified: **BUILD SUCCEEDED**.
+
+After every web change: `npm run build && npx cap sync ios`.
+Android later: `npm i @capacitor/android && npx cap add android`.
 
 Capacitor reads `capacitor.config.json` (already in the repo). After every web
 build: `npx cap sync`.
