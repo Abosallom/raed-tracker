@@ -27,6 +27,7 @@ import {
   subscribeFreshness,
 } from '../lib/freshness'
 import { byRecentActivity, lastActivity } from '../lib/activity'
+import { detectStampedImport } from '../lib/healthcheck'
 import { computeStreaks } from '../lib/streaks'
 import { PosterImage, ProgressBar, timeAgo } from '../components/shared'
 import { showToast } from '../components/toast'
@@ -88,6 +89,55 @@ interface SheetInfo {
   episode: number
   episodeTitle?: string
   variant?: 'default' | 'pause-this'
+}
+
+
+// ---------- import-stamped dates notice (library health) ----------
+
+const DATES_NOTICE_KEY = 'raedtracker_dates_notice'
+
+/** Self-serve repair prompt: shows when many shows' ordering keys are import
+    stamps (see lib/healthcheck). Dismissal is per-signature, so a NEW bad
+    import re-surfaces it, and a successful repair hides it for good. */
+function StampedDatesNotice() {
+  const shows = useLibrary((s) => s.shows)
+  const report = useMemo(() => detectStampedImport(shows), [shows])
+  const [, force] = useState(0)
+  if (!report) return null
+  const sig = `${report.affectedShows}:${report.stampedRecords}`
+  try {
+    if (localStorage.getItem(DATES_NOTICE_KEY) === sig) return null
+  } catch {
+    /* storage unavailable — just show it */
+  }
+  return (
+    <div className="dates-notice" role="status">
+      <span aria-hidden>🩹</span>
+      <div className="dates-notice-text">
+        <b>{report.affectedShows} shows are missing real watch dates</b> — their order here
+        won&apos;t match your true history. Re-import your TV Time export (it repairs the dates
+        in place) to fix the order.
+      </div>
+      <div className="dates-notice-actions">
+        <Link className="btn small primary" to="/migrate">
+          Repair via import
+        </Link>
+        <button
+          className="btn small"
+          onClick={() => {
+            try {
+              localStorage.setItem(DATES_NOTICE_KEY, sig)
+            } catch {
+              /* ignore */
+            }
+            force((n) => n + 1)
+          }}
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  )
 }
 
 // ---------- grid filters (P4a) ----------
@@ -982,6 +1032,7 @@ export default function MyShows() {
         </div>
       </div>
 
+      <StampedDatesNotice />
       <div className="toptabs" role="tablist" aria-label="My Shows sections">
         <span className="toptab active" role="tab" aria-selected="true">
           Keep Watching

@@ -1284,3 +1284,35 @@
     padding: 1px 5px;
   }
 }
+
+/* ---------- import-stamped dates notice ---------- */
+
+.dates-notice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.dates-notice-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-dim);
+}
+
+.dates-notice-text b {
+  color: var(--text);
+}
+
+.dates-notice-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
