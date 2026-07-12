@@ -11,23 +11,13 @@ a credential you create, and legal declarations only you can make.
 - ✅ Compliance baked in: in-app account deletion (5.1.1(v)), privacy manifest,
   `#/privacy` policy, export-compliance key, SW disabled in the native shell.
 
-## You do (≈30–40 min + Apple's review)
+## You do (≈20–30 min + Apple's review)
 
-### 1. Upload the binary
-Pick one:
-- **Transporter app** (easiest): download from the Mac App Store, sign in with
-  your Apple ID, drag in `ios/App/build/export/App.ipa`, Deliver.
-- **Command line**: create an App Store Connect API key at App Store Connect →
-  Users and Access → Integrations → App Store Connect API → “+”. Download the
-  `AuthKey_XXXX.p8` to `~/.appstoreconnect/private_keys/`, then:
-  ```
-  xcrun altool --upload-app -f ios/App/build/export/App.ipa -t ios \
-    --apiKey XXXX --apiIssuer <issuer-uuid>
-  ```
-- **Xcode**: `open ios/App/App.xcodeproj` → Product → Archive → Distribute App
-  → App Store Connect → Upload.
-
-The build takes ~10 min to finish processing before it appears under the app.
+### 1. ~~Upload the binary~~ — DONE
+Uploaded 2026-07-12 via the Xcode account session ("Upload succeeded").
+It appears under the app (and TestFlight) after ~10 min of processing.
+Future uploads: bump the build number in Xcode, re-archive, re-run
+`xcodebuild -exportArchive … -exportOptionsPlist uploadOptions.plist`.
 
 ### 2. Create a reviewer demo account (signups are admin-only)
 In your app's `/admin` console, add a member — e.g. username `appreviewer`,
