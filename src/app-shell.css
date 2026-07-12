@@ -118,7 +118,9 @@
   /* ----- minimal brand row (root tab pages only; JS gates the routes) ----- */
 
   .mobile-brand {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 7px;
     font-size: 16px;
     font-weight: 800;
     letter-spacing: -0.4px;
@@ -127,8 +129,12 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  .mobile-brand span {
-    color: var(--accent);
+  /* Accent gradient lives on .mobile-brand span in global.css (shared with
+     the sidebar wordmark). */
+  .mobile-brand .brand-mark {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
   }
 }
 

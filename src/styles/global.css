@@ -175,14 +175,29 @@ textarea:focus {
 }
 
 .sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   font-size: 20px;
   font-weight: 800;
   padding: 6px 12px 18px;
   letter-spacing: -0.5px;
 }
 
-.sidebar-logo span {
+/* Rebrand: the app-icon chip shown beside the wordmark. */
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+
+.sidebar-logo span,
+.mobile-brand span {
   color: var(--accent);
+  background: linear-gradient(135deg, #f8d335 0%, #eec50e 55%, #cfa50a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .nav-item {

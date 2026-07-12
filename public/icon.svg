@@ -1,12 +1,60 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Raed Tracker app icon: rounded dark square, yellow TV glyph -->
-  <rect width="512" height="512" rx="112" fill="#171717"/>
-  <!-- antenna -->
-  <path d="M186 128 L256 202 L326 118" fill="none" stroke="#fbbf24" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- tv body -->
-  <rect x="112" y="196" width="288" height="196" rx="40" fill="#fbbf24"/>
-  <!-- screen -->
-  <rect x="146" y="230" width="220" height="128" rx="20" fill="#171717"/>
-  <!-- play triangle -->
-  <path d="M234 262 L298 294 L234 326 Z" fill="#fbbf24"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="0.5" cy="0.46" r="0.9">
+      <stop offset="0" stop-color="#262421"/>
+      <stop offset="0.55" stop-color="#181817"/>
+      <stop offset="1" stop-color="#0b0b0b"/>
+    </radialGradient>
+    <radialGradient id="ambient" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#eec50e" stop-opacity="0.15"/>
+      <stop offset="0.6" stop-color="#eec50e" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#eec50e" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe98f"/>
+      <stop offset="0.5" stop-color="#eec50e"/>
+      <stop offset="1" stop-color="#c79708"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232629"/>
+      <stop offset="1" stop-color="#0e1011"/>
+    </linearGradient>
+    <linearGradient id="play" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe37a"/>
+      <stop offset="0.55" stop-color="#f0c81a"/>
+      <stop offset="1" stop-color="#c99a00"/>
+    </linearGradient>
+    <linearGradient id="track" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d4a90a"/>
+      <stop offset="1" stop-color="#ffdf6b"/>
+    </linearGradient>
+    <filter id="b8" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <filter id="b18" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+
+  <!-- full-bleed background -->
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <ellipse cx="512" cy="512" rx="430" ry="400" fill="url(#ambient)"/>
+
+  <!-- floating panel: outer neon halo -->
+  <rect x="184" y="284" width="656" height="456" rx="80" fill="none" stroke="#eec50e" stroke-width="26" opacity="0.45" filter="url(#b18)"/>
+
+  <!-- edge-lit glass panel -->
+  <rect x="184" y="284" width="656" height="456" rx="80" fill="url(#glass)" stroke="url(#edge)" stroke-width="14"/>
+  <!-- interior edge light bleeding inward -->
+  <rect x="208" y="308" width="608" height="408" rx="64" fill="none" stroke="#eec50e" stroke-width="10" opacity="0.18" filter="url(#b8)"/>
+
+  <!-- play mark: glow then mark -->
+  <path d="M448 410 L448 597 L641 504 Z" fill="#f8d335" opacity="0.5" filter="url(#b18)"/>
+  <path d="M448 410 L448 597 L641 504 Z" fill="url(#play)" stroke="url(#play)" stroke-width="36" stroke-linejoin="round"/>
+
+  <!-- progress track (tracker cue) -->
+  <rect x="290" y="652" width="444" height="12" rx="6" fill="#eec50e" opacity="0.2"/>
+  <rect x="290" y="652" width="284" height="12" rx="6" fill="url(#track)"/>
+  <circle cx="574" cy="658" r="18" fill="#eec50e" opacity="0.5" filter="url(#b8)"/>
+  <circle cx="574" cy="658" r="12" fill="#ffe98f"/>
 </svg>

@@ -223,6 +223,7 @@ function Nav({
   return (
     <nav className="sidebar">
       <div className="sidebar-logo">
+        <img src="./icon.svg" alt="" className="brand-mark" />
         Raed <span>Tracker</span>
       </div>
       <div className="nav-section">Library</div>
@@ -305,6 +306,7 @@ function MobileBrand() {
   if (!TAB_ROOTS.includes(pathname)) return null
   return (
     <Link to="/" className="mobile-brand" aria-label="Raed Tracker home">
+      <img src="./icon.svg" alt="" className="brand-mark" />
       Raed <span>Tracker</span>
     </Link>
   )
