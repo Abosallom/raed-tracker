@@ -237,6 +237,14 @@ textarea:focus {
   max-width: 1200px;
 }
 
+/* Programmatic focus (sheet close / route change restores focus here for
+   screen readers) must not paint the UA ring around the whole viewport —
+   Chrome treats focus() outside a user gesture as :focus-visible. Keyboard
+   users don't lose anything: main is only ever focused programmatically. */
+.main-content:focus {
+  outline: none;
+}
+
 /* ---------- common components ---------- */
 
 .page-title {
@@ -295,6 +303,15 @@ textarea:focus {
 .btn.small {
   padding: 5px 10px;
   font-size: 13px;
+  /* Keep the compact look but carry a ≥44px hit area via an invisible
+     overlay (vertical only — horizontal growth would overlap row neighbours). */
+  position: relative;
+}
+
+.btn.small::after {
+  content: '';
+  position: absolute;
+  inset: -8px 0;
 }
 
 .chip {

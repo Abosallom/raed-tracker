@@ -267,49 +267,6 @@ a.moviedetail-imdb-btn:hover {
    All colors via CSS variables; verified in both themes.
    ============================================================ */
 
-/* ---- Watched-by stacked-avatar chip (hero) ---- */
-.detail-watchedby {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 28px;
-  padding: 0 12px 0 8px;
-  border-radius: 999px;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-
-.detail-watchedby-avatars {
-  display: inline-flex;
-  align-items: center;
-}
-
-.detail-watchedby-avatar {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  margin-left: -7px;
-  box-shadow: 0 0 0 1.5px var(--bg-elev-2);
-}
-
-.detail-watchedby-avatar:first-child {
-  margin-left: 0;
-}
-
-.detail-watchedby-label {
-  color: var(--text);
-}
-
 /* ---- 10-star personal rating row ---- */
 .detail-rating {
   display: flex;
@@ -336,6 +293,9 @@ a.moviedetail-imdb-btn:hover {
   background: none;
   border: none;
   cursor: pointer;
+  /* Comfortable touch slot per star (was a 24px glyph with 2px padding). */
+  min-width: 32px;
+  min-height: 44px;
   padding: 2px;
   font-size: 20px;
   line-height: 1;

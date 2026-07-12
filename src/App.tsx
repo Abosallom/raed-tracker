@@ -296,8 +296,11 @@ function TabBar({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: bo
   )
 }
 
-// Root tab pages that get the minimal mobile brand row.
-const TAB_ROOTS = ['/', '/movies', '/search', '/profile']
+// Root tab pages that get the minimal mobile brand row. /upcoming and
+// /watchlist are peer tabs of '/' (same toptabs row) — including them keeps
+// the tab row at the same height on all three instead of jumping when the
+// brand row disappears.
+const TAB_ROOTS = ['/', '/movies', '/search', '/profile', '/upcoming', '/watchlist']
 
 /** Mobile-only minimal brand row, shown on the four root tab pages only
     (sub-pages get a BackBar instead; desktop keeps the sidebar logo). */

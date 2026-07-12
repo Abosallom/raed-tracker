@@ -9,24 +9,16 @@
 .mig-steps {
   display: flex;
   align-items: center;
+  flex-wrap: wrap; /* all five steps stay visible — clipping hid steps 3–5 */
   gap: 6px;
+  row-gap: 4px;
   list-style: none;
   padding: 0;
   margin: 4px 0 22px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  /* Fade the right edge so it's visually clear the stepper scrolls when it
-     can't fit (e.g. all five steps at 375px). */
-  -webkit-mask-image: linear-gradient(to right, #000 92%, transparent 100%);
-  mask-image: linear-gradient(to right, #000 92%, transparent 100%);
 }
 
-.mig-steps::-webkit-scrollbar {
-  display: none;
-}
-
-/* At ≤400px, tighten step padding and the connector width so more of the four
-   steps fit before the scroll fade kicks in. */
+/* At ≤400px, tighten step padding and the connector width so the five steps
+   wrap onto as few lines as possible. */
 @media (max-width: 400px) {
   .mig-step {
     padding: 6px 6px;

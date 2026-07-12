@@ -442,19 +442,22 @@
 }
 
 .queue-ep-sep {
-  color: var(--accent);
+  color: var(--text-faint);
   font-weight: 400;
 }
 
-/* "+N more aired" — tiny solid accent chip */
+/* "N left" — quiet neutral count; amber stays reserved for the check action
+   (a solid-amber chip on every row read as guilt-debt, not information). */
 .queue-behind {
   padding: 1px 7px;
   border-radius: 999px;
-  background: var(--accent);
-  color: #171717;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
   font-size: 10.5px;
-  font-weight: 800;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* NEW = yellow chip, PREMIERE = green-tinted chip */
@@ -1069,7 +1072,9 @@
   font-size: 12.5px;
   font-weight: 700;
   color: var(--accent-hover);
-  padding: 4px 8px;
+  /* ≥44px hit target (HIG) without growing the visual text */
+  min-height: 44px;
+  padding: 4px 12px;
   border-radius: var(--radius-sm);
   transition: color 0.15s, opacity 0.15s;
 }
@@ -1109,7 +1114,9 @@
 }
 
 .shfilters-chip {
-  padding: 7px 13px;
+  /* 44px-tall touch targets — the sheet has the vertical room */
+  min-height: 44px;
+  padding: 7px 14px;
   border-radius: 999px;
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
@@ -1125,10 +1132,12 @@
   border-color: var(--text-faint);
 }
 
+/* Selection reads by brightness (mono, like the nav) — amber stays reserved
+   for the apply action below, and defaults don't light up the whole sheet. */
 .shfilters-chip.active {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent-hover);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  border-color: var(--text-faint);
+  color: var(--text);
 }
 
 .shfilters-apply {

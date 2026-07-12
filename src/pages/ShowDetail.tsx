@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import type { Emotion, SearchResult, SeasonDetail, ShowDetail } from '../types'
 import { EMOTIONS, episodeKey } from '../types'
-import { compactNumber, watchedByCount, watcherCluster } from '../api/social'
 import {
   backdropUrl,
   getRecommendations,
@@ -33,7 +32,6 @@ import {
   MediaRow,
   PosterImage,
   ProgressBar,
-  Rating,
   ReactionPicker,
   SkeletonDetail,
 } from '../components/shared'
@@ -144,25 +142,6 @@ function SeasonSkeleton() {
         </div>
       ))}
     </div>
-  )
-}
-
-/** Stacked emoji-avatar cluster + "Watched by +NNN" — a chip-sized social
-    proof cue on the hero. Links nowhere (yet). */
-function WatchedByChip({ mediaId, voteCount }: { mediaId: number; voteCount?: number }) {
-  const cluster = watcherCluster(mediaId, 3)
-  const total = watchedByCount(mediaId, voteCount)
-  return (
-    <span className="detail-watchedby" title={`Watched by ${total.toLocaleString()} people`}>
-      <span className="detail-watchedby-avatars" aria-hidden="true">
-        {cluster.map((u, i) => (
-          <span key={u.id} className="detail-watchedby-avatar" style={{ zIndex: cluster.length - i }}>
-            {u.avatar}
-          </span>
-        ))}
-      </span>
-      <span className="detail-watchedby-label">Watched by +{compactNumber(total)}</span>
-    </span>
   )
 }
 
@@ -483,6 +462,11 @@ export default function ShowDetailPage() {
   // ----- mobile quick-log bar: shown while the episode list is on screen -----
   const [epListVisible, setEpListVisible] = useState(false)
 
+  // Which episode row has its reaction picker expanded. Watched rows show only
+  // the chosen emoji (or a quiet "React" control) — six always-on emoji per
+  // row doubled every row's height and drowned the checklist.
+  const [reactOpenKey, setReactOpenKey] = useState<string | null>(null)
+
   useEffect(() => {
     const el = seasonBodyRef.current
     if (!el || !seasonDetail) {
@@ -498,6 +482,33 @@ export default function ShowDetailPage() {
       setEpListVisible(false)
     }
   }, [seasonDetail, seasonLoading])
+
+  // …but not while the up-next row itself is on screen: its own check circle
+  // is right there, and the floating pill would just occlude other rows.
+  const [nextRowVisible, setNextRowVisible] = useState(false)
+  const trackedNext = tracked ? nextEpisode(tracked) : null
+  const trackedNextKey = trackedNext
+    ? episodeKey(trackedNext.season, trackedNext.episode)
+    : null
+
+  useEffect(() => {
+    const row = trackedNextKey
+      ? seasonBodyRef.current?.querySelector<HTMLElement>(`[data-ep-key="${trackedNextKey}"]`)
+      : null
+    if (!row) {
+      // Another season is on screen — the pill is the shortcut back.
+      setNextRowVisible(false)
+      return
+    }
+    const io = new IntersectionObserver((entries) =>
+      setNextRowVisible(entries.some((e) => e.isIntersecting)),
+    )
+    io.observe(row)
+    return () => {
+      io.disconnect()
+      setNextRowVisible(false)
+    }
+  }, [seasonDetail, seasonLoading, trackedNextKey])
 
   if (loading)
     return (
@@ -670,44 +681,52 @@ export default function ShowDetailPage() {
               <div className="show-detail-title">{detail.name}</div>
               {detail.tagline && <div className="show-detail-tagline">{detail.tagline}</div>}
             </div>
-            <div className="show-detail-chips">
+            {/* One calm meta line instead of a nine-pill wall; rating leads. */}
+            <div className="show-detail-meta">
               {tracked?.paused && <span className="chip show-detail-paused-chip">⏸ Paused</span>}
-              {year && <span className="chip">{year}</span>}
-              {detail.status && <span className="chip">{detail.status}</span>}
-              <Rating value={detail.vote_average} />
-              <WatchedByChip mediaId={id} />
-              <span className="chip">
-                {detail.number_of_seasons} season{detail.number_of_seasons === 1 ? '' : 's'} ·{' '}
-                {detail.number_of_episodes} ep
+              {detail.vote_average > 0 && (
+                <span className="show-detail-meta-rating">★ {detail.vote_average.toFixed(1)}</span>
+              )}
+              <span className="show-detail-meta-line">
+                {[
+                  year,
+                  detail.status,
+                  `${detail.number_of_seasons} season${
+                    detail.number_of_seasons === 1 ? '' : 's'
+                  } · ${detail.number_of_episodes} ep`,
+                  network,
+                  detail.genres
+                    .slice(0, 2)
+                    .map((g) => g.name)
+                    .join(' · '),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </span>
-              {network && <span className="chip">{network}</span>}
-              {detail.genres.map((g) => (
-                <span key={g.id} className="chip">
-                  {g.name}
-                </span>
-              ))}
             </div>
             <div className="show-detail-actions">
+              {/* One verb everywhere: Track → Tracking (was add/follow/track
+                  depending on the screen). */}
               {followed ? (
                 <button
                   className="btn"
                   onClick={() => {
                     removeShow(id)
-                    showToast(`Unfollowed ${detail.name}`, '👋')
+                    showToast(`Stopped tracking ${detail.name}`, '👋')
                   }}
-                  title="Stop following"
+                  title="Stop tracking"
                 >
-                  ✓ Following
+                  ✓ Tracking
                 </button>
               ) : (
                 <button
                   className="btn primary"
                   onClick={() => {
                     addShow(detail)
-                    showToast(`Following ${detail.name} ✓`, '📺')
+                    showToast(`Tracking ${detail.name} ✓`, '📺')
                   }}
                 >
-                  + Add show
+                  + Track show
                 </button>
               )}
               {onWatchlist ? (
@@ -780,27 +799,33 @@ export default function ShowDetailPage() {
               <button className="btn" onClick={() => setAddListOpen(true)} title="Add to a list">
                 📋 Add to list
               </button>
-              {trailerKey && (
-                <a
-                  className="btn show-detail-trailer-btn"
-                  href={youtubeUrl(trailerKey)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  ▶ YouTube trailer
-                </a>
-              )}
-              {detail.imdb_id && (
-                <a
-                  className="btn show-detail-imdb-btn"
-                  href={imdbTitleUrl(detail.imdb_id)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  IMDb ↗
-                </a>
-              )}
             </div>
+            {/* External links live on one quiet row — exits shouldn't outshine
+                the core actions above. */}
+            {(trailerKey || detail.imdb_id) && (
+              <div className="show-detail-links">
+                {trailerKey && (
+                  <a
+                    className="show-detail-link"
+                    href={youtubeUrl(trailerKey)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    ▶ Trailer
+                  </a>
+                )}
+                {detail.imdb_id && (
+                  <a
+                    className="show-detail-link"
+                    href={imdbTitleUrl(detail.imdb_id)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    IMDb ↗
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -842,7 +867,15 @@ export default function ShowDetailPage() {
             {upNext && (
               <button
                 className="btn small"
-                onClick={() => {
+                onClick={async () => {
+                  // Bulk marks stamp every remaining episode — worth one tap
+                  // of friction to avoid wiping in a mistap-driven state.
+                  const ok = await confirm({
+                    title: `Mark ${detail.name} fully watched?`,
+                    message: 'Every aired episode will be marked watched.',
+                    confirmLabel: 'Mark all ✓',
+                  })
+                  if (!ok) return
                   markShowWatched(id)
                   fireConfetti()
                   showToast(`${detail.name} — all episodes watched ✓`, '🎉')
@@ -902,7 +935,19 @@ export default function ShowDetailPage() {
               {seasonWatchedCount > 0 && (
                 <button
                   className="btn small"
-                  onClick={() => {
+                  onClick={async () => {
+                    // Destructive: removes per-episode watch dates AND
+                    // reactions with no undo — confirm first (Pause, which is
+                    // harmless, already gets a confirm sheet).
+                    const ok = await confirm({
+                      title: `Unmark ${seasonWatchedCount} watched episode${
+                        seasonWatchedCount === 1 ? '' : 's'
+                      }?`,
+                      message: 'Watch dates and reactions for this season will be removed.',
+                      confirmLabel: 'Unmark season',
+                      danger: true,
+                    })
+                    if (!ok) return
                     markSeasonUnwatched(id, season)
                     showToast(`Season ${season} unmarked`, '↩️')
                   }}
@@ -959,17 +1004,40 @@ export default function ShowDetailPage() {
                         </span>
                       )}
                     </div>
+                    {/* Reaction lives inside the main column so it never
+                        crushes the episode title on narrow screens. */}
+                    {isWatched &&
+                      (reactOpenKey === key ? (
+                        <ReactionPicker
+                          compact
+                          value={record?.emotion}
+                          onChange={(emo) => {
+                            setEpisodeEmotion(id, ep.season_number, ep.episode_number, emo)
+                            toastEmotion(emo)
+                            setReactOpenKey(null)
+                          }}
+                        />
+                      ) : (
+                        <button
+                          className={`show-detail-ep-react${
+                            record?.emotion ? ' has-emotion' : ''
+                          }`}
+                          aria-label={
+                            record?.emotion
+                              ? `Your reaction: ${
+                                  EMOTIONS.find((e) => e.key === record.emotion)?.label ?? 'set'
+                                } — change it`
+                              : `React to ${epCode(ep.season_number, ep.episode_number)}`
+                          }
+                          title={record?.emotion ? 'Change reaction' : 'React'}
+                          onClick={() => setReactOpenKey(key)}
+                        >
+                          {record?.emotion
+                            ? EMOTIONS.find((e) => e.key === record.emotion)?.emoji
+                            : 'React'}
+                        </button>
+                      ))}
                   </div>
-                  {isWatched && (
-                    <ReactionPicker
-                      compact
-                      value={record?.emotion}
-                      onChange={(emo) => {
-                        setEpisodeEmotion(id, ep.season_number, ep.episode_number, emo)
-                        toastEmotion(emo)
-                      }}
-                    />
-                  )}
                   {isFuture && ep.air_date ? (
                     <span className="show-detail-future-chip">
                       {inDaysLabel(daysUntil(ep.air_date))}
@@ -978,6 +1046,11 @@ export default function ShowDetailPage() {
                     <button
                       className={`show-detail-ep-toggle${isWatched ? ' on' : ''}`}
                       title={isWatched ? 'Mark unwatched' : 'Mark watched'}
+                      aria-label={
+                        isWatched
+                          ? `Unmark ${epCode(ep.season_number, ep.episode_number)}`
+                          : `Mark ${epCode(ep.season_number, ep.episode_number)} watched`
+                      }
                       onClick={() =>
                         handleToggleEpisode(ep.season_number, ep.episode_number, ep.name)
                       }
@@ -1033,12 +1106,14 @@ export default function ShowDetailPage() {
       {/* ---------- mobile quick-log bar (fixed above the tab bar) ---------- */}
       {followed && upNext && (
         <div
-          className={`show-detail-quickbar${epListVisible ? ' visible' : ''}`}
-          aria-hidden={!epListVisible}
+          className={`show-detail-quickbar${
+            epListVisible && !nextRowVisible ? ' visible' : ''
+          }`}
+          aria-hidden={!(epListVisible && !nextRowVisible)}
         >
           <button
             className="show-detail-quickbar-btn"
-            tabIndex={epListVisible ? 0 : -1}
+            tabIndex={epListVisible && !nextRowVisible ? 0 : -1}
             onClick={() => handleToggleEpisode(upNext.season, upNext.episode)}
           >
             {/* When viewing the up-next season the button logs the row you're

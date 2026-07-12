@@ -101,7 +101,7 @@ interface LibraryState {
   /** Ids of seeded SocialUsers the user follows (local social graph). */
   following: string[]
   profile: Profile
-  /** Reaction-sheet frequency (Settings > App). Defaults to 'always'. */
+  /** Reaction-sheet frequency (Settings > App). Defaults to 'milestones'. */
   reactionPrompt: ReactionPrompt
   setReactionPrompt: (pref: ReactionPrompt) => void
 
@@ -242,7 +242,10 @@ const EMPTY = {
   lists: [] as UserList[],
   following: [] as string[],
   profile: { name: 'Watcher', avatar: '🍿', joinedAt: now() } as Profile,
-  reactionPrompt: 'always' as ReactionPrompt,
+  // 'milestones': the most-repeated action in the app (checking an episode)
+  // stays quiet — toast + undo — and the deep-react sheet only opens on
+  // premieres/finales/completions. Settings still offers 'always'/'never'.
+  reactionPrompt: 'milestones' as ReactionPrompt,
 }
 
 export const useLibrary = create<LibraryState>()(
@@ -760,7 +763,7 @@ export const useLibrary = create<LibraryState>()(
       // Persist only serializable data slices — never the action functions.
       // Explicit now that a scalar preference (reactionPrompt) lives alongside
       // the collections; a legacy store missing it falls back to EMPTY's
-      // 'always' via merge (undefined slice → initial-state value).
+      // 'milestones' via merge (undefined slice → initial-state value).
       partialize: (st) => ({
         shows: st.shows,
         movies: st.movies,

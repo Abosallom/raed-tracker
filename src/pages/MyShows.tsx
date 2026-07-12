@@ -143,7 +143,7 @@ function StampedDatesNotice() {
 // ---------- grid filters (P4a) ----------
 
 type StatusFilter = 'all' | 'watching' | 'uptodate' | 'notstarted' | 'paused'
-type SortMode = 'az' | 'recent' | 'behind'
+type SortMode = 'az' | 'recent' | 'behind' | 'watched'
 
 interface ShowsFilters {
   status: StatusFilter
@@ -650,11 +650,13 @@ const QueueRow = memo(function QueueRow({
               S{pad2(shown.season)} <span className="queue-ep-sep">|</span> E{pad2(shown.episode)}
             </span>
             {behind > 0 && !leaving && (
+              // Same definition as the grid badge: TOTAL unwatched aired
+              // episodes (the two views previously disagreed by one).
               <span
                 className="queue-behind"
-                title={`${behind} more aired ${behind === 1 ? 'episode' : 'episodes'} after this one`}
+                title={`${behind + 1} aired episodes to watch`}
               >
-                +{behind}
+                {behind + 1} left
               </span>
             )}
             {shown.episode === 1 && <span className="queue-badge premiere">Premiere</span>}
@@ -856,20 +858,38 @@ export default function MyShows() {
       layoutRef.current.get(s.snapshot.id) ?? { rank: 1e9, stale: false }
     const byRank = (a: TrackedShow, b: TrackedShow) => meta(a).rank - meta(b).rank
 
-    const queueable = pool.filter(
+    // ----- P4a filters + sort apply to BOTH layouts (the sheet previously
+    // only drove the grid, silently ignoring list view) -----
+    const matchesFilters = (s: TrackedShow) => {
+      if (filters.status !== 'all' && showStatus(s) !== filters.status) return false
+      if (filters.genre && !s.snapshot.genres.includes(filters.genre)) return false
+      if (filters.network && s.snapshot.network !== filters.network) return false
+      return true
+    }
+    const filtered = pool.filter(matchesFilters)
+    const sortShows = (list: TrackedShow[]) => {
+      if (filters.sort === 'az')
+        return [...list].sort((a, b) => a.snapshot.name.localeCompare(b.snapshot.name))
+      if (filters.sort === 'behind')
+        return [...list].sort((a, b) => behindCount(b) - behindCount(a) || byRank(a, b))
+      if (filters.sort === 'watched') return [...list].sort(byRecentActivity)
+      return [...list].sort(byRank) // recently added / frozen activity order
+    }
+
+    const queueable = filtered.filter(
       (s) => !s.paused && (nextEpisode(s) !== null || leavingIds.includes(s.snapshot.id)),
     )
     // "To Watch" = shows the user STOPPED recently: real watch activity
     // inside the recency window. Everything else queueable (stale momentum
     // or never started) belongs to "Haven't seen in a while".
     const stoppedRecently = (s: TrackedShow) => watchedCount(s) > 0 && !meta(s).stale
-    const fresh = queueable.filter(stoppedRecently).sort(byRank)
-    const stale = queueable.filter((s) => !stoppedRecently(s)).sort(byRank)
-    const paused = pool.filter((s) => s.paused).sort(byRank)
-    const notStarted = pool.filter((s) => watchedCount(s) === 0).sort(byRank)
-    const upToDate = pool
-      .filter((s) => !s.paused && watchedCount(s) > 0 && nextEpisode(s) === null)
-      .sort(byRank)
+    const fresh = sortShows(queueable.filter(stoppedRecently))
+    const stale = sortShows(queueable.filter((s) => !stoppedRecently(s)))
+    const paused = sortShows(filtered.filter((s) => s.paused))
+    const notStarted = sortShows(filtered.filter((s) => watchedCount(s) === 0))
+    const upToDate = sortShows(
+      filtered.filter((s) => !s.paused && watchedCount(s) > 0 && nextEpisode(s) === null),
+    )
 
     // Last 10 checks across every show, newest first.
     const history: { show: TrackedShow; season: number; episode: number; watchedAt: string }[] = []
@@ -894,25 +914,8 @@ export default function MyShows() {
     const genreOptions = [...genreSet].sort((a, b) => a.localeCompare(b))
     const networkOptions = [...networkSet].sort((a, b) => a.localeCompare(b))
 
-    // ----- P4a/P4c: build the filtered + sorted grid pool -----
-    let gridPool = pool.filter((s) => {
-      if (filters.status !== 'all' && showStatus(s) !== filters.status) return false
-      if (filters.genre && !s.snapshot.genres.includes(filters.genre)) return false
-      if (filters.network && s.snapshot.network !== filters.network) return false
-      return true
-    })
-    if (filters.sort === 'az') {
-      gridPool = gridPool
-        .slice()
-        .sort((a, b) => a.snapshot.name.localeCompare(b.snapshot.name))
-    } else if (filters.sort === 'behind') {
-      // Most behind first (unwatched aired count, tie-break by rank).
-      gridPool = gridPool
-        .slice()
-        .sort((a, b) => behindCount(b) - behindCount(a) || meta(a).rank - meta(b).rank)
-    } else {
-      gridPool = gridPool.slice().sort(byRank) // recently added / activity order
-    }
+    // ----- P4a/P4c: the grid pool is the same filtered + sorted set -----
+    const gridPool = sortShows(filtered)
 
     return {
       all,
@@ -984,20 +987,26 @@ export default function MyShows() {
     [freshness.newlyAired],
   )
 
+  // Zero-count chips are pure noise — each chip appears once it has content
+  // (or while its view is open, so it can still be toggled off).
   const browseChips = (
     <div className="queue-browse">
-      <button
-        className={`queue-chip${view === 'notstarted' ? ' active' : ''}`}
-        onClick={() => setView(view === 'notstarted' ? 'queue' : 'notstarted')}
-      >
-        ○ Not started <span className="queue-chip-count">{notStarted.length}</span>
-      </button>
-      <button
-        className={`queue-chip${view === 'uptodate' ? ' active' : ''}`}
-        onClick={() => setView(view === 'uptodate' ? 'queue' : 'uptodate')}
-      >
-        ✓ Up to date <span className="queue-chip-count">{upToDate.length}</span>
-      </button>
+      {(notStarted.length > 0 || view === 'notstarted') && (
+        <button
+          className={`queue-chip${view === 'notstarted' ? ' active' : ''}`}
+          onClick={() => setView(view === 'notstarted' ? 'queue' : 'notstarted')}
+        >
+          ○ Not started <span className="queue-chip-count">{notStarted.length}</span>
+        </button>
+      )}
+      {(upToDate.length > 0 || view === 'uptodate') && (
+        <button
+          className={`queue-chip${view === 'uptodate' ? ' active' : ''}`}
+          onClick={() => setView(view === 'uptodate' ? 'queue' : 'uptodate')}
+        >
+          ✓ Up to date <span className="queue-chip-count">{upToDate.length}</span>
+        </button>
+      )}
       {view !== 'queue' && (
         <button className="queue-chip" onClick={() => setView('queue')}>
           ‹ Back to queue
@@ -1042,9 +1051,13 @@ export default function MyShows() {
           Upcoming
         </Link>
         <Link to="/watchlist" className="toptab" role="tab" aria-selected="false">
-          Watch List
+          Watchlist
         </Link>
         <span className="toptabs-spacer" />
+        {/* First run: no content means nothing to filter, favorite or re-lay-
+            out — hide the whole action cluster so the empty state is the one
+            focal point. */}
+        {all.length > 0 && (
         <div className="toptabs-actions">
           <button
             className={`queue-chip queue-fav${favOnly ? ' active' : ''}`}
@@ -1082,15 +1095,18 @@ export default function MyShows() {
             {layout === 'list' ? <GridIcon /> : <ListIcon />}
           </button>
         </div>
+        )}
       </div>
 
-      <p className="page-subtitle">
-        {all.length === 0
-          ? 'Your watch-next queue lives here.'
-          : `${all.length} ${all.length === 1 ? 'show' : 'shows'} tracked · ${totalEps} ${
-              totalEps === 1 ? 'episode' : 'episodes'
-            } watched`}
-      </p>
+      {/* No placeholder sentence on first run — the empty state below is the
+          single message. */}
+      {all.length > 0 && (
+        <p className="page-subtitle">
+          {`${all.length} ${all.length === 1 ? 'show' : 'shows'} tracked · ${totalEps} ${
+            totalEps === 1 ? 'episode' : 'episodes'
+          } watched`}
+        </p>
+      )}
 
       {freshness.newlyAired.length > 0 && (
         <div className="queue-ribbon" role="status">
@@ -1126,7 +1142,7 @@ export default function MyShows() {
           </p>
           <p style={{ marginTop: 4 }}>Find something great and start checking off episodes.</p>
           <Link className="btn primary" to="/search" style={{ marginTop: 18 }}>
-            🔍 Find shows to track
+            Find shows to track
           </Link>
         </div>
       ) : view !== 'queue' ? (
@@ -1144,7 +1160,7 @@ export default function MyShows() {
                   : 'No shows fully caught up yet. Keep watching!'}
               </p>
               <Link className="btn primary" to="/search" style={{ marginTop: 18 }}>
-                🔍 Find more shows
+                Find more shows
               </Link>
             </div>
           ) : (
@@ -1276,6 +1292,16 @@ export default function MyShows() {
           <section className="queue-section">
             <h2 className="queue-section-title">To Watch</h2>
             {fresh.length === 0 && stale.length === 0 ? (
+              hasActiveFilters && paused.length === 0 && notStarted.length === 0 ? (
+                // Filters (shared with grid view) matched nothing here.
+                <div className="empty-state fade-in">
+                  <div className="big">🔍</div>
+                  <p>No shows match these filters.</p>
+                  <button className="btn primary" onClick={resetFilters} style={{ marginTop: 18 }}>
+                    Clear filters
+                  </button>
+                </div>
+              ) : (
               <div className="empty-state fade-in">
                 <div className="big">{favOnly && pool.length === 0 ? '☆' : '🎉'}</div>
                 <p>
@@ -1284,9 +1310,10 @@ export default function MyShows() {
                     : 'All caught up — nothing left to watch.'}
                 </p>
                 <Link className="btn primary" to="/search" style={{ marginTop: 18 }}>
-                  🔍 Find something new
+                  Find something new
                 </Link>
               </div>
+              )
             ) : (
               <div className="queue-list stagger">
                 {fresh.map((s, i) => (
@@ -1380,6 +1407,7 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
   { value: 'az', label: 'A–Z' },
   { value: 'recent', label: 'Recently added' },
+  { value: 'watched', label: 'Recently watched' },
   { value: 'behind', label: 'Most behind' },
 ]
 

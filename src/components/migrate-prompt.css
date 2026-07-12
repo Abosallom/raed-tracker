@@ -1,62 +1,56 @@
-/* "Moving from TV Time?" first-visit prompt — bottom card above the tab bar. */
+/* "Moving from TV Time?" first-visit prompt — sheet attached to the bottom
+   edge. On mobile it docks flush on top of the tab bar (never covering it);
+   on desktop it sits on the viewport's bottom edge. */
 
 .migprompt {
   position: fixed;
   left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(76px + env(safe-area-inset-bottom, 0px)); /* clears the mobile tab bar */
-  z-index: 900; /* under toasts (1000+), over content */
+  bottom: 0;
+  z-index: 900; /* under toasts (1000+), over content and tab bar (80) */
   display: flex;
   gap: 14px;
   align-items: flex-start;
-  width: min(480px, calc(100vw - 24px));
-  padding: 16px 18px;
+  width: min(560px, 100vw);
+  padding: 18px 18px calc(18px + env(safe-area-inset-bottom, 0px));
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  animation: migprompt-in 0.3s cubic-bezier(0.21, 1.02, 0.55, 1.1) backwards;
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+  /* Slide-up as a transition from @starting-style, not a keyframe: the settled
+     (non-animated) state is fully on-screen, so a stalled first frame can
+     never strand the card off-screen at an animation's from-frame. */
+  transform: translateX(-50%) translateY(0);
+  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
-@media (min-width: 761px) {
+@starting-style {
   .migprompt {
-    bottom: 24px; /* desktop has no tab bar */
+    transform: translateX(-50%) translateY(100%);
   }
 }
 
 .migprompt.closing {
-  animation: migprompt-out 0.22s ease-in forwards;
+  transform: translateX(-50%) translateY(110%);
+  transition: transform 0.22s ease-in;
 }
 
-@keyframes migprompt-in {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(24px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-}
-
-@keyframes migprompt-out {
-  to {
-    opacity: 0;
-    transform: translateX(-50%) translateY(24px);
+/* Mobile: dock on top of the fixed tab bar so the four tabs stay visible
+   (~57px bar + its safe-area padding; the sheet keeps its own padding). */
+@media (max-width: 760px) {
+  .migprompt {
+    bottom: calc(57px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .migprompt,
   .migprompt.closing {
-    animation: none;
+    transition: none;
   }
-}
-
-.migprompt-emoji {
-  font-size: 28px;
-  line-height: 1;
-  margin-top: 2px;
 }
 
 .migprompt-body {
@@ -82,23 +76,6 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.migprompt-check {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12.5px;
-  color: var(--text-faint);
-  cursor: pointer;
-  user-select: none;
-}
-
-.migprompt-check input {
-  accent-color: var(--accent);
-  width: 15px;
-  height: 15px;
-  cursor: pointer;
 }
 
 .migprompt-close {

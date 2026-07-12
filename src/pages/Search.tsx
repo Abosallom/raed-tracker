@@ -536,7 +536,7 @@ function FeedTab() {
             key={`${it.media_type}:${it.id}`}
             item={it}
             genreNames={genreNames}
-            delay={Math.min(Math.max(i - batchStart, 0), 5) * 70}
+            delay={Math.min(Math.max(i - batchStart, 0), 5) * 40}
           />
         ))}
       </div>
@@ -892,7 +892,7 @@ function ActivityTab({
             key={it.id}
             item={it}
             voteCount={voteCounts.get(it.mediaId)}
-            delay={Math.min(i, 8) * 55}
+            delay={Math.min(i, 5) * 40}
           />
         ))}
       </div>

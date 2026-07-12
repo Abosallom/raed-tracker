@@ -305,7 +305,10 @@
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  padding: 4px 2px;
+  /* ≥44px touch target around the small label */
+  min-height: 44px;
+  min-width: 44px;
+  padding: 4px 8px;
   text-decoration: underline;
   text-underline-offset: 2px;
   transition: color 0.15s;

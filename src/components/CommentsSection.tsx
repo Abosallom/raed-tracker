@@ -72,6 +72,21 @@ export function CommentsSection({ mediaKey, title }: { mediaKey: string; title?:
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13.5 }}>
                 <b>{c.author}</b>{' '}
+                {/* Honesty tag: seeded comments aren't real people. */}
+                {c.id.startsWith('seed_') && (
+                  <span
+                    style={{
+                      color: 'var(--text-faint)',
+                      fontSize: 10.5,
+                      border: '1px solid var(--border)',
+                      borderRadius: 999,
+                      padding: '0 6px',
+                      marginRight: 2,
+                    }}
+                  >
+                    sample
+                  </span>
+                )}
                 <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>
                   · {timeAgo(c.createdAt)}
                 </span>
@@ -79,12 +94,19 @@ export function CommentsSection({ mediaKey, title }: { mediaKey: string; title?:
               <div style={{ margin: '2px 0 4px' }}>{c.text}</div>
               <div style={{ display: 'flex', gap: 12, fontSize: 13, color: 'var(--text-dim)' }}>
                 <button
+                  aria-pressed={c.likedByMe || !!seedLikes[c.id]}
+                  aria-label={`Like — ${c.likes + (seedLikes[c.id] ? 1 : 0)} likes`}
                   onClick={() =>
                     c.id.startsWith('seed_')
                       ? setSeedLikes((p) => ({ ...p, [c.id]: !p[c.id] }))
                       : toggleLike(c.id)
                   }
                   style={{
+                    // ≥44px touch target on a small visual (was ~32x19)
+                    minHeight: 44,
+                    minWidth: 44,
+                    display: 'inline-flex',
+                    alignItems: 'center',
                     color:
                       c.likedByMe || seedLikes[c.id] ? 'var(--accent-hover)' : 'inherit',
                   }}
@@ -92,7 +114,15 @@ export function CommentsSection({ mediaKey, title }: { mediaKey: string; title?:
                   ♥ {c.likes + (seedLikes[c.id] ? 1 : 0)}
                 </button>
                 {c.isMine && (
-                  <button onClick={() => deleteComment(c.id)} style={{ color: 'var(--text-faint)' }}>
+                  <button
+                    onClick={() => deleteComment(c.id)}
+                    style={{
+                      minHeight: 44,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      color: 'var(--text-faint)',
+                    }}
+                  >
                     Delete
                   </button>
                 )}

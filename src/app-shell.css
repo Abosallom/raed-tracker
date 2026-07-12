@@ -100,7 +100,8 @@
   }
 
   .tabbar-label {
-    font-size: 9.5px;
+    /* ~iOS tab-bar size (10pt ≈ 13px); 9.5px was below comfortable legibility */
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.4px;

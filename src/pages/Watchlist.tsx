@@ -5,7 +5,6 @@ import { Link } from 'react-router-dom'
 import type { MediaType, WatchlistItem } from '../types'
 import { useLibrary } from '../store/library'
 import { PosterImage, timeAgo } from '../components/shared'
-import { BackBar } from '../components/BackBar'
 import { showToast } from '../components/toast'
 import './watchlist.css'
 
@@ -60,7 +59,8 @@ export default function Watchlist() {
 
   return (
     <div>
-      <BackBar title="Watchlist" />
+      {/* No BackBar: this is a peer top tab, not a pushed page — the tab row
+          IS the navigation. */}
       <div className="toptabs" role="tablist" aria-label="My Shows sections">
         <Link className="toptab" to="/" role="tab" aria-selected="false">
           Keep Watching
@@ -68,9 +68,10 @@ export default function Watchlist() {
         <Link className="toptab" to="/upcoming" role="tab" aria-selected="false">
           Upcoming
         </Link>
+        {/* No count bubble here: the subtitle and the "All" chip below already
+            carry this number — one count per concept per screen. */}
         <span className="toptab active" role="tab" aria-selected="true">
-          Watch List
-          {watchlist.length > 0 && <span className="toptab-count">{watchlist.length}</span>}
+          Watchlist
         </span>
       </div>
       <p className="page-subtitle">
@@ -90,10 +91,10 @@ export default function Watchlist() {
           </p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20 }}>
             <Link className="btn primary" to="/search">
-              🔍 Search titles
+              Search titles
             </Link>
             <Link className="btn" to="/">
-              📺 My Shows
+              My Shows
             </Link>
           </div>
         </div>

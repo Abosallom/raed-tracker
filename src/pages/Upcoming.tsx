@@ -690,11 +690,11 @@ export default function Upcoming() {
           Upcoming
         </span>
         <Link className="toptab" to="/watchlist" role="tab" aria-selected="false">
-          Watch List
+          Watchlist
         </Link>
       </div>
       <p className="page-subtitle">
-        Air dates for the shows you follow{demo ? ' — plus sample shows in demo mode' : ''}.
+        Air dates for the shows you track{demo ? ' — plus sample shows in demo mode' : ''}.
       </p>
 
       {showEmptyState ? (
@@ -706,8 +706,8 @@ export default function Upcoming() {
           </div>
           <div className="upcoming-empty-title">Your upcoming list is empty!</div>
           <p style={{ maxWidth: 420, margin: '0 auto' }}>
-            When you follow shows, their upcoming episodes land on this schedule so you never
-            miss an air date. Find something to track and hit follow.
+            When you track shows, their upcoming episodes land on this schedule so you never
+            miss an air date. Find something to track and hit “Track show”.
           </p>
           <div className="upcoming-empty-cta">
             <Link className="btn primary" to="/search">
@@ -805,8 +805,10 @@ export default function Upcoming() {
         </>
       )}
 
+      {/* "In theaters" (not "soon") — the rail includes already-released
+          titles badged "Out now". */}
       <h2 className="section-title" style={{ marginTop: 36 }}>
-        In theaters soon
+        In theaters
       </h2>
       {moviesError ? (
         <ErrorBox message={moviesError} />

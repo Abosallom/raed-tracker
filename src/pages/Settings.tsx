@@ -265,7 +265,7 @@ const REACTION_OPTIONS: { value: ReactionPrompt; emoji: string; title: string; d
     value: 'milestones',
     emoji: '🏆',
     title: 'Milestones only',
-    desc: 'Only on premieres, finales and completions',
+    desc: 'Only on premieres, finales and completions (default)',
   },
   { value: 'never', emoji: '🚫', title: 'Never', desc: 'Just a toast — react inline on the show page' },
 ]

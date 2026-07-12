@@ -694,14 +694,20 @@ export default function Migrate() {
 
           <p className="mig-desc">
             Bring <b>either or both</b> to the next step — they&apos;re merged automatically, and
-            re-importing never creates duplicates. Signed in? Your history lands in the library
-            shown above.
+            re-importing never creates duplicates. <b>You&apos;ll need to be signed in to
+            import</b> (so your history lands in your library) — sort that out before doing the
+            export dance.
           </p>
 
           <div className="mig-actions">
             <button className="btn primary" onClick={() => setStep(1)}>
               I have my export →
             </button>
+            {identity.state === 'signed-out' && (
+              <Link className="btn" to="/account">
+                Sign in first →
+              </Link>
+            )}
           </div>
         </section>
       )}

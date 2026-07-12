@@ -726,8 +726,10 @@ export default function Movies() {
     maybeCelebrateCleared(item.id)
   }
 
+  // Segment label "To watch" (not "Watch list") — a nav pill and a filter
+  // segment sharing one name made users compare two near-identical controls.
   const tabs: { key: Tab; label: string; count: number | null }[] = [
-    { key: 'watchlist', label: 'Watch list', count: watchItems.length },
+    { key: 'watchlist', label: 'To watch', count: watchItems.length },
     { key: 'watched', label: 'Watched', count: watchedList.length },
     { key: 'upcoming', label: 'Upcoming', count: upcoming ? upcoming.length : null },
   ]
@@ -741,11 +743,6 @@ export default function Movies() {
             Your movie hub — what to watch, what you've seen, what's next.
           </p>
         </div>
-        {/* Direct entry point to the full (shows + movies) watchlist page,
-            which is otherwise orphaned on mobile. */}
-        <Link className="movies-watchlist-link" to="/watchlist">
-          🔖 Watchlist →
-        </Link>
       </div>
 
       <div className="movies-toolbar">

@@ -11,7 +11,6 @@ import type {
   SearchResult,
 } from '../types'
 import { EMOTIONS } from '../types'
-import { compactNumber, watchedByCount, watcherCluster } from '../api/social'
 import {
   backdropUrl,
   getMovieDetail,
@@ -68,25 +67,6 @@ function CastStrip({ cast }: { cast: CastMember[] }) {
         })}
       </div>
     </>
-  )
-}
-
-/** Stacked emoji-avatar cluster + "Watched by +NNN" — a chip-sized social
-    proof cue on the hero. Links nowhere (yet). */
-function WatchedByChip({ mediaId, voteCount }: { mediaId: number; voteCount?: number }) {
-  const cluster = watcherCluster(mediaId, 3)
-  const total = watchedByCount(mediaId, voteCount)
-  return (
-    <span className="detail-watchedby" title={`Watched by ${total.toLocaleString()} people`}>
-      <span className="detail-watchedby-avatars" aria-hidden="true">
-        {cluster.map((u, i) => (
-          <span key={u.id} className="detail-watchedby-avatar" style={{ zIndex: cluster.length - i }}>
-            {u.avatar}
-          </span>
-        ))}
-      </span>
-      <span className="detail-watchedby-label">Watched by +{compactNumber(total)}</span>
-    </span>
   )
 }
 
@@ -397,7 +377,6 @@ export default function MovieDetail() {
                 <span className="chip">{formatMinutes(detail.runtime)}</span>
               )}
               <Rating value={detail.vote_average} />
-              <WatchedByChip mediaId={movieId} />
               {detail.genres.map((g) => (
                 <span key={g.id} className="chip">
                   {g.name}

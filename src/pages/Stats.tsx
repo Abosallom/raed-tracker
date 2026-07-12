@@ -90,8 +90,13 @@ function useCountUp(target: number, active: boolean, durationMs = 700): number {
       if (p < 1) rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
+    // Safety net: rAF is throttled/paused in background or frame-starved
+    // contexts, which froze headline stats at partial counts ("2" of 16
+    // episodes). A plain timeout always snaps to the exact final value.
+    const settle = window.setTimeout(() => setValue(target), durationMs + 150)
     return () => {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+      window.clearTimeout(settle)
     }
   }, [target, active, durationMs])
   return value

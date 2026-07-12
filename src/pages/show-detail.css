@@ -71,10 +71,24 @@
   font-size: 14.5px;
 }
 
-.show-detail-chips {
+/* One-line hero metadata (year · status · seasons · network · genres) */
+.show-detail-meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+}
+
+.show-detail-meta-rating {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--yellow);
+  white-space: nowrap;
+}
+
+.show-detail-meta-line {
+  font-size: 13px;
+  color: var(--text-dim);
 }
 
 .show-detail-actions {
@@ -124,31 +138,29 @@
   margin-bottom: 8px;
 }
 
-/* trailer pill */
+/* external links row (trailer / IMDb) — quiet dim text, one row, exits never
+   compete with the tracking actions above */
 
-a.show-detail-trailer-btn {
-  border-radius: 999px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  color: #ff4d4d;
-  border-color: rgba(255, 77, 77, 0.45);
+.show-detail-links {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 2px;
 }
 
-a.show-detail-trailer-btn:hover {
-  background: rgba(255, 77, 77, 0.14);
-  border-color: #ff4d4d;
-  color: #ff6b6b;
+.show-detail-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px; /* full-size touch target on a small visual */
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-faint);
+  transition: color 0.15s;
 }
 
-:root[data-theme='light'] a.show-detail-trailer-btn {
-  color: #c4302b;
-  border-color: rgba(196, 48, 43, 0.45);
-}
-
-:root[data-theme='light'] a.show-detail-trailer-btn:hover {
-  background: rgba(196, 48, 43, 0.1);
-  border-color: #c4302b;
-  color: #a02722;
+.show-detail-link:hover {
+  color: var(--text);
+  text-decoration: underline;
 }
 
 /* next-episode countdown card */
@@ -384,33 +396,72 @@ a.show-detail-trailer-btn:hover {
   color: var(--text-dim);
 }
 
-/* tiny community rating chip on episode rows */
+/* tiny community rating on episode rows — plain dim text, repeated amber
+   badges on every row spent the accent on non-actions */
 
 .show-detail-ep-rating {
   display: inline-block;
   margin-left: 8px;
-  padding: 1px 6px;
-  border-radius: 6px;
   font-size: 11px;
   font-weight: 700;
-  color: var(--yellow);
-  background: color-mix(in srgb, var(--yellow) 12%, transparent);
+  color: var(--text-faint);
+}
+
+/* quiet per-row react control (inside the main column): the chosen emoji,
+   or a ghost "React" — replaces the six always-on emoji per watched row */
+.show-detail-ep-react {
+  min-height: 32px;
+  margin: 2px 0 0 -6px; /* optical left-align with the title above */
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.show-detail-ep-react.has-emotion {
+  font-size: 16px;
+}
+
+.show-detail-ep-react:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* When the picker expands inside the main column, let it wrap. */
+.show-detail-ep-main .reaction-picker {
+  flex-wrap: wrap;
+  margin-top: 4px;
 }
 
 .show-detail-ep-toggle {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  /* THE most-tapped control in the app — 40px visual circle, and the
+     ::after overlay stretches the hit area to ≥48px (HIG 44 minimum). */
+  position: relative;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: 2px solid var(--border);
   background: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 800;
   color: transparent;
   transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.12s;
+}
+
+.show-detail-ep-toggle::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
 }
 
 .show-detail-ep-toggle:hover {
@@ -437,23 +488,6 @@ a.show-detail-trailer-btn:hover {
   100% {
     transform: scale(1);
   }
-}
-
-/* IMDb pill — brand yellow on dark */
-
-a.show-detail-imdb-btn {
-  background: #f5c518;
-  border-color: #f5c518;
-  border-radius: 999px;
-  color: #131313;
-  font-weight: 800;
-  letter-spacing: 0.3px;
-}
-
-a.show-detail-imdb-btn:hover {
-  background: #ffd633;
-  border-color: #ffd633;
-  color: #131313;
 }
 
 .show-detail-future-chip {
@@ -589,18 +623,6 @@ a.show-detail-imdb-btn:hover {
     width: 72px;
     height: 40px;
   }
-  /* The six emoji reaction buttons don't shrink, so on narrow screens they
-     crush the episode title and push the unwatch toggle off-screen — wrap the
-     picker onto its own line inside the row instead. */
-  .show-detail-ep {
-    flex-wrap: wrap;
-    row-gap: 6px;
-  }
-  .show-detail-ep .reaction-picker {
-    order: 1;
-    flex: 1 1 100%;
-    justify-content: flex-end;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -631,49 +653,6 @@ a.show-detail-imdb-btn:hover {
    All colors via CSS variables; verified in both themes.
    ============================================================ */
 
-/* ---- Watched-by stacked-avatar chip (hero) ---- */
-.detail-watchedby {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 28px;
-  padding: 0 12px 0 8px;
-  border-radius: 999px;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-
-.detail-watchedby-avatars {
-  display: inline-flex;
-  align-items: center;
-}
-
-.detail-watchedby-avatar {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  margin-left: -7px;
-  box-shadow: 0 0 0 1.5px var(--bg-elev-2);
-}
-
-.detail-watchedby-avatar:first-child {
-  margin-left: 0;
-}
-
-.detail-watchedby-label {
-  color: var(--text);
-}
-
 /* ---- 10-star personal rating row ---- */
 .detail-rating {
   display: flex;
@@ -700,6 +679,9 @@ a.show-detail-imdb-btn:hover {
   background: none;
   border: none;
   cursor: pointer;
+  /* Comfortable touch slot per star (was a 24px glyph with 2px padding). */
+  min-width: 32px;
+  min-height: 44px;
   padding: 2px;
   font-size: 20px;
   line-height: 1;

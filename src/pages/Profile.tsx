@@ -15,7 +15,6 @@ import {
   subscribeInstall,
 } from '../lib/install'
 import { posterUrl } from '../api/tmdb'
-import { compactNumber } from '../api/social'
 import { PosterImage, formatMinutes, timeAgo } from '../components/shared'
 import { showToast } from '../components/toast'
 import './profile.css'
@@ -139,17 +138,6 @@ export default function Profile() {
   const movieMinutes = movieList.reduce((n, m) => n + (m.watched ? m.snapshot.runtime : 0), 0)
 
   const streaks = useMemo(() => computeStreaks(shows, movies), [shows, movies])
-  // Synthetic-but-stable follower base seeded off the join date, seasoned with
-  // the real number of people the user follows back (no backend social graph).
-  const followerCount = useMemo(() => {
-    let h = 2166136261
-    const seed = profile.joinedAt
-    for (let i = 0; i < seed.length; i++) {
-      h ^= seed.charCodeAt(i)
-      h = Math.imul(h, 16777619)
-    }
-    return (Math.abs(h) % 480) + 12 + following.length * 3
-  }, [profile.joinedAt, following.length])
   const favShows = showList.filter((s) => s.favorite)
   const favMovies = movieList.filter((m) => m.favorite)
   const myComments = comments.filter((c) => c.isMine)
@@ -284,15 +272,14 @@ export default function Profile() {
             </div>
             <div className="profile-joined">Member since {memberSince(profile.joinedAt)}</div>
 
+            {/* No follower count: the local profile has no real one, and a
+                fabricated number erodes trust the moment anyone notices. */}
             <div className="profile-chips">
               <Link className="chip profile-social-chip" to="/users?filter=following">
                 🤝 <b>{following.length}</b> following
               </Link>
-              <Link className="chip profile-social-chip" to="/users">
-                👥 <b>{compactNumber(followerCount)}</b> followers
-              </Link>
               <span className="chip">
-                📺 <b>{showList.length}</b> shows followed
+                📺 <b>{showList.length}</b> shows tracked
               </span>
               <span className="chip">
                 ✅ <b>{episodesWatched}</b> episodes watched
@@ -492,7 +479,7 @@ export default function Profile() {
       {showList.length === 0 ? (
         <div className="empty-state card fade-in">
           <div className="big">📺</div>
-          You aren’t following any shows yet — find some in{' '}
+          You aren’t tracking any shows yet — find some in{' '}
           <Link className="profile-inline-link" to="/search">
             Explore
           </Link>
@@ -521,10 +508,12 @@ export default function Profile() {
           </Link>
         )}
       </h2>
+      {/* Empty copy says "watched", not "tracked" — watchlisted movies aren't
+          in this grid, so the old copy contradicted a fresh watchlist entry. */}
       {movieList.length === 0 ? (
         <div className="empty-state card fade-in">
           <div className="big">🎬</div>
-          No movies tracked yet — find some in{' '}
+          No movies watched yet — find some in{' '}
           <Link className="profile-inline-link" to="/search">
             Explore
           </Link>
@@ -583,6 +572,7 @@ export default function Profile() {
           })}
         </div>
       )}
+      <div className="profile-version">v{__APP_VERSION__}</div>
     </div>
   )
 }

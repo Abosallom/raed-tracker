@@ -8,24 +8,16 @@
   justify-content: center;
 }
 
+/* Attached to the bottom wall on every viewport — never floats mid-screen. */
 .confirm-sheet {
   background: var(--bg-elev);
   border: 1px solid var(--border);
+  border-bottom: none;
   border-radius: 16px 16px 0 0;
   padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
   width: 100%;
   max-width: 480px;
   animation: confirm-up 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
-}
-
-@media (min-width: 761px) {
-  .confirm-backdrop {
-    align-items: center;
-  }
-  .confirm-sheet {
-    border-radius: 16px;
-    padding-bottom: 20px;
-  }
 }
 
 .confirm-title {

@@ -493,7 +493,7 @@
   }
 }
 
-/* ---------- "In theaters soon" release chips ---------- */
+/* ---------- "In theaters" release chips ---------- */
 
 .upcoming-movie {
   position: relative;
@@ -501,7 +501,11 @@
 
 .upcoming-movie .upcoming-release {
   position: absolute;
-  top: 8px;
+  /* Anchor to the poster's bottom-left corner (rail posters are a fixed
+     150px wide → 225px tall via aspect-ratio 2/3). The top edge already
+     carries the rating badge — two chips up top covered the title art. */
+  top: 217px;
+  transform: translateY(-100%);
   left: 8px;
   z-index: 2;
   pointer-events: none;

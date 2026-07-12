@@ -532,3 +532,11 @@
 .profile-install-btn {
   flex-shrink: 0;
 }
+
+/* App version — quiet footer at the very end of the last tab. */
+.profile-version {
+  margin-top: 40px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-faint);
+}

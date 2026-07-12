@@ -1,6 +1,6 @@
 /* Movies hub — scoped styles (prefix: movies-) */
 
-/* ---------- header: title + full-watchlist entry point ---------- */
+/* ---------- header ---------- */
 
 .movies-head {
   display: flex;
@@ -8,25 +8,6 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-.movies-watchlist-link {
-  flex-shrink: 0;
-  padding: 7px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg-elev);
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.movies-watchlist-link:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent-hover);
 }
 
 /* ---------- toolbar: segmented tabs + favorites filter ---------- */

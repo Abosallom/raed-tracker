@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { CastMember, Emotion, ShowDetail } from '../types'
 import { EMOTIONS, episodeKey } from '../types'
-import { getShowDetail, profileUrl } from '../api/tmdb'
+import { getSeasonDetail, getShowDetail, profileUrl } from '../api/tmdb'
 import { ReactionPicker } from './shared'
 import { showToast } from './toast'
 import { useLibrary } from '../store/library'
@@ -105,15 +105,43 @@ export default function EpisodeSheet({
     let alive = true
     fetchDetail(showId)
       .then((d) => {
-        if (alive) setCast(d.cast.slice(0, 8))
+        if (!alive) return
+        setCast(d.cast.slice(0, 8))
+        // A "favorite" picker with one (or zero) candidates reads as broken —
+        // skip straight to the reaction step instead of showing it.
+        if (d.cast.length < 2) setStep((s) => (s === 'cast' ? 'react' : s))
       })
       .catch(() => {
-        if (alive) setCastFailed(true)
+        if (!alive) return
+        setCastFailed(true)
+        setStep((s) => (s === 'cast' ? 'react' : s))
       })
     return () => {
       alive = false
     }
   }, [showId])
+
+  // The header's episode title: callers can't always supply it (e.g. the
+  // cross-season Continue pill fires before that season's data is loaded), so
+  // fall back to fetching it from the season detail.
+  const [fetchedTitle, setFetchedTitle] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    if (episodeTitle) return
+    let alive = true
+    getSeasonDetail(showId, season)
+      .then((d) => {
+        if (!alive) return
+        const ep = d.episodes.find((e) => e.episode_number === episode)
+        if (ep?.name) setFetchedTitle(ep.name)
+      })
+      .catch(() => {
+        /* header just shows the episode code */
+      })
+    return () => {
+      alive = false
+    }
+  }, [showId, season, episode, episodeTitle])
+  const shownTitle = episodeTitle ?? fetchedTitle
 
   // Animate out, then actually unmount.
   const close = useCallback(() => {
@@ -315,7 +343,7 @@ export default function EpisodeSheet({
               <div className="epsheet-header-text">
                 <div className="epsheet-ep">
                   S{pad2(season)} <span className="epsheet-sep">|</span> E{pad2(episode)}
-                  {episodeTitle ? ` — ${episodeTitle}` : ''}
+                  {shownTitle ? ` — ${shownTitle}` : ''}
                 </div>
                 <div className="epsheet-show">{showName}</div>
               </div>

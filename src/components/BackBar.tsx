@@ -1,5 +1,7 @@
 // Back-navigation bar for sub-pages: a single ≥44x44 tap target wrapping the
-// ‹ chevron and the (previously dead) title text — the whole row is tappable.
+// ‹ chevron and a "Back" label. The visible text is always "Back" — labeling
+// the chip with the current page's name read as a destination ("‹ Import" on
+// the import page). `title` still enriches the accessible name.
 
 import { useNavigate } from 'react-router-dom'
 
@@ -8,7 +10,7 @@ export function BackBar({ title }: { title?: string }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <button
-        aria-label={title ? `Go back — ${title}` : 'Go back'}
+        aria-label={title ? `Go back — leave ${title}` : 'Go back'}
         onClick={() => {
           if (window.history.length > 1) navigate(-1)
           else navigate('/shows')
@@ -31,20 +33,16 @@ export function BackBar({ title }: { title?: string }) {
         <span style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }} aria-hidden="true">
           ‹
         </span>
-        {title && (
-          <span
-            style={{
-              fontWeight: 700,
-              fontSize: 15,
-              color: 'var(--text-dim)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {title}
-          </span>
-        )}
+        <span
+          style={{
+            fontWeight: 700,
+            fontSize: 15,
+            color: 'var(--text-dim)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Back
+        </span>
       </button>
     </div>
   )
