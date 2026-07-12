@@ -47,3 +47,39 @@ themselves, so without this the app is rejected.
 Notes: "Demo account — username: appreviewer / password: <the one you set>.
 Sign in on the Profile → Account screen. Offline TV/movie episode tracker;
 metadata from TMDB." Then click **Add for Review → Submit**.
+
+## Paste-ready listing copy
+
+**Subtitle (30 ch):** `Track shows, episode by episode`
+
+**Description:**
+```
+Raed Tracker keeps your whole watching life in one place — every show,
+every episode, every movie.
+
+• WATCH LIST — the next episode of everything you follow, one tap to check
+  off, with undo and catch-up ("seen all previous episodes?")
+• UPCOMING — a day-by-day schedule of what airs next, with network and time
+• STATS — total watch time, streaks, badges, genres, and a forecast of when
+  you'll catch up
+• MOVING FROM TV TIME? Import your complete history — shows, episodes,
+  movies and real watch dates — in minutes, with a built-in guide
+• PRIVATE BY DESIGN — no ads, no tracking, no public profiles. Your library
+  syncs to your own account and you can delete it, and your account, anytime
+
+Show and movie data from TMDB. This product uses the TMDB API but is not
+endorsed or certified by TMDB.
+```
+
+**Keywords (100 ch):**
+`tv time,tv tracker,show tracker,episode,series,watchlist,next episode,movies,anime,binge`
+
+**Support URL:** `https://abosallom.github.io/raed-tracker/`
+**Privacy Policy URL:** `https://abosallom.github.io/raed-tracker/#/privacy`
+**Category:** Entertainment. **Price:** Free (required — TMDB non-commercial).
+**Age rating answers:** all "None" except: Unrestricted Web Access = NO;
+outcome ≈ 12+ (infrequent mild mature/suggestive themes from TV metadata is
+acceptable to declare if asked).
+**Review notes:** `Demo account — username: appreviewer, password: <set in
+/admin>. Sign in via Profile → Account. TV/movie episode tracker; data from
+TMDB; TV Time import supported.`
