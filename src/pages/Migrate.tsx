@@ -27,6 +27,7 @@ import type {
   TvTimeImport,
 } from '../lib/tvtime-import'
 import { parseExportFiles } from '../lib/tvtime-import'
+import { directImportAvailable, runDirectImport, type DirectProgress } from '../lib/tvtime-direct'
 import './migrate.css'
 
 const STEPS = ['Get your export', 'Upload', 'Preview', 'Import', 'Done'] as const
@@ -343,6 +344,55 @@ export default function Migrate() {
   const cancelRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Step-0 acquisition source: null = picker, 'direct' = TV Time sign-in,
+  // 'file' = the export-file guide. TV Time Direct pulls the live library via
+  // the tvtime-direct edge function; the file path is the frozen-export fallback.
+  const [source, setSource] = useState<null | 'direct' | 'file'>(null)
+  const [ttUser, setTtUser] = useState('')
+  const [ttPass, setTtPass] = useState('')
+  const [direct, setDirect] = useState<
+    | { state: 'form' }
+    | { state: 'running'; phase: DirectProgress['phase']; done: number; total: number }
+    | { state: 'error'; message: string }
+  >({ state: 'form' })
+
+  async function runDirect(e: React.FormEvent) {
+    e.preventDefault()
+    if (!ttUser.trim() || !ttPass) return
+    cancelRef.current = false
+    setDirect({ state: 'running', phase: 'login', done: 0, total: 1 })
+    const res = await runDirectImport(
+      { username: ttUser.trim(), password: ttPass },
+      (p) => setDirect({ state: 'running', phase: p.phase, done: p.done, total: p.total }),
+      cancelRef,
+    )
+    setTtPass('') // never keep the password around after the attempt
+    if (!res.ok) {
+      const message =
+        res.kind === 'function-missing'
+          ? "Couldn't reach the import service — use a file export instead."
+          : res.code === 'bad-credentials'
+            ? "TV Time didn't accept that email or password."
+            : res.code === 'blocked'
+              ? "TV Time's servers blocked the request — use a file export instead."
+              : res.message || 'Something went wrong — use a file export instead.'
+      setDirect({ state: 'error', message })
+      return
+    }
+    const model = res.data
+    const found =
+      model.shows.length > 0 || model.followedOnly.length > 0 || model.movies.length > 0
+    if (!found) {
+      setDirect({ state: 'error', message: 'No watch history came back from TV Time.' })
+      return
+    }
+    setParsed(model)
+    savePendingImport(model)
+    showToast('Fetched your TV Time history', '📥')
+    setDirect({ state: 'form' })
+    setStep(2)
+  }
+
   // Navigating away must cancel a running import: the loop would otherwise
   // keep hitting TMDB invisibly, and a remount (sessionStorage still holds the
   // parsed export) would show an enabled "Start import" that races the orphan
@@ -620,95 +670,214 @@ export default function Migrate() {
         ))}
       </ol>
 
-      {/* ================= step 1: get your export ================= */}
+      {/* ================= step 1: choose a source & get your data ============ */}
       {step === 0 && (
         <section className="card mig-card">
-          <div className="mig-card-title">Get your data out of TV Time</div>
+          <div className="mig-card-title">Bring your history in from TV Time</div>
 
           <div className="mig-deadline" role="alert">
             ⚠️ <b>TV Time shuts down on July 15, 2026</b> — all account data is permanently
-            deleted after that date. Export before then; once it&apos;s gone there is no way to
+            deleted after that date. Import before then; once it&apos;s gone there is no way to
             get it back.
           </div>
 
-          <div className="mig-method">
-            <span className="mig-method-tag">Recommended · ~5 minutes</span>
-            Chrome extension: TV Time Out by Refract
-          </div>
-          <p className="mig-desc">
-            A free extension that downloads your complete library — every show, episode, watch
-            date, movie and list. It runs entirely on your own computer; nothing is uploaded
-            anywhere. You need a <b>computer with Google Chrome</b> (extensions don&apos;t work in
-            phone browsers).
-          </p>
-          <ol className="mig-instructions">
-            <li>
-              In Chrome, install{' '}
-              <a
-                href="https://chromewebstore.google.com/detail/tv-time-out-by-refract/pmejpdpjbkjklfceogdkolmgclldogbi"
-                target="_blank"
-                rel="noreferrer"
-              >
-                TV Time Out by Refract
-              </a>{' '}
-              from the Chrome Web Store: <b>Add to Chrome → Add extension</b>.
-            </li>
-            <li>
-              Go to{' '}
-              <a href="https://app.tvtime.com" target="_blank" rel="noreferrer">
-                app.tvtime.com
-              </a>{' '}
-              and <b>sign in with your TV Time account</b> (same email + password as the app).
-            </li>
-            <li>
-              Click the <b>puzzle-piece icon</b> 🧩 at Chrome&apos;s top-right, then click{' '}
-              <b>TV Time Out by Refract</b>.
-            </li>
-            <li>
-              Pick <b>JSON</b> as the format and click <b>Export my data</b> — large libraries
-              take a minute or two.
-            </li>
-            <li>
-              Your <b>Downloads</b> folder now has <code>tvtime-series-….json</code> and{' '}
-              <code>tvtime-movies-….json</code> (plus a browsable summary page). Keep them safe.
-            </li>
-          </ol>
+          {/* ---- source picker ---- */}
+          {source === null && (
+            <div className="mig-picker">
+              {directImportAvailable() && (
+                <button
+                  type="button"
+                  className="mig-source"
+                  onClick={() => {
+                    setDirect({ state: 'form' })
+                    setSource('direct')
+                  }}
+                >
+                  <span className="mig-source-tag">Recommended · ~2 minutes · phone-friendly</span>
+                  <span className="mig-source-title">Import directly from TV Time</span>
+                  <span className="mig-source-desc">
+                    Sign in with your TV Time account and we&apos;ll pull your whole library —
+                    shows, episodes, watch dates and movies — straight over. No files, works right
+                    on your phone.
+                  </span>
+                </button>
+              )}
+              <button type="button" className="mig-source" onClick={() => setSource('file')}>
+                <span className="mig-source-tag">Import an export file</span>
+                <span className="mig-source-title">I have an export file</span>
+                <span className="mig-source-desc">
+                  Already exported from TV Time? Bring the official export ZIP, or the JSON from the
+                  desktop extension. This is the only path that also carries your{' '}
+                  <b>reactions</b>.
+                </span>
+              </button>
+            </div>
+          )}
 
-          <div className="mig-method">
-            <span className="mig-method-tag">Backup · can be slow</span>
-            Official TV Time export
-          </div>
-          <ol className="mig-instructions">
-            <li>
-              Sign in at{' '}
-              <a href="https://gdpr.tvtime.com/gdpr/self-service" target="_blank" rel="noreferrer">
-                gdpr.tvtime.com/gdpr/self-service
-              </a>{' '}
-              and request your personal data.
-            </li>
-            <li>
-              TV Time emails a download link — hours to days right now. Download the{' '}
-              <b>ZIP file</b> and <b>don&apos;t unzip it</b>; this page reads it directly.
-            </li>
-          </ol>
+          {/* ---- TV Time Direct sign-in ---- */}
+          {source === 'direct' && (
+            <div className="mig-direct">
+              {supabase && identity.state !== 'signed-in' ? (
+                <>
+                  <div className="mig-method">🔐 Sign in to Raed Tracker first</div>
+                  <p className="mig-desc">
+                    Your imported history lands in <b>your</b> library, so you need to be signed
+                    into Raed Tracker before importing.
+                  </p>
+                  <div className="mig-actions">
+                    <Link className="btn primary" to="/account">
+                      Sign in →
+                    </Link>
+                    <button className="btn" onClick={() => setSource(null)}>
+                      ← Back
+                    </button>
+                  </div>
+                </>
+              ) : direct.state === 'running' ? (
+                <div className="mig-direct-running">
+                  <LoadingSpinner />
+                  <div className="mig-direct-phase">
+                    {direct.phase === 'login' && 'Signing in to TV Time…'}
+                    {direct.phase === 'movies' && 'Fetching your movies…'}
+                    {direct.phase === 'shows' &&
+                      `Fetching your shows… (${direct.done}/${direct.total})`}
+                    {direct.phase === 'building' && 'Building your preview…'}
+                  </div>
+                  {direct.phase === 'shows' && direct.total > 0 && (
+                    <ProgressBar value={direct.done / direct.total} />
+                  )}
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      cancelRef.current = true
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <form className="mig-direct-form" onSubmit={runDirect}>
+                  <div className="mig-method">Sign in with your TV Time account</div>
+                  {direct.state === 'error' && <ErrorBox message={direct.message} />}
+                  <label className="mig-field">
+                    <span>TV Time email</span>
+                    <input
+                      type="email"
+                      autoComplete="off"
+                      value={ttUser}
+                      onChange={(e) => setTtUser(e.target.value)}
+                      placeholder="you@example.com"
+                    />
+                  </label>
+                  <label className="mig-field">
+                    <span>TV Time password</span>
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={ttPass}
+                      onChange={(e) => setTtPass(e.target.value)}
+                      placeholder="••••••••"
+                    />
+                  </label>
+                  <p className="mig-privacy">
+                    Sent once to TV Time through our secure relay to fetch your history — never
+                    stored, never logged.
+                  </p>
+                  <div className="mig-actions">
+                    <button className="btn primary" type="submit" disabled={!ttUser.trim() || !ttPass}>
+                      Fetch my history →
+                    </button>
+                    <button className="btn" type="button" onClick={() => setSource(null)}>
+                      ← Back
+                    </button>
+                  </div>
+                  {direct.state === 'error' && (
+                    <button className="mig-inline-btn" type="button" onClick={() => setSource('file')}>
+                      Use an export file instead →
+                    </button>
+                  )}
+                </form>
+              )}
+            </div>
+          )}
 
-          <p className="mig-desc">
-            Bring <b>either or both</b> to the next step — they&apos;re merged automatically, and
-            re-importing never creates duplicates. <b>You&apos;ll need to be signed in to
-            import</b> (so your history lands in your library) — sort that out before doing the
-            export dance.
-          </p>
+          {/* ---- export-file guide ---- */}
+          {source === 'file' && (
+            <div className="mig-file">
+              <div className="mig-method">
+                <span className="mig-method-tag">Recommended file · phone-friendly · richest</span>
+                Official TV Time export
+              </div>
+              <p className="mig-desc">
+                This is the only export that includes your <b>reactions/emotions</b> along with
+                every show, episode and watch date. It&apos;s a self-service download now — no
+                waiting for an email — and works right in a phone browser.
+              </p>
+              <ol className="mig-instructions">
+                <li>
+                  Sign in at{' '}
+                  <a
+                    href="https://gdpr.tvtime.com/gdpr/self-service"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    gdpr.tvtime.com/gdpr/self-service
+                  </a>{' '}
+                  with your TV Time account.
+                </li>
+                <li>
+                  Tap <b>Download</b> to save your data <b>ZIP</b>, and <b>don&apos;t unzip it</b> —
+                  this page reads it directly.
+                </li>
+              </ol>
 
-          <div className="mig-actions">
-            <button className="btn primary" onClick={() => setStep(1)}>
-              I have my export →
-            </button>
-            {identity.state === 'signed-out' && (
-              <Link className="btn" to="/account">
-                Sign in first →
-              </Link>
-            )}
-          </div>
+              <div className="mig-method">
+                <span className="mig-method-tag">Desktop only · alternative</span>
+                Chrome extension: TV Time Out by Refract
+              </div>
+              <ol className="mig-instructions">
+                <li>
+                  On a <b>computer with Google Chrome</b>, install{' '}
+                  <a
+                    href="https://chromewebstore.google.com/detail/tv-time-out-by-refract/pmejpdpjbkjklfceogdkolmgclldogbi"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    TV Time Out by Refract
+                  </a>
+                  , open{' '}
+                  <a href="https://app.tvtime.com" target="_blank" rel="noreferrer">
+                    app.tvtime.com
+                  </a>
+                  , click the extension, pick <b>JSON</b> and <b>Export my data</b>.
+                </li>
+                <li>
+                  It reads your live library, so it captures recent changes — but it drops
+                  reactions.
+                </li>
+              </ol>
+
+              <p className="mig-desc">
+                Bring <b>either or both</b> to the next step — they&apos;re merged automatically,
+                and re-importing never creates duplicates.{' '}
+                <b>You&apos;ll need to be signed in to import.</b>
+              </p>
+
+              <div className="mig-actions">
+                <button className="btn primary" onClick={() => setStep(1)}>
+                  I have my export →
+                </button>
+                <button className="btn" onClick={() => setSource(null)}>
+                  ← Back
+                </button>
+                {identity.state === 'signed-out' && (
+                  <Link className="btn" to="/account">
+                    Sign in first →
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -1062,7 +1231,7 @@ export default function Migrate() {
             )}
           </div>
 
-          {unmatched.length > 0 && (
+          {unmatched.length > 0 ? (
             <div className="mig-unmatched">
               <div className="mig-unmatched-head">
                 <span>
@@ -1079,7 +1248,14 @@ export default function Migrate() {
                 ))}
               </ul>
             </div>
+          ) : (
+            <p className="mig-receipt-note">Everything we could match came through cleanly.</p>
           )}
+
+          <p className="mig-receipt-note">
+            TV Time ratings, comments and lists aren&apos;t carried — Raed Tracker doesn&apos;t have
+            a place for them yet.
+          </p>
 
           <div className="mig-actions" style={{ justifyContent: 'center' }}>
             <button className="btn primary" onClick={() => navigate('/shows')}>

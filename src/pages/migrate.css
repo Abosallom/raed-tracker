@@ -132,6 +132,122 @@
   cursor: not-allowed;
 }
 
+/* ---------- source picker (step 0) ---------- */
+
+.mig-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mig-source {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px;
+  text-align: left;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.mig-source:hover,
+.mig-source:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.mig-source-tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--accent-hover);
+}
+
+.mig-source-title {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.mig-source-desc {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.mig-source-desc b {
+  color: var(--text);
+}
+
+/* ---------- TV Time Direct sign-in ---------- */
+
+.mig-direct,
+.mig-file {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mig-direct-form,
+.mig-direct-running {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mig-direct-running {
+  align-items: center;
+  text-align: center;
+  padding: 12px 0;
+}
+
+.mig-direct-phase {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.mig-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.mig-field input {
+  min-height: 44px;
+  font-size: 15px;
+}
+
+.mig-privacy {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.mig-inline-btn {
+  align-self: flex-start;
+  color: var(--accent-hover);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 8px 0;
+  background: none;
+  border: none;
+}
+
+.mig-receipt-note {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  text-align: center;
+}
+
 /* ---------- dropzone ---------- */
 
 .mig-drop {
