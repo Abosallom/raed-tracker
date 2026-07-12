@@ -76,16 +76,7 @@
   height: 4px;
   border-radius: 999px;
   background: var(--border);
-  margin: 0 auto 6px;
-}
-
-/* "Tap outside to skip" — makes the always-available dismiss affordance
-   explicit (paired with the ✕ close button in the header). */
-.epsheet-skiphint {
-  text-align: center;
-  font-size: 11.5px;
-  color: var(--text-faint);
-  margin-bottom: 12px;
+  margin: 0 auto 10px;
 }
 
 .epsheet-header {

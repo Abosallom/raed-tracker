@@ -26,17 +26,23 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  font-size: 16px;
+  color: var(--text-dim);
   line-height: 1;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 999px;
-  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+  transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.15s;
+}
+
+.profile-shortcut svg {
+  width: 18px;
+  height: 18px;
 }
 
 .profile-shortcut:hover {
   border-color: var(--accent);
   background: var(--bg-elev-2);
+  color: var(--text);
   transform: translateY(-1px);
 }
 
@@ -104,39 +110,94 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  color: #171717;
   background: var(--accent);
   border-radius: 999px;
   border: 2px solid var(--bg-elev);
   pointer-events: none;
 }
 
-.profile-pop-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
+.profile-avatar-hint svg {
+  width: 13px;
+  height: 13px;
 }
 
-.profile-emoji-pop {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: 0;
-  z-index: 50;
+/* Avatar picker — a real bottom sheet (edge-attached, scrim, grip), matching
+   the confirm/filter/reaction sheets. The old floating popover was the last
+   mid-screen popup in the app and could not be dismissed. */
+.profile-avatar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: profile-sheet-fade 0.2s ease;
+}
+
+.profile-avatar-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: var(--shadow);
+  padding: 10px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  animation: profile-sheet-up 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.profile-avatar-grip {
+  width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  margin: 0 auto 10px;
+}
+
+.profile-avatar-sheet-title {
+  font-size: 17px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.profile-emoji-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  padding: 10px;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  width: max-content;
+  gap: 6px;
+}
+
+@keyframes profile-sheet-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes profile-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-avatar-backdrop,
+  .profile-avatar-sheet {
+    animation: none;
+  }
 }
 
 .profile-emoji-btn {
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1;
   padding: 8px;
+  min-height: 52px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   transition: background 0.12s, border-color 0.12s;
@@ -217,11 +278,6 @@
   color: var(--accent-hover);
 }
 
-.profile-fav-heart {
-  color: var(--accent);
-  font-size: 18px;
-}
-
 .profile-inline-link {
   color: var(--accent-hover);
   font-weight: 600;
@@ -250,12 +306,6 @@
 .profile-stat-card:hover {
   border-color: var(--accent);
   transform: translateY(-2px);
-}
-
-.profile-stat-emoji {
-  font-size: 28px;
-  line-height: 1;
-  flex-shrink: 0;
 }
 
 .profile-stat-cell {
@@ -321,6 +371,31 @@
 .profile-list-create .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.profile-list-create-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Collapsed list creation — a quiet row that expands into the form on tap. */
+.profile-list-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 16px;
+  border-style: dashed;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.profile-list-new:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
 }
 
 .profile-list-card {
@@ -479,10 +554,6 @@
   .profile-chips {
     justify-content: center;
   }
-  .profile-emoji-pop {
-    left: 50%;
-    transform: translateX(-50%);
-  }
   .profile-fav-empty {
     justify-content: center;
     text-align: center;
@@ -507,10 +578,28 @@
   border-color: rgba(181, 127, 2, 0.4);
 }
 
-.profile-install-icon {
-  font-size: 26px;
-  line-height: 1;
-  flex-shrink: 0;
+/* "Move in from TV Time" — quiet visible entry point to /migrate (the
+   one-time banner is dismissible, and Settings ▸ Data buried it). */
+.profile-migrate-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.profile-migrate-row:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.profile-migrate-arrow {
+  margin-left: auto;
+  color: var(--text-faint);
 }
 
 .profile-install-body {

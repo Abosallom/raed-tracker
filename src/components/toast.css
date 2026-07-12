@@ -51,6 +51,14 @@
   }
 }
 
+/* While any bottom sheet is open, dock toasts to the TOP edge — bottom-anchored
+   toasts landed dead-center over sheet content (covering the reaction emoji
+   row) and expired-toast taps fell through onto the controls beneath. */
+body:has(.epsheet-backdrop, .confirm-backdrop, .addlist-backdrop, .shfilters-backdrop, .movies-sheet-backdrop, .profile-avatar-backdrop) .toaster {
+  bottom: auto;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+}
+
 /* Action button (e.g. Undo) inside a toast. The toaster container is
    pointer-events:none, so actionable toasts re-enable it. */
 .toast {

@@ -146,6 +146,16 @@
   margin-bottom: 11px;
 }
 
+/* All values equal: plain name/count list — no track column. */
+.stats-bar-row.plain {
+  grid-template-columns: 1fr 64px;
+}
+
+.stats-bar-row.plain .stats-bar-label {
+  text-align: left;
+  max-width: none;
+}
+
 .stats-emotion-row {
   display: grid;
   grid-template-columns: 26px 74px 1fr 34px;
@@ -334,11 +344,6 @@
 
 .stats-mini {
   padding: 16px;
-}
-
-.stats-mini-icon {
-  font-size: 17px;
-  margin-bottom: 8px;
 }
 
 .stats-mini-value {
@@ -545,13 +550,36 @@
   gap: 18px;
 }
 
-.stats-badges-title {
+/* Quiet collapsed summary row — the badge wall expands on demand. */
+.stats-badges-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 18px;
-  font-weight: 800;
-  margin: 4px 0 0;
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.stats-badges-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.stats-badges-caret {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--text-faint);
+  transition: transform 0.15s;
+}
+
+.stats-badges-caret.open {
+  transform: rotate(90deg);
 }
 
 .stats-badges-card {

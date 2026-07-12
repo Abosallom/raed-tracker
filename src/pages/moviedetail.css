@@ -74,11 +74,26 @@
   margin-bottom: 12px;
 }
 
-.moviedetail-chips {
+/* One-line hero metadata (rating · year · runtime · genres) — mirrors the
+   show page's calm meta line; the old chip wall + branded pills are gone. */
+.moviedetail-meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
+}
+
+.moviedetail-meta-rating {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--yellow);
+  white-space: nowrap;
+}
+
+.moviedetail-meta-line {
+  font-size: 13px;
+  color: var(--text-dim);
 }
 
 .moviedetail-actions {
@@ -88,83 +103,35 @@
   align-items: center;
 }
 
-.moviedetail-watched-btn.is-watched {
-  background: var(--green);
-  border-color: var(--green);
-  color: #06281c;
-  animation: moviedetail-watch-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+/* external links row (trailer / IMDb) — quiet dim text, one row */
+
+.moviedetail-links {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 2px;
 }
 
-@keyframes moviedetail-watch-pop {
-  0% {
-    transform: scale(0.85);
-  }
-  55% {
-    transform: scale(1.08);
-  }
-  100% {
-    transform: scale(1);
-  }
+.moviedetail-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px; /* full-size touch target on a small visual */
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-faint);
+  transition: color 0.15s;
 }
 
-.moviedetail-watched-btn.is-watched:hover {
-  background: #4ade9d;
+.moviedetail-link:hover {
+  color: var(--text);
+  text-decoration: underline;
 }
 
-/* trailer pill */
-
-a.moviedetail-trailer-btn {
-  border-radius: 999px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  color: #ff4d4d;
-  border-color: rgba(255, 77, 77, 0.45);
-}
-
-a.moviedetail-trailer-btn:hover {
-  background: rgba(255, 77, 77, 0.14);
-  border-color: #ff4d4d;
-  color: #ff6b6b;
-}
-
-:root[data-theme='light'] a.moviedetail-trailer-btn {
-  color: #c4302b;
-  border-color: rgba(196, 48, 43, 0.45);
-}
-
-:root[data-theme='light'] a.moviedetail-trailer-btn:hover {
-  background: rgba(196, 48, 43, 0.1);
-  border-color: #c4302b;
-  color: #a02722;
-}
-
-/* IMDb pill — brand yellow on dark */
-
-a.moviedetail-imdb-btn {
-  background: #f5c518;
-  border-color: #f5c518;
-  border-radius: 999px;
-  color: #131313;
-  font-weight: 800;
-  letter-spacing: 0.3px;
-}
-
-a.moviedetail-imdb-btn:hover {
-  background: #ffd633;
-  border-color: #ffd633;
-  color: #131313;
-}
-
-.moviedetail-fav {
-  font-size: 19px;
-  padding: 7px 12px;
-  line-height: 1;
-}
-
-.moviedetail-fav.is-fav {
-  color: var(--yellow);
-  border-color: rgba(251, 191, 36, 0.45);
-  background: rgba(251, 191, 36, 0.12);
+/* "Remove from library" — quiet row at the very bottom of the page. */
+.moviedetail-remove-row {
+  margin-top: 28px;
+  display: flex;
+  justify-content: flex-start;
 }
 
 .moviedetail-feel-card {
@@ -248,15 +215,15 @@ a.moviedetail-imdb-btn:hover {
     align-items: center;
     text-align: center;
   }
-  .moviedetail-chips,
-  .moviedetail-actions {
+  .moviedetail-meta,
+  .moviedetail-actions,
+  .moviedetail-links {
     justify-content: center;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .moviedetail-hero-bg,
-  .moviedetail-watched-btn.is-watched {
+  .moviedetail-hero-bg {
     animation: none !important;
   }
 }

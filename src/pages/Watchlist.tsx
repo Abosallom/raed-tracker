@@ -32,11 +32,10 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
       >
         ✕
       </button>
+      {/* Type appears once, in the caption — the filter chips above already
+          segment by type, so a poster badge said "Movie" a third time. */}
       <Link to={to} className="poster-card">
-        <div style={{ position: 'relative' }}>
-          <PosterImage path={item.poster_path} title={item.name} />
-          <div className="watchlist-type-badge">{item.type === 'tv' ? 'Show' : 'Movie'}</div>
-        </div>
+        <PosterImage path={item.poster_path} title={item.name} />
         <div className="poster-title">{item.name}</div>
         <div className="poster-sub">
           {item.type === 'tv' ? 'Show' : 'Movie'} · added {timeAgo(item.addedAt)}
@@ -55,7 +54,12 @@ export default function Watchlist() {
     tv: watchlist.filter((w) => w.type === 'tv').length,
     movie: watchlist.filter((w) => w.type === 'movie').length,
   }
-  const items = filter === 'all' ? watchlist : watchlist.filter((w) => w.type === filter)
+  // With a single media type the segments are all the same list ("All 1 /
+  // Movies 1") — hide the row entirely and just show everything.
+  const bothTypes = counts.tv > 0 && counts.movie > 0
+  const effectiveFilter = bothTypes ? filter : 'all'
+  const items =
+    effectiveFilter === 'all' ? watchlist : watchlist.filter((w) => w.type === effectiveFilter)
 
   return (
     <div>
@@ -100,23 +104,25 @@ export default function Watchlist() {
         </div>
       ) : (
         <>
-          <div className="watchlist-filters">
-            {FILTERS.map((f) => (
-              <button
-                key={f.key}
-                className={`watchlist-chip${filter === f.key ? ' active' : ''}`}
-                onClick={() => setFilter(f.key)}
-              >
-                {f.label}
-                <span className="watchlist-chip-count">{counts[f.key]}</span>
-              </button>
-            ))}
-          </div>
+          {bothTypes && (
+            <div className="watchlist-filters">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  className={`watchlist-chip${effectiveFilter === f.key ? ' active' : ''}`}
+                  onClick={() => setFilter(f.key)}
+                >
+                  {f.label}
+                  <span className="watchlist-chip-count">{counts[f.key]}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {items.length === 0 ? (
             <div className="empty-state">
-              <div className="big">{filter === 'tv' ? '📺' : '🎬'}</div>
-              <p>No {filter === 'tv' ? 'shows' : 'movies'} on your watchlist.</p>
+              <div className="big">{effectiveFilter === 'tv' ? '📺' : '🎬'}</div>
+              <p>No {effectiveFilter === 'tv' ? 'shows' : 'movies'} on your watchlist.</p>
             </div>
           ) : (
             <div className="poster-grid stagger">

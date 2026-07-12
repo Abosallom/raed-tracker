@@ -473,18 +473,6 @@ textarea:focus {
   overflow: hidden;
 }
 
-.poster-badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background: rgba(14, 15, 23, 0.85);
-  border-radius: 6px;
-  padding: 2px 7px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--yellow);
-}
-
 /* ---------- progress ---------- */
 
 .progress-track {
@@ -528,11 +516,6 @@ textarea:focus {
 :root[data-theme='light'] .poster-fallback {
   background: linear-gradient(160deg, #d8d3c8 0%, #bdb7a8 55%, #9a937f 100%);
   color: rgba(0, 0, 0, 0.72);
-}
-
-:root[data-theme='light'] .poster-badge {
-  background: rgba(255, 255, 255, 0.9);
-  color: #b57f02;
 }
 
 /* ---------- motion & skeletons (shared utilities) ---------- */

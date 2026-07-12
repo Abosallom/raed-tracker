@@ -156,12 +156,18 @@
   overflow-x: auto;
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
+  /* No scrollbar track under the rail — clipping the next card already
+     signals overflow. */
+  scrollbar-width: none;
   padding-bottom: 6px;
   /* Bleed to the page edges so the last card can scroll fully into view. */
   margin: 0 -2px;
   padding-left: 2px;
   padding-right: 2px;
+}
+
+.movies-disc-rail::-webkit-scrollbar {
+  display: none;
 }
 
 .movies-disc-card {
@@ -207,6 +213,13 @@
   font-weight: 700;
   line-height: 1;
   transition: background 0.15s, color 0.15s, transform 0.12s;
+}
+
+/* ≥44px hit area on the 28px visual chip (HIG minimum). */
+.movies-disc-add::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
 }
 
 .movies-disc-add:hover:not(:disabled) {
@@ -519,6 +532,22 @@
 
 .movies-tile-link {
   display: block;
+  /* Anchor for the hover overlay + emotion badge, so they cover the poster
+     only — never the caption below. */
+  position: relative;
+}
+
+/* Always-visible title caption under the art (matches the Discover rail and
+   Watchlist cards). */
+.movies-tile-caption {
+  padding: 6px 8px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Hover / focus overlay: darkened scrim over the artwork with the title.
@@ -550,17 +579,6 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-}
-
-.movies-tile-name {
-  color: rgba(255, 255, 255, 0.95);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.3;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 /* runtime · top genre — e.g. "1h 48m · Thriller" */

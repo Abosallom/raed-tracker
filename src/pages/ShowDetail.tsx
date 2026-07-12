@@ -47,6 +47,16 @@ function epCode(season: number, episode: number): string {
   return `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
 }
 
+/** "2022-02-17" -> "Feb 17, 2022", NBSP-glued so the date wraps as one token —
+    a column of raw ISO dates read as machine output, not language. */
+function formatAirDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return iso
+  return d
+    .toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    .replace(/ /g, '\u00A0')
+}
+
 function initials(name: string): string {
   return name
     .split(' ')
@@ -76,55 +86,6 @@ function toastEmotion(emo: Emotion | undefined) {
   const meta = emo ? EMOTIONS.find((m) => m.key === emo) : undefined
   if (meta) showToast(`Feeling ${meta.emoji} about it!`)
   else showToast('Reaction cleared', '↩️')
-}
-
-/** Small circular progress ring + fraction shown beside the season tabs.
-    The fraction label (and a ✓ glyph at 100%) makes it read as progress, not
-    as a stuck loading spinner. */
-function SeasonRing({ watched, aired }: { watched: number; aired: number }) {
-  const r = 12
-  const c = 2 * Math.PI * r
-  const value = aired > 0 ? Math.min(1, watched / aired) : 0
-  const complete = value >= 1
-  return (
-    <div
-      className="show-detail-season-ring"
-      role="img"
-      aria-label={`${watched} of ${aired} aired episodes watched this season`}
-      title={`${watched}/${aired} aired watched`}
-    >
-      <svg width={32} height={32} viewBox="0 0 32 32">
-        <circle cx={16} cy={16} r={r} fill="none" stroke="var(--border)" strokeWidth={3.5} />
-        <circle
-          className="show-detail-season-ring-fill"
-          cx={16}
-          cy={16}
-          r={r}
-          fill="none"
-          stroke={complete ? 'var(--green)' : 'var(--accent)'}
-          strokeWidth={3.5}
-          strokeLinecap="round"
-          strokeDasharray={`${c * value} ${c}`}
-          transform="rotate(-90 16 16)"
-        />
-        {complete && (
-          <text
-            x={16}
-            y={16}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontSize={13}
-            fill="var(--green)"
-          >
-            ✓
-          </text>
-        )}
-      </svg>
-      <span className="show-detail-season-ring-frac" aria-hidden="true">
-        {watched}/{aired}
-      </span>
-    </div>
-  )
 }
 
 /** Placeholder rows shown while a season's episodes are loading. */
@@ -183,7 +144,8 @@ function StarRating({
           )
         })}
       </div>
-      <span className="detail-rating-value">{value ? `${value}/10` : '—'}</span>
+      {/* No placeholder dash when unrated — ten unlit stars already say it. */}
+      {value != null && <span className="detail-rating-value">{value}/10</span>}
     </div>
   )
 }
@@ -348,8 +310,11 @@ export default function ShowDetailPage() {
     episode: number
     episodeTitle?: string
     variant?: 'default' | 'pause-this'
+    onUndo?: () => void
   } | null>(null)
   const [addListOpen, setAddListOpen] = useState(false)
+  // Secondary hero actions (Favorite / Pause / Add to list) fold behind "···".
+  const [moreOpen, setMoreOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -602,10 +567,6 @@ export default function ShowDetailPage() {
       showToast(`${epCode(s, e)} unmarked`, '↩️')
       return
     }
-    showToast(`${epCode(s, e)} marked watched ✓`, '🎬', {
-      label: 'Undo',
-      onClick: () => toggleEpisode(id, s, e),
-    })
     const big = celebrateIfComplete(s)
     // Micro-burst on the premieres/finales users actually reach.
     const show = useLibrary.getState().shows[id]
@@ -627,10 +588,19 @@ export default function ShowDetailPage() {
     }
     // Fire the same deep-react EpisodeSheet the queue uses, honoring the store
     // pref: 'always' every check, 'milestones' only premieres/finales/completions,
-    // 'never' skips.
+    // 'never' skips. The sheet confirms the check and carries its own Undo, so
+    // the toast only shows when no sheet opens — stacked on the sheet it hid
+    // the emoji row for its whole lifetime.
     const openSheet =
       reactionPrompt === 'always' || (reactionPrompt === 'milestones' && milestone)
-    if (openSheet) setSheet({ season: s, episode: e, episodeTitle })
+    if (openSheet) {
+      setSheet({ season: s, episode: e, episodeTitle, onUndo: () => toggleEpisode(id, s, e) })
+    } else {
+      showToast(`${epCode(s, e)} marked watched ✓`, '🎬', {
+        label: 'Undo',
+        onClick: () => toggleEpisode(id, s, e),
+      })
+    }
   }
 
   const handleMarkSeason = (s: number) => {
@@ -688,6 +658,9 @@ export default function ShowDetailPage() {
                 <span className="show-detail-meta-rating">★ {detail.vote_average.toFixed(1)}</span>
               )}
               <span className="show-detail-meta-line">
+                {/* NBSP glues multi-word tokens ("Apple TV") and binds each '·'
+                    to the token before it — wraps happen between whole tokens,
+                    never on a floating separator. */}
                 {[
                   year,
                   detail.status,
@@ -701,9 +674,13 @@ export default function ShowDetailPage() {
                     .join(' · '),
                 ]
                   .filter(Boolean)
-                  .join(' · ')}
+                  .map((t) => String(t).replace(/ /g, '\u00A0'))
+                  .join('\u00A0· ')}
               </span>
             </div>
+            {/* Hierarchy: ONE visible state control (Track/Tracking) plus a
+                quiet "More" disclosure — five equal grey buttons gave the
+                hero no primary action. */}
             <div className="show-detail-actions">
               {/* One verb everywhere: Track → Tracking (was add/follow/track
                   depending on the screen). */}
@@ -729,6 +706,9 @@ export default function ShowDetailPage() {
                   + Track show
                 </button>
               )}
+              {/* Watchlist is for planning — tracking supersedes it, so the
+                  add affordance hides once the show is tracked (the remove
+                  toggle stays reachable while an entry exists). */}
               {onWatchlist ? (
                 <button
                   className="btn"
@@ -740,66 +720,81 @@ export default function ShowDetailPage() {
                   ✓ Watchlist
                 </button>
               ) : (
-                <button
-                  className="btn"
-                  onClick={() => {
-                    addToWatchlist({
-                      type: 'tv',
-                      id,
-                      name: detail.name,
-                      poster_path: detail.poster_path,
-                    })
-                    showToast('Added to watchlist', '🔖')
-                  }}
-                >
-                  + Watchlist
-                </button>
+                !followed && (
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      addToWatchlist({
+                        type: 'tv',
+                        id,
+                        name: detail.name,
+                        poster_path: detail.poster_path,
+                      })
+                      showToast('Added to watchlist', '🔖')
+                    }}
+                  >
+                    + Watchlist
+                  </button>
+                )
               )}
-              {followed && tracked && (
-                <button
-                  className="btn"
-                  onClick={() => {
-                    const wasFavorite = tracked.favorite
-                    toggleFavoriteShow(id)
-                    showToast(
-                      wasFavorite ? 'Removed from favorites' : 'Added to favorites',
-                      wasFavorite ? '☆' : '⭐',
-                    )
-                  }}
-                  title={tracked.favorite ? 'Remove from favorites' : 'Add to favorites'}
-                  style={tracked.favorite ? { color: 'var(--yellow)' } : undefined}
-                >
-                  {tracked.favorite ? '★ Favorite' : '☆ Favorite'}
-                </button>
-              )}
-              {followed && tracked && (
-                <button
-                  className="btn"
-                  onClick={() => {
-                    if (tracked.paused) {
-                      // Resuming is a plain toggle; the sheet is a pause prompt.
-                      togglePauseShow(id)
-                      showToast('Resumed ▶', '▶️')
-                      return
-                    }
-                    // TV Time-style "PAUSE THIS?" sheet (equalizer hero)
-                    // instead of an instant state flip.
-                    const next = nextEpisode(tracked)
-                    setSheet({
-                      season: next?.season ?? 1,
-                      episode: next?.episode ?? 1,
-                      variant: 'pause-this',
-                    })
-                  }}
-                  title={tracked.paused ? 'Resume this show' : 'Pause — hide from Watch Next'}
-                >
-                  {tracked.paused ? '▶ Resume' : '⏸ Pause'}
-                </button>
-              )}
-              <button className="btn" onClick={() => setAddListOpen(true)} title="Add to a list">
-                📋 Add to list
+              <button
+                className="btn"
+                onClick={() => setMoreOpen((o) => !o)}
+                aria-expanded={moreOpen}
+                title="More actions"
+                aria-label="More actions"
+              >
+                ···
               </button>
             </div>
+            {moreOpen && (
+              <div className="show-detail-actions show-detail-actions-more">
+                {followed && tracked && (
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      const wasFavorite = tracked.favorite
+                      toggleFavoriteShow(id)
+                      showToast(
+                        wasFavorite ? 'Removed from favorites' : 'Added to favorites',
+                        wasFavorite ? '☆' : '⭐',
+                      )
+                    }}
+                    title={tracked.favorite ? 'Remove from favorites' : 'Add to favorites'}
+                    style={tracked.favorite ? { color: 'var(--yellow)' } : undefined}
+                  >
+                    {tracked.favorite ? '★ Favorite' : '☆ Favorite'}
+                  </button>
+                )}
+                {followed && tracked && (
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      if (tracked.paused) {
+                        // Resuming is a plain toggle; the sheet is a pause prompt.
+                        togglePauseShow(id)
+                        showToast('Resumed ▶', '▶️')
+                        return
+                      }
+                      // TV Time-style "PAUSE THIS?" sheet (equalizer hero)
+                      // instead of an instant state flip.
+                      const next = nextEpisode(tracked)
+                      setSheet({
+                        season: next?.season ?? 1,
+                        episode: next?.episode ?? 1,
+                        variant: 'pause-this',
+                      })
+                    }}
+                    title={tracked.paused ? 'Resume this show' : 'Pause — hide from Keep Watching'}
+                  >
+                    {tracked.paused ? 'Resume' : 'Pause'}
+                  </button>
+                )}
+                <button className="btn" onClick={() => setAddListOpen(true)} title="Add to a list">
+                  Add to list
+                </button>
+              </div>
+            )}
             {/* External links live on one quiet row — exits shouldn't outshine
                 the core actions above. */}
             {(trailerKey || detail.imdb_id) && (
@@ -901,6 +896,9 @@ export default function ShowDetailPage() {
 
       {/* ---------- seasons ---------- */}
       <div className="section-title">Episodes</div>
+      {/* No pinned progress ring/badge here — the "x/y watched" line in the
+          season head below already says it, and the cluster clipped the last
+          season chips. */}
       <div className="show-detail-season-tabs-row">
         <div className="show-detail-season-tabs">
           {detail.seasons.map((s) => (
@@ -913,9 +911,6 @@ export default function ShowDetailPage() {
             </button>
           ))}
         </div>
-        {!seasonLoading && seasonDetail && seasonAiredCount > 0 && (
-          <SeasonRing watched={seasonWatchedCount} aired={seasonAiredCount} />
-        )}
       </div>
 
       {seasonLoading && <SeasonSkeleton />}
@@ -995,48 +990,41 @@ export default function ShowDetailPage() {
                   <div className="show-detail-ep-main">
                     <div className="show-detail-ep-name">{ep.name}</div>
                     <div className="show-detail-ep-meta">
-                      {[ep.air_date, ep.runtime ? `${ep.runtime} min` : null]
+                      {/* Human date + NBSP-glued tokens ("Feb 17, 2022", "54 min")
+                          joined with a bound '·' so separators never orphan. */}
+                      {[
+                        ep.air_date ? formatAirDate(ep.air_date) : null,
+                        ep.runtime ? `${ep.runtime} min` : null,
+                      ]
                         .filter(Boolean)
-                        .join(' · ')}
+                        .join(' · ')}
                       {ep.vote_average > 0 && (
                         <span className="show-detail-ep-rating">
-                          ★ {ep.vote_average.toFixed(1)}
+                          {`★ ${ep.vote_average.toFixed(1)}`}
                         </span>
                       )}
                     </div>
-                    {/* Reaction lives inside the main column so it never
-                        crushes the episode title on narrow screens. */}
-                    {isWatched &&
-                      (reactOpenKey === key ? (
-                        <ReactionPicker
-                          compact
-                          value={record?.emotion}
-                          onChange={(emo) => {
-                            setEpisodeEmotion(id, ep.season_number, ep.episode_number, emo)
-                            toastEmotion(emo)
-                            setReactOpenKey(null)
-                          }}
-                        />
-                      ) : (
-                        <button
-                          className={`show-detail-ep-react${
-                            record?.emotion ? ' has-emotion' : ''
-                          }`}
-                          aria-label={
-                            record?.emotion
-                              ? `Your reaction: ${
-                                  EMOTIONS.find((e) => e.key === record.emotion)?.label ?? 'set'
-                                } — change it`
-                              : `React to ${epCode(ep.season_number, ep.episode_number)}`
-                          }
-                          title={record?.emotion ? 'Change reaction' : 'React'}
-                          onClick={() => setReactOpenKey(key)}
-                        >
-                          {record?.emotion
-                            ? EMOTIONS.find((e) => e.key === record.emotion)?.emoji
-                            : 'React'}
-                        </button>
-                      ))}
+                    {isWatched && (
+                      <button
+                        className={`show-detail-ep-react${
+                          record?.emotion ? ' has-emotion' : ''
+                        }`}
+                        aria-expanded={reactOpenKey === key}
+                        aria-label={
+                          record?.emotion
+                            ? `Your reaction: ${
+                                EMOTIONS.find((e) => e.key === record.emotion)?.label ?? 'set'
+                              } — change it`
+                            : `React to ${epCode(ep.season_number, ep.episode_number)}`
+                        }
+                        title={record?.emotion ? 'Change reaction' : 'React'}
+                        onClick={() => setReactOpenKey(reactOpenKey === key ? null : key)}
+                      >
+                        {record?.emotion
+                          ? EMOTIONS.find((e) => e.key === record.emotion)?.emoji
+                          : 'React'}
+                      </button>
+                    )}
                   </div>
                   {isFuture && ep.air_date ? (
                     <span className="show-detail-future-chip">
@@ -1058,6 +1046,22 @@ export default function ShowDetailPage() {
                       ✓
                     </button>
                   )}
+                  {/* Expanded picker spans a full row under the episode —
+                      squeezed into the narrow main column the six emoji
+                      wrapped into a tall, sparse 2-across grid. */}
+                  {isWatched && reactOpenKey === key && (
+                    <div className="show-detail-ep-reactrow">
+                      <ReactionPicker
+                        compact
+                        value={record?.emotion}
+                        onChange={(emo) => {
+                          setEpisodeEmotion(id, ep.season_number, ep.episode_number, emo)
+                          toastEmotion(emo)
+                          setReactOpenKey(null)
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -1066,7 +1070,7 @@ export default function ShowDetailPage() {
       )}
 
       {/* ---------- cast ---------- */}
-      {detail.cast.length > 0 && (
+      {detail.cast.length >= 3 && (
         <>
           <div className="section-title">Cast</div>
           <div className="show-detail-cast stagger">
@@ -1137,6 +1141,7 @@ export default function ShowDetailPage() {
           // Hero-initiated pause prompt: "Keep watching" just closes — there
           // is no freshly-checked episode for the reaction steps to describe.
           keepAction={sheet.variant === 'pause-this' ? 'close' : undefined}
+          onUndo={sheet.onUndo}
           onClose={() => setSheet(null)}
         />
       )}

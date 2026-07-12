@@ -29,14 +29,8 @@ import { useLibrary } from '../store/library'
 import { showToast } from '../components/toast'
 import { ErrorBox, PosterCard, SkeletonGrid, SkeletonRow, timeAgo } from '../components/shared'
 import HeroCarousel from '../components/HeroCarousel'
-import {
-  compactNumber as compactNum,
-  generateActivityFeed,
-  watchedByCount,
-  watcherCluster,
-} from '../api/social'
+import { generateActivityFeed } from '../api/social'
 import { fetchLiveFeed, socialLiveEnabled } from '../api/social-live'
-import type { GroupSort } from '../api/groups'
 import { GROUPS, loadJoined, saveJoined, sortGroups } from '../api/groups'
 import './search.css'
 
@@ -49,11 +43,12 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'movie', label: 'Movies' },
 ]
 
-const TABS: { key: Tab; label: string; emoji: string }[] = [
-  { key: 'feed', label: 'Feed', emoji: '📡' },
-  { key: 'discover', label: 'Discover', emoji: '🧭' },
-  { key: 'groups', label: 'Groups', emoji: '👥' },
-  { key: 'activity', label: 'Activity', emoji: '✨' },
+// Plain-text pills — emoji-as-chrome reads as noise, not navigation.
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'feed', label: 'Feed' },
+  { key: 'discover', label: 'Discover' },
+  { key: 'groups', label: 'Groups' },
+  { key: 'activity', label: 'Activity' },
 ]
 
 // ---------- last active tab (sessionStorage, best-effort) ----------
@@ -385,7 +380,7 @@ function FeedCard({
         </span>
       )}
       <span className="feed-type-chip">
-        {item.media_type === 'tv' ? '📺 Show' : '🎬 Movie'}
+        {item.media_type === 'tv' ? 'Show' : 'Movie'}
       </span>
       <div className="feed-scrim" aria-hidden="true" />
       <div className="feed-info">
@@ -586,7 +581,6 @@ function BrowseBanner({ type, onClick }: { type: MediaType; onClick: () => void 
   const tv = type === 'tv'
   return (
     <button className="explore-banner" onClick={onClick}>
-      <span className="explore-banner-emoji">{tv ? '📺' : '🎬'}</span>
       <span className="explore-banner-text">
         <b>Browse all {tv ? 'shows' : 'movies'}</b>
         <small>
@@ -637,18 +631,18 @@ function DiscoverTab({
   return (
     <div className="fade-in">
       {heroItems.length > 0 && <HeroCarousel items={heroItems} />}
-      <ExploreRow title="🔥 Trending shows" res={trendTv} />
-      <ExploreRow title="🍿 Trending movies" res={trendMv} />
-      <ExploreRow title="📺 Popular shows" res={popTv} />
+      <ExploreRow title="Trending shows" res={trendTv} />
+      <ExploreRow title="Trending movies" res={trendMv} />
+      <ExploreRow title="Popular shows" res={popTv} />
       <BrowseBanner type="tv" onClick={() => jumpToGenreHub('tv')} />
-      <ExploreRow title="🏆 Top rated shows" res={topTv} />
-      <ExploreRow title="🎖️ Top rated movies" res={topMv} />
+      <ExploreRow title="Top rated shows" res={topTv} />
+      <ExploreRow title="Top rated movies" res={topMv} />
       <BrowseBanner type="movie" onClick={() => jumpToGenreHub('movie')} />
 
       <ForYouSection topGenres={topGenres} />
 
       <section className="discover-genre-hub">
-        <h2 className="section-title">🎭 Browse by genre</h2>
+        <h2 className="section-title">Browse by genre</h2>
         <GenresTab
           type={genreType}
           onType={(t) => {
@@ -710,7 +704,7 @@ function ForYouSection({ topGenres }: { topGenres: string[] }) {
 
   return (
     <section>
-      <h2 className="section-title">✨ For you</h2>
+      <h2 className="section-title">For you</h2>
       <p className="explore-foryou-sub">
         Based on your top genres: {matched.map((m) => m.name).join(', ')}.
       </p>
@@ -743,18 +737,17 @@ function emotionEmoji(key: string | undefined): string | null {
 
 function ActivityCard({
   item,
-  voteCount,
+  sample,
   delay,
 }: {
   item: ActivityItem
-  voteCount?: number
+  /** Seeded (not live) activity — carries the same honesty tag as comments. */
+  sample: boolean
   delay: number
 }) {
   const { user } = item
   const to = item.mediaType === 'tv' ? `/show/${item.mediaId}` : `/movie/${item.mediaId}`
   const poster = posterUrl(item.poster_path, 'w185')
-  const cluster = watcherCluster(item.mediaId, 3)
-  const watchers = watchedByCount(item.mediaId, voteCount)
   const reaction = emotionEmoji(item.reaction)
 
   const epLabel =
@@ -765,12 +758,14 @@ function ActivityCard({
 
   return (
     <article className="activity-card" style={{ animationDelay: `${delay}ms` }}>
+      {/* Neutral initial tile (same treatment as Comments) — colorful emoji
+          avatars on every row read as decoration noise. */}
       <Link
         to={`/user/${user.id}`}
         className="activity-avatar"
         aria-label={`${user.name}'s profile`}
       >
-        {user.avatar}
+        {(user.name.trim()[0] ?? '?').toUpperCase()}
       </Link>
       <div className="activity-body">
         <p className="activity-line">
@@ -789,18 +784,10 @@ function ActivityCard({
             </span>
           )}
         </p>
+        {/* No fabricated "Watched by +NNK" social proof or avatar clusters —
+            just the timestamp, plus the sample tag on seeded items. */}
         <div className="activity-meta">
-          <span className="activity-cluster" aria-hidden="true">
-            {cluster.map((u, i) => (
-              <span key={u.id} className="activity-cluster-avatar" style={{ zIndex: 3 - i }}>
-                {u.avatar}
-              </span>
-            ))}
-          </span>
-          <span className="activity-watchers">Watched by +{compactNum(watchers)}</span>
-          <span className="activity-dot" aria-hidden="true">
-            ·
-          </span>
+          {sample && <span className="group-sample activity-sample">sample</span>}
           <span className="activity-time">{timeAgo(item.createdAt)}</span>
         </div>
       </div>
@@ -824,8 +811,7 @@ function ActivityTab({
   shows: Record<number, TrackedShow>
   movies: Record<number, TrackedMovie>
 }) {
-  // Trending titles seed the feed when the library is thin, and also supply
-  // vote counts so "Watched by +NNN" scales with a title's real popularity.
+  // Trending titles seed the feed when the library is thin.
   const trendTv = useCached<SearchResult[]>('trending:tv', trendingShows)
   const trendMv = useCached<SearchResult[]>('trending:movie', trendingMovies)
 
@@ -840,13 +826,6 @@ function ActivityTab({
       })
     }
     return src
-  }, [trendTv.data, trendMv.data])
-
-  const voteCounts = useMemo(() => {
-    const m = new Map<number, number>()
-    for (const s of [...(trendTv.data ?? []), ...(trendMv.data ?? [])])
-      if (s.vote_count != null) m.set(s.id, s.vote_count)
-    return m
   }, [trendTv.data, trendMv.data])
 
   const seededFeed = useMemo(
@@ -868,7 +847,8 @@ function ActivityTab({
     }
   }, [])
 
-  const feed = liveFeed && liveFeed.length > 0 ? liveFeed : seededFeed
+  const live = liveFeed !== null && liveFeed.length > 0
+  const feed = live ? liveFeed : seededFeed
   const hasLibrary = Object.keys(shows).length + Object.keys(movies).length > 0
 
   if (feed.length === 0) {
@@ -888,12 +868,7 @@ function ActivityTab({
     <div className="fade-in">
       <div className="activity-list">
         {feed.map((it, i) => (
-          <ActivityCard
-            key={it.id}
-            item={it}
-            voteCount={voteCounts.get(it.mediaId)}
-            delay={Math.min(i, 5) * 40}
-          />
+          <ActivityCard key={it.id} item={it} sample={!live} delay={Math.min(i, 5) * 40} />
         ))}
       </div>
     </div>
@@ -902,15 +877,8 @@ function ActivityTab({
 
 // ---------- Groups tab ----------
 
-const GROUP_SORTS: { key: GroupSort; label: string }[] = [
-  { key: 'popular', label: 'Popular' },
-  { key: 'az', label: 'A–Z' },
-  { key: 'members', label: 'Most members' },
-]
-
 function GroupsTab() {
   const [joined, setJoined] = useState<Set<string>>(loadJoined)
-  const [sort, setSort] = useState<GroupSort>('popular')
 
   const toggleJoin = (id: string) => {
     // Side effects (toast, persistence) must stay OUT of the setState updater:
@@ -929,41 +897,29 @@ function GroupsTab() {
     )
   }
 
-  const ordered = useMemo(() => sortGroups(GROUPS, sort, joined), [sort, joined])
+  // No SORT row while there's only a handful of sample groups — a labeled
+  // control cluster over 4 cards was chrome without a job.
+  const ordered = useMemo(() => sortGroups(GROUPS, 'popular', joined), [joined])
 
   return (
     <div className="fade-in">
-      <div className="search-filters groups-sort">
-        <span className="groups-sort-label">Sort</span>
-        {GROUP_SORTS.map((s) => (
-          <button
-            key={s.key}
-            className={`search-chip${sort === s.key ? ' active' : ''}`}
-            onClick={() => setSort(s.key)}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
       <div className="groups-grid stagger">
         {ordered.map((g) => {
           const isJoined = joined.has(g.id)
           return (
             <div key={g.id} className="group-card">
-              <span
-                className="group-tile"
-                style={{
-                  background: `linear-gradient(135deg, ${g.gradient[0]}, ${g.gradient[1]})`,
-                }}
-                aria-hidden="true"
-              >
+              {/* Neutral tile, not a saturated gradient — sample content
+                  shouldn't shout louder than real features. */}
+              <span className="group-tile" aria-hidden="true">
                 {g.emoji}
               </span>
               <div className="group-body">
-                <h3 className="group-name">{g.name}</h3>
-                <p className="group-stats">
-                  {compactNum(g.members)} members · {compactNum(g.discussions)} discussions
-                </p>
+                <h3 className="group-name">
+                  {g.name}
+                  {/* No invented member/discussion counts — the seeded
+                      communities carry the same honesty tag as comments. */}
+                  <span className="group-sample">sample</span>
+                </h3>
                 <p className="group-blurb">{g.blurb}</p>
               </div>
               <button
@@ -1097,13 +1053,13 @@ function GenresTab({
           className={`search-chip${type === 'tv' ? ' active' : ''}`}
           onClick={() => onType('tv')}
         >
-          📺 Shows
+          Shows
         </button>
         <button
           className={`search-chip${type === 'movie' ? ' active' : ''}`}
           onClick={() => onType('movie')}
         >
-          🎬 Movies
+          Movies
         </button>
       </div>
       {selected ? (
@@ -1225,8 +1181,12 @@ export default function Search() {
   const movieCount = results.length - showCount
   const countFor = (f: Filter) =>
     f === 'all' ? results.length : f === 'tv' ? showCount : movieCount
+  // With only one media type in the results the segments are all the same
+  // list ("All 4 / Shows 4 / Movies 0") — hide the row and show everything.
+  const bothTypes = showCount > 0 && movieCount > 0
+  const effectiveFilter = bothTypes ? filter : 'all'
   const filtered =
-    filter === 'all' ? results : results.filter((r) => r.media_type === filter)
+    effectiveFilter === 'all' ? results : results.filter((r) => r.media_type === effectiveFilter)
 
   return (
     <div>
@@ -1234,15 +1194,21 @@ export default function Search() {
       <p className="page-subtitle">Search, discover, and find your next binge.</p>
 
       <div className="search-box">
-        <span className="search-icon">🔍</span>
+        <span className="search-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+            <path d="m20 20-3.8-3.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </span>
+        {/* No autofocus on tab entry — it popped the keyboard (and an amber
+            focus glow) on every visit; the big styled field invites the tap. */}
         <input
           ref={inputRef}
           className="search-input"
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search shows and movies…"
-          autoFocus
+          placeholder="Search shows and movies"
           spellCheck={false}
         />
         {query && (
@@ -1301,7 +1267,7 @@ export default function Search() {
                 className={`explore-tab${tab === t.key ? ' active' : ''}`}
                 onClick={() => setTab(t.key)}
               >
-                <span aria-hidden="true">{t.emoji}</span> {t.label}
+                {t.label}
               </button>
             ))}
           </div>
@@ -1336,17 +1302,18 @@ export default function Search() {
       ) : (
         <>
           <div className="search-filters">
-            {FILTERS.map((f) => (
-              <button
-                key={f.key}
-                className={`search-chip${filter === f.key ? ' active' : ''}`}
-                onClick={() => setFilter(f.key)}
-              >
-                {f.label}
-                <span className="search-chip-count">{countFor(f.key)}</span>
-              </button>
-            ))}
-            <span className="search-count fade-in" key={`${filter}|${q}`}>
+            {bothTypes &&
+              FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  className={`search-chip${effectiveFilter === f.key ? ' active' : ''}`}
+                  onClick={() => setFilter(f.key)}
+                >
+                  {f.label}
+                  <span className="search-chip-count">{countFor(f.key)}</span>
+                </button>
+              ))}
+            <span className="search-count fade-in" key={`${effectiveFilter}|${q}`}>
               <b>{filtered.length}</b> result{filtered.length === 1 ? '' : 's'} for
               “{q}”
             </span>
@@ -1355,10 +1322,10 @@ export default function Search() {
           {filtered.length === 0 ? (
             <div className="empty-state">
               <div className="big">
-                {filter === 'tv' ? '📺' : '🎬'}
+                {effectiveFilter === 'tv' ? '📺' : '🎬'}
               </div>
               <p>
-                No {filter === 'tv' ? 'shows' : 'movies'} match “{q}” — try
+                No {effectiveFilter === 'tv' ? 'shows' : 'movies'} match “{q}” — try
                 another filter.
               </p>
             </div>

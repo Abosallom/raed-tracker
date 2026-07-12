@@ -1,7 +1,7 @@
 // Profile page — identity hub: avatar + name, stats summary, custom lists,
 // favorites, full library grids and the user's own comments.
 
-import { useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { Comment, TrackedMovie, TrackedShow } from '../types'
 import { displayWatchedCount, useLibrary, watchedCount } from '../store/library'
@@ -18,6 +18,53 @@ import { posterUrl } from '../api/tmdb'
 import { PosterImage, formatMinutes, timeAgo } from '../components/shared'
 import { showToast } from '../components/toast'
 import './profile.css'
+
+/* Monochrome line icons for the header shortcuts — raw emoji rendered
+   inconsistently across platforms and read as unlabeled controls. Same
+   stroke style as the App.tsx nav icons. */
+type IconProps = { className?: string }
+const svg = (paths: React.ReactNode) => (p: IconProps) => (
+  <svg
+    className={p.className}
+    viewBox="0 0 24 24"
+    width="20"
+    height="20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.8}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    {paths}
+  </svg>
+)
+
+/* A real gear (toothed outer ring), not radiating spokes — the old glyph read
+   as a sun/brightness toggle. */
+const IconGear = svg(
+  <>
+    <circle cx="12" cy="12" r="3" />
+    <circle cx="12" cy="12" r="6.5" />
+    <path d="M12 2.8v2.7M12 18.5v2.7M2.8 12h2.7M18.5 12h2.7M5.5 5.5l1.9 1.9M16.6 16.6l1.9 1.9M18.5 5.5l-1.9 1.9M7.4 16.6l-1.9 1.9" />
+  </>,
+)
+/* Person, not a padlock — Account is the identity page, and the lock read as
+   a privacy control. */
+const IconPerson = svg(
+  <>
+    <circle cx="12" cy="8" r="3.4" />
+    <path d="M5.5 20c.8-3.6 3.4-5.6 6.5-5.6s5.7 2 6.5 5.6" />
+  </>,
+)
+const IconBookmark = svg(<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.5L5 21V4a1 1 0 0 1 1-1z" />)
+const IconShield = svg(
+  <>
+    <path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3z" />
+    <path d="m9 12 2 2 4-4" />
+  </>,
+)
+const IconPencil = svg(<path d="m4 20 1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1z" />)
 
 const AVATAR_CHOICES = [
   '🍿', '📺', '🎬', '🦉',
@@ -84,9 +131,6 @@ function InstallCard() {
 
   return (
     <div className="card profile-install fade-in">
-      <span className="profile-install-icon" aria-hidden="true">
-        📲
-      </span>
       <div className="profile-install-body">
         <div className="profile-install-title">Get the app</div>
         <div className="profile-install-text">
@@ -129,6 +173,19 @@ export default function Profile() {
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [newListName, setNewListName] = useState('')
+  // List creation folds behind a quiet "+ New list" row — a permanently open
+  // form with an input shouted on every Profile visit.
+  const [creatingList, setCreatingList] = useState(false)
+
+  // Escape closes the avatar sheet (same idiom as the other bottom sheets).
+  useEffect(() => {
+    if (!pickerOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPickerOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pickerOpen])
 
   const showList = Object.values(shows).sort((a, b) => b.addedAt.localeCompare(a.addedAt))
   const movieList = Object.values(movies).sort((a, b) => b.addedAt.localeCompare(a.addedAt))
@@ -186,10 +243,10 @@ export default function Profile() {
         </div>
         <div className="profile-shortcuts" aria-label="Profile shortcuts">
           <Link className="profile-shortcut" to="/settings" aria-label="Settings" title="Settings">
-            ⚙️
+            <IconGear />
           </Link>
           <Link className="profile-shortcut" to="/account" aria-label="Account" title="Account">
-            🔐
+            <IconPerson />
           </Link>
           <Link
             className="profile-shortcut"
@@ -197,11 +254,11 @@ export default function Profile() {
             aria-label="Watchlist"
             title="Watchlist"
           >
-            🔖
+            <IconBookmark />
           </Link>
           {adminGate.isAdmin && adminGate.adminMode && (
             <Link className="profile-shortcut" to="/admin" aria-label="Admin" title="Admin">
-              🛡️
+              <IconShield />
             </Link>
           )}
         </div>
@@ -215,27 +272,13 @@ export default function Profile() {
             <button
               className="profile-avatar"
               title="Change avatar"
-              onClick={() => setPickerOpen((o) => !o)}
+              onClick={() => setPickerOpen(true)}
             >
               {profile.avatar}
             </button>
-            <span className="profile-avatar-hint">✏️</span>
-            {pickerOpen && (
-              <>
-                <div className="profile-pop-backdrop" onClick={() => setPickerOpen(false)} />
-                <div className="profile-emoji-pop">
-                  {AVATAR_CHOICES.map((emoji) => (
-                    <button
-                      key={emoji}
-                      className={`profile-emoji-btn${emoji === profile.avatar ? ' selected' : ''}`}
-                      onClick={() => pickAvatar(emoji)}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+            <span className="profile-avatar-hint" aria-hidden="true">
+              <IconPencil />
+            </span>
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -265,7 +308,7 @@ export default function Profile() {
                 <>
                   <span className="profile-name">{profile.name}</span>
                   <button className="profile-edit-link" onClick={startEditingName}>
-                    ✏️ Edit
+                    Edit
                   </button>
                 </>
               )}
@@ -274,19 +317,25 @@ export default function Profile() {
 
             {/* No follower count: the local profile has no real one, and a
                 fabricated number erodes trust the moment anyone notices. */}
+            {/* Zero-value chips are hidden (same rule as "Not started 0"
+                elsewhere) — a fresh profile shouldn't open on a row of zeros. */}
             <div className="profile-chips">
-              <Link className="chip profile-social-chip" to="/users?filter=following">
-                🤝 <b>{following.length}</b> following
-              </Link>
+              {following.length > 0 && (
+                <Link className="chip profile-social-chip" to="/users?filter=following">
+                  <b>{following.length}</b> following
+                </Link>
+              )}
               <span className="chip">
-                📺 <b>{showList.length}</b> shows tracked
+                <b>{showList.length}</b> shows tracked
               </span>
               <span className="chip">
-                ✅ <b>{episodesWatched}</b> episodes watched
+                <b>{episodesWatched}</b> episodes watched
               </span>
-              <span className="chip">
-                💬 <b>{myComments.length}</b> comments
-              </span>
+              {myComments.length > 0 && (
+                <span className="chip">
+                  <b>{myComments.length}</b> comments
+                </span>
+              )}
               {streaks.current >= 2 && (
                 <span
                   className="chip"
@@ -297,7 +346,7 @@ export default function Profile() {
                     color: 'var(--accent)',
                   }}
                 >
-                  🔥 <b style={{ color: 'var(--accent)' }}>{streaks.current}</b>-day streak
+                  <b style={{ color: 'var(--accent)' }}>{streaks.current}</b>-day streak
                 </span>
               )}
             </div>
@@ -308,18 +357,24 @@ export default function Profile() {
       {/* ---------- install nudge (browser tab only) ---------- */}
       <InstallCard />
 
+      {/* Visible path to the importer — the one-time TV Time banner is
+          dismissible and the Settings ▸ Data entry is buried. */}
+      <Link className="card profile-migrate-row fade-in" to="/migrate">
+        Moving from TV Time? Import your history
+        <span className="profile-migrate-arrow" aria-hidden="true">
+          →
+        </span>
+      </Link>
+
       {/* ---------- stats summary ---------- */}
       <h2 className="section-title">
-        <span>📊 Stats</span>
+        <span>Stats</span>
         <Link className="profile-viewall" to="/stats">
           Full stats →
         </Link>
       </h2>
       <div className="profile-stat-cards stagger">
         <Link className="card profile-stat-card" to="/stats">
-          <span className="profile-stat-emoji" aria-hidden="true">
-            📺
-          </span>
           <span className="profile-stat-cell">
             <span className="profile-stat-value">{formatMinutes(tvMinutes)}</span>
             <span className="profile-stat-label">TV time</span>
@@ -333,9 +388,6 @@ export default function Profile() {
           </span>
         </Link>
         <Link className="card profile-stat-card" to="/stats">
-          <span className="profile-stat-emoji" aria-hidden="true">
-            🎬
-          </span>
           <span className="profile-stat-cell">
             <span className="profile-stat-value">{formatMinutes(movieMinutes)}</span>
             <span className="profile-stat-label">Movie time</span>
@@ -350,9 +402,6 @@ export default function Profile() {
         </Link>
         {/* Watchlist is otherwise orphaned on mobile — give it a visible card. */}
         <Link className="card profile-stat-card" to="/watchlist">
-          <span className="profile-stat-emoji" aria-hidden="true">
-            🔖
-          </span>
           <span className="profile-stat-cell">
             <span className="profile-stat-value">{watchlist.length}</span>
             <span className="profile-stat-label">On your watchlist</span>
@@ -369,22 +418,37 @@ export default function Profile() {
 
       {/* ---------- custom lists ---------- */}
       <h2 className="section-title">
-        <span>📃 Lists</span>
+        <span>Lists</span>
       </h2>
       <div className="profile-lists stagger">
-        <form className="card profile-list-create" onSubmit={submitNewList}>
-          <div className="profile-list-create-title">➕ New list</div>
-          <input
-            className="profile-list-create-input"
-            value={newListName}
-            maxLength={48}
-            placeholder="e.g. Cozy weekend picks"
-            onChange={(e) => setNewListName(e.target.value)}
-          />
-          <button className="btn primary small" type="submit" disabled={!newListName.trim()}>
-            Create list
+        {creatingList ? (
+          <form className="card profile-list-create" onSubmit={submitNewList}>
+            <div className="profile-list-create-title">New list</div>
+            <input
+              className="profile-list-create-input"
+              value={newListName}
+              maxLength={48}
+              autoFocus
+              placeholder="e.g. Cozy weekend picks"
+              onChange={(e) => setNewListName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setCreatingList(false)
+              }}
+            />
+            <div className="profile-list-create-actions">
+              <button className="btn primary small" type="submit" disabled={!newListName.trim()}>
+                Create list
+              </button>
+              <button className="btn small" type="button" onClick={() => setCreatingList(false)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button className="card profile-list-new" onClick={() => setCreatingList(true)}>
+            + New list
           </button>
-        </form>
+        )}
         {lists.map((l) => (
           <Link key={l.id} className="card profile-list-card" to={`/list/${l.id}`}>
             <div className="profile-list-thumbs" aria-hidden="true">
@@ -411,16 +475,11 @@ export default function Profile() {
 
       {/* ---------- favorite shows ---------- */}
       <h2 className="section-title">
-        <span>
-          <span className="profile-fav-heart" aria-hidden="true">
-            ♥
-          </span>{' '}
-          Favorite shows
-        </span>
+        <span>Favorite shows</span>
       </h2>
       {favShows.length === 0 ? (
         <div className="card profile-fav-empty fade-in">
-          <span>No favorite shows yet — tap the heart on a show you love.</span>
+          <span>No favorite shows yet — tap ☆ Favorite on a show you love.</span>
           <Link className="btn small" to="/">
             Add favorites
           </Link>
@@ -441,12 +500,7 @@ export default function Profile() {
 
       {/* ---------- favorite movies ---------- */}
       <h2 className="section-title">
-        <span>
-          <span className="profile-fav-heart" aria-hidden="true">
-            ♥
-          </span>{' '}
-          Favorite movies
-        </span>
+        <span>Favorite movies</span>
       </h2>
       {favMovies.length === 0 ? (
         <div className="card profile-fav-empty fade-in">
@@ -469,7 +523,7 @@ export default function Profile() {
 
       {/* ---------- all shows ---------- */}
       <h2 className="section-title">
-        <span>📺 Shows</span>
+        <span>Shows</span>
         {showList.length > 0 && (
           <Link className="profile-viewall" to="/">
             View all ({showList.length}) →
@@ -501,7 +555,7 @@ export default function Profile() {
 
       {/* ---------- all movies ---------- */}
       <h2 className="section-title">
-        <span>🎬 Movies</span>
+        <span>Movies</span>
         {movieList.length > 0 && (
           <Link className="profile-viewall" to="/movies">
             View all ({movieList.length}) →
@@ -533,7 +587,7 @@ export default function Profile() {
 
       {/* ---------- your comments ---------- */}
       <h2 className="section-title">
-        <span>💬 Your comments</span>
+        <span>Your comments</span>
       </h2>
       {myComments.length === 0 ? (
         <div className="empty-state card fade-in">
@@ -573,6 +627,37 @@ export default function Profile() {
         </div>
       )}
       <div className="profile-version">v{__APP_VERSION__}</div>
+
+      {/* ---------- avatar picker (bottom sheet — never a floating popover) ---------- */}
+      {pickerOpen && (
+        <div
+          className="profile-avatar-backdrop"
+          role="presentation"
+          onClick={() => setPickerOpen(false)}
+        >
+          <div
+            className="profile-avatar-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Choose your avatar"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="profile-avatar-grip" aria-hidden="true" />
+            <div className="profile-avatar-sheet-title">Choose your avatar</div>
+            <div className="profile-emoji-grid">
+              {AVATAR_CHOICES.map((emoji) => (
+                <button
+                  key={emoji}
+                  className={`profile-emoji-btn${emoji === profile.avatar ? ' selected' : ''}`}
+                  onClick={() => pickAvatar(emoji)}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

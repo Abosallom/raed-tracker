@@ -69,6 +69,12 @@ export interface EpisodeSheetProps {
    * a fresh check (e.g. the show page's Pause button).
    */
   keepAction?: 'continue' | 'close'
+  /**
+   * Reverts the check-off that opened the sheet. When set, the sheet carries
+   * its own Undo action — callers then suppress the usual Undo toast, which
+   * otherwise z-stacked on top of the open sheet and covered its controls.
+   */
+  onUndo?: () => void
   onClose: () => void
 }
 
@@ -84,6 +90,7 @@ export default function EpisodeSheet({
   episodeTitle,
   variant = 'default',
   keepAction = 'continue',
+  onUndo,
   onClose,
 }: EpisodeSheetProps) {
   const show = useLibrary((s) => s.shows[showId])
@@ -334,8 +341,8 @@ export default function EpisodeSheet({
           />
         ) : (
           <>
-            <div className="epsheet-skiphint">Tap outside to skip</div>
-
+            {/* No "Tap outside to skip" caption — grabber + ✕ are the sheet
+                idiom; three competing dismiss affordances read as clutter. */}
             <div className="epsheet-header">
               <div className="epsheet-check" aria-hidden="true">
                 ✓
@@ -375,6 +382,21 @@ export default function EpisodeSheet({
                 </div>
 
                 <div className="epsheet-actions epsheet-step-in">
+                  {onUndo && (
+                    <button
+                      className="btn small"
+                      onClick={() => {
+                        onUndo()
+                        showToast(
+                          `S${pad2(season)}E${pad2(episode)} unmarked`,
+                          '↩️',
+                        )
+                        close()
+                      }}
+                    >
+                      ↩ Undo
+                    </button>
+                  )}
                   <button
                     className="btn small"
                     onClick={() => {
@@ -438,7 +460,7 @@ function PauseHero({
       </div>
       <div className="epsheet-pause-copy">
         {prompt === 'requested'
-          ? 'It disappears from Watch Next until you resume'
+          ? 'It disappears from Keep Watching until you resume'
           : `You haven't touched ${showName} in a while`}
       </div>
       <div className="epsheet-pause-actions">

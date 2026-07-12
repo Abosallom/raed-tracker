@@ -600,7 +600,7 @@ export default function Migrate() {
       {/* Mid-flow the back target is an unmissable escape hatch (same
           navigate(-1) fallback); on the first step it's just "Import". */}
       <BackBar title={step > 0 && step < 4 ? 'Cancel import' : 'Import'} />
-      <h1 className="page-title">Move in from TV Time 🚚</h1>
+      <h1 className="page-title">Move in from TV Time</h1>
       <p className="page-subtitle">
         Bring your whole watch history — shows, episodes, movies, reactions and your watchlist —
         into Raed Tracker.
@@ -623,7 +623,7 @@ export default function Migrate() {
       {/* ================= step 1: get your export ================= */}
       {step === 0 && (
         <section className="card mig-card">
-          <div className="mig-card-title">📨 Get your data out of TV Time</div>
+          <div className="mig-card-title">Get your data out of TV Time</div>
 
           <div className="mig-deadline" role="alert">
             ⚠️ <b>TV Time shuts down on July 15, 2026</b> — all account data is permanently
@@ -1001,7 +1001,7 @@ export default function Migrate() {
       {/* ================= step 4: importing ================= */}
       {step === 3 && (
         <section className="card mig-card">
-          <div className="mig-card-title">🚚 Importing your library…</div>
+          <div className="mig-card-title">Importing your library…</div>
           <IdentityCard identity={identity} />
           <p className="mig-desc">
             Matching each title against TMDB — big libraries take a few minutes. Keep this tab

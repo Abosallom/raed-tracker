@@ -89,6 +89,7 @@ interface SheetInfo {
   episode: number
   episodeTitle?: string
   variant?: 'default' | 'pause-this'
+  onUndo?: () => void
 }
 
 
@@ -459,7 +460,7 @@ const QueueRow = memo(function QueueRow({
     return diff >= 0 && diff <= 7 * 86400000
   })()
 
-  const handleCheck = () => {
+  const handleCheck = (btn: HTMLButtonElement) => {
     if (leaving) return
     // Haptic tick where supported (Android Chrome etc.); iOS Safari has no
     // navigator.vibrate, so the optional call is a silent no-op there.
@@ -492,10 +493,6 @@ const QueueRow = memo(function QueueRow({
     const streakBefore = computeStreaks(before.shows, before.movies)
 
     toggleEpisode(snap.id, s, e)
-    showToast(`${snap.name} · ${epCode(s, e)} watched ✓`, '📺', {
-      label: 'Undo',
-      onClick: () => toggleEpisode(snap.id, s, e),
-    })
 
     const after = useLibrary.getState()
     const updated = after.shows[snap.id]
@@ -518,56 +515,78 @@ const QueueRow = memo(function QueueRow({
     const hitThousand =
       Math.floor(lifetimeAfter / 1000) > Math.floor(lifetimeBefore / 1000) && lifetimeAfter >= 1000
     const newBestStreak = streakAfter.longest > streakBefore.longest
-    let milestone = false
 
-    if (updated && nextEpisode(updated) === null) {
-      fireConfetti()
-      showToast(`All caught up on ${snap.name} 🎉`)
-      onCaughtUp(snap.id)
-      milestone = true
-    } else if (updated && seasonComplete(updated, s)) {
-      // Season finale / season complete — full burst.
-      fireConfetti()
-      showToast(`Season ${s} complete! 🎉`, '🏆')
-      milestone = true
-    } else if (seasonFinale) {
-      fireConfetti()
-      showToast(`Season ${s} finale watched 🎬`, '🏁')
-      milestone = true
-    } else if (hitThousand) {
-      // Lifetime 1000th — full burst.
-      fireConfetti()
-      showToast(`${lifetimeAfter.toLocaleString()} episodes watched! 🎉`, '🏆')
-      milestone = true
-    } else if (hitHundred) {
-      // Lifetime 100th (and every following hundred) — micro-burst.
-      fireConfetti({ intensity: 'micro' })
-      showToast(`${lifetimeAfter} episodes watched! 🎉`, '💯')
-      milestone = true
-    } else if (newBestStreak) {
-      // Extended the streak to a new personal best — micro-burst.
-      fireConfetti({ intensity: 'micro' })
-      showToast(`New best streak — ${streakAfter.longest} days! 🔥`, '🔥')
-      milestone = true
-    } else if (seriesPremiere) {
-      fireConfetti({ intensity: 'micro' })
-      showToast(`${snap.name} — series premiere! 🎉`, '🎬')
-      milestone = true
-    } else if (seasonPremiere) {
-      fireConfetti({ intensity: 'micro' })
-      showToast(`Season ${s} premiere 🎬`, '🎬')
-      milestone = true
-    } else if (tenth) {
-      fireConfetti({ intensity: 'micro' })
-      showToast(`${lifetimeAfter} episodes watched! 🎉`, '🔟')
-      milestone = true
-    }
+    // Sheet-worthy milestones are exactly what the Settings copy documents:
+    // premieres, finales and completions. Round-number/streak celebrations
+    // below stay confetti + toast only — an unexplained sheet on the 20th
+    // lifetime episode read as a random quiz.
+    const caughtUp = updated ? nextEpisode(updated) === null : false
+    const reactionMilestone =
+      caughtUp ||
+      (updated ? seasonComplete(updated, s) : false) ||
+      seasonFinale ||
+      seriesPremiere ||
+      seasonPremiere
 
     // P5b: checking an episode of a STALE show (no activity for >1 month before
     // this check) opens the EpisodeSheet in its 'pause-this' variant instead of
     // the normal reaction sheet — nudging the user to pause or resume in
     // earnest. Takes precedence over the reaction-frequency preference.
-    if (wasStale && updated && nextEpisode(updated) !== null) {
+    const openPause = wasStale && updated !== undefined && !caughtUp
+    // Reaction-sheet frequency: 'always' opens the deep-react sheet on every
+    // check-off, 'milestones' only on premieres/finales/completions, 'never'
+    // relies on the toast + inline reactions on the show page.
+    const openReact =
+      !openPause &&
+      (reactionPrompt === 'always' || (reactionPrompt === 'milestones' && reactionMilestone))
+
+    // The reaction sheet confirms the check itself and carries its own Undo —
+    // a simultaneous toast stacked on top of the sheet and hid the emoji row.
+    if (!openReact) {
+      showToast(`${snap.name} · ${epCode(s, e)} watched ✓`, '📺', {
+        label: 'Undo',
+        onClick: () => toggleEpisode(snap.id, s, e),
+      })
+    }
+    // Drop lingering focus once no sheet needs it — a resting focus/hover
+    // state painted a false "watched" ring on the NEXT episode's circle.
+    if (!openPause && !openReact) btn.blur()
+
+    if (caughtUp) {
+      fireConfetti()
+      showToast(`All caught up on ${snap.name} 🎉`)
+      onCaughtUp(snap.id)
+    } else if (updated && seasonComplete(updated, s)) {
+      // Season finale / season complete — full burst.
+      fireConfetti()
+      showToast(`Season ${s} complete! 🎉`, '🏆')
+    } else if (seasonFinale) {
+      fireConfetti()
+      showToast(`Season ${s} finale watched 🎬`, '🏁')
+    } else if (hitThousand) {
+      // Lifetime 1000th — full burst.
+      fireConfetti()
+      showToast(`${lifetimeAfter.toLocaleString()} episodes watched! 🎉`, '🏆')
+    } else if (hitHundred) {
+      // Lifetime 100th (and every following hundred) — micro-burst.
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${lifetimeAfter} episodes watched! 🎉`, '💯')
+    } else if (newBestStreak) {
+      // Extended the streak to a new personal best — micro-burst.
+      fireConfetti({ intensity: 'micro' })
+      showToast(`New best streak — ${streakAfter.longest} days! 🔥`, '🔥')
+    } else if (seriesPremiere) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${snap.name} — series premiere! 🎉`, '🎬')
+    } else if (seasonPremiere) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`Season ${s} premiere 🎬`, '🎬')
+    } else if (tenth) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${lifetimeAfter} episodes watched! 🎉`, '🔟')
+    }
+
+    if (openPause) {
       onOpenSheet({
         showId: snap.id,
         showName: snap.name,
@@ -576,21 +595,14 @@ const QueueRow = memo(function QueueRow({
         episodeTitle: epInfo?.title,
         variant: 'pause-this',
       })
-      return
-    }
-
-    // Reaction-sheet frequency: 'always' opens the deep-react sheet on every
-    // check-off, 'milestones' only on premieres/finales/completions, 'never'
-    // relies on the toast + inline reactions on the show page.
-    const openSheet =
-      reactionPrompt === 'always' || (reactionPrompt === 'milestones' && milestone)
-    if (openSheet) {
+    } else if (openReact) {
       onOpenSheet({
         showId: snap.id,
         showName: snap.name,
         season: s,
         episode: e,
         episodeTitle: epInfo?.title,
+        onUndo: () => toggleEpisode(snap.id, s, e),
       })
     }
   }
@@ -668,7 +680,7 @@ const QueueRow = memo(function QueueRow({
 
       <button
         className={`queue-check${pop ? ' pop' : ''}${checked ? ' checked' : ''}`}
-        onClick={handleCheck}
+        onClick={(ev) => handleCheck(ev.currentTarget)}
         title={`Mark ${epCode(shown.season, shown.episode)} watched`}
         aria-label={`Mark ${snap.name} ${epCode(shown.season, shown.episode)} watched`}
       >
@@ -899,7 +911,12 @@ export default function MyShows() {
         if (pe) history.push({ show, ...pe, watchedAt: rec.watchedAt })
       }
     }
-    history.sort((a, b) => b.watchedAt.localeCompare(a.watchedAt))
+    // Same-moment batches (Mark all / season fill share one timestamp) tie-
+    // break by episode order so the list reads E05, E04, E03 — not scrambled.
+    history.sort(
+      (a, b) =>
+        b.watchedAt.localeCompare(a.watchedAt) || b.season - a.season || b.episode - a.episode,
+    )
     const recent = history.slice(0, 10)
 
     const totalEps = all.reduce((n, s) => n + watchedCount(s), 0)
@@ -979,6 +996,9 @@ export default function MyShows() {
     saveFilters(next)
   }
   const hasActiveFilters = filtersActive(filters)
+  // Filters that HIDE shows (a non-default sort alone can't empty the queue).
+  const hasNarrowingFilters =
+    filters.status !== 'all' || filters.genre !== '' || filters.network !== ''
 
   // Show IDs that just gained episodes on the last refresh (drives the grid
   // NEW badge alongside the persistent snapshot heuristic).
@@ -1254,7 +1274,9 @@ export default function MyShows() {
                   ▸
                 </span>
                 Watched history
-                <span className="queue-chip-count">{recent.length}</span>
+                {/* "last N", not a bare count — a bare "10" read as the
+                    lifetime total and contradicted the header stats. */}
+                <span className="queue-chip-count">last {recent.length}</span>
               </button>
               {historyOpen && (
                 <div className="queue-history stagger">
@@ -1290,10 +1312,14 @@ export default function MyShows() {
           )}
 
           <section className="queue-section">
-            <h2 className="queue-section-title">To Watch</h2>
+            {/* "Up next", not "To Watch" — the active tab already says Keep
+                Watching, and "To watch" is a Movies segment name. */}
+            <h2 className="queue-section-title">Up next</h2>
             {fresh.length === 0 && stale.length === 0 ? (
-              hasActiveFilters && paused.length === 0 && notStarted.length === 0 ? (
-                // Filters (shared with grid view) matched nothing here.
+              hasNarrowingFilters ? (
+                // A narrowing filter (status/genre/network) is hiding the
+                // queue — never show the "all caught up" celebration while
+                // unwatched episodes are merely filtered out.
                 <div className="empty-state fade-in">
                   <div className="big">🔍</div>
                   <p>No shows match these filters.</p>

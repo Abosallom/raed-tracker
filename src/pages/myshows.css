@@ -260,23 +260,20 @@
   }
 }
 
-/* Leading media: show poster (2:3) that morphs into a wider 16:9 episode
-   still once the still image has loaded (crossfade + width/height tween). */
+/* Leading media: fixed 16:9 frame from FIRST paint (poster cropped
+   object-fit:cover as the placeholder, episode still crossfades in). A
+   poster-sized frame that later shrank moved every card ~50px right when
+   the user was about to tap. */
 
 .queue-poster {
   position: relative;
   display: block;
-  width: 64px;
-  height: 96px;
+  width: 108px;
+  height: 61px;
   flex-shrink: 0;
   border-radius: 8px;
   overflow: hidden;
-  transition: transform 0.15s, width 0.35s ease, height 0.35s ease;
-}
-
-.queue-poster.has-still {
-  width: 108px;
-  height: 61px;
+  transition: transform 0.15s;
 }
 
 .queue-poster .poster-img,
@@ -477,10 +474,11 @@
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+/* Premiere reads as dim meta text, not a third accent color on the
+   calmest screen. */
 .queue-badge.premiere {
-  background: color-mix(in srgb, var(--green) 14%, transparent);
-  color: var(--green);
-  border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);
+  padding: 1.5px 0;
+  color: var(--text-faint);
 }
 
 .queue-ep-title {
@@ -510,11 +508,22 @@
   transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.12s;
 }
 
-.queue-check:hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #171717;
-  transform: scale(1.06);
+/* Hover is a NEUTRAL brighten, never amber and never a fill: after a check-off
+   the pointer rests on the same circle — now the NEXT episode's — and an amber
+   ring/glyph there read as a false "watched" signal until the pointer moved.
+   The fill stays reserved for the transient green .checked confirm below. */
+@media (hover: hover) and (pointer: fine) {
+  .queue-check:hover {
+    border-color: var(--text-dim);
+    color: var(--text);
+    transform: scale(1.06);
+  }
+}
+
+/* Keyboard focus gets a ring, never the watched fill. */
+.queue-check:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* P0a: inline SVG checkmark. Its stroke is hidden by default (fully dashed
@@ -606,14 +615,17 @@
   gap: 6px;
 }
 
+/* Plain hairline-separated rows — no card chrome for passive history. */
 .queue-history-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 12px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.queue-history-row:last-child {
+  border-bottom: none;
 }
 
 .queue-history-name {
@@ -646,14 +658,16 @@
   white-space: nowrap;
 }
 
+/* Done-state stays quiet: a dim outlined check, not a solid amber disc —
+   history is the least actionable content on the page. */
 .queue-undo {
   width: 26px;
   height: 26px;
   flex-shrink: 0;
   border-radius: 50%;
-  border: 2px solid var(--accent);
-  background: var(--accent);
-  color: #171717;
+  border: 1.5px solid var(--text-faint);
+  background: transparent;
+  color: var(--text-faint);
   font-size: 12px;
   font-weight: 800;
   display: flex;
@@ -1195,10 +1209,6 @@
     height: 40px;
   }
   .queue-poster {
-    width: 54px;
-    height: 81px;
-  }
-  .queue-poster.has-still {
     width: 96px;
     height: 54px;
   }

@@ -207,6 +207,7 @@ interface SheetInfo {
   episode: number
   episodeTitle?: string
   variant?: 'default' | 'pause-this'
+  onUndo?: () => void
 }
 
 function CheckButton({
@@ -255,15 +256,11 @@ function CheckButton({
     const streakBefore = computeStreaks(before.shows, before.movies)
 
     const nowWatched = toggleEpisode(entry.showId, entry.season, entry.episode)
-    showToast(
-      nowWatched ? `${epCode(entry)} marked watched ✓` : `${epCode(entry)} marked unwatched`,
-      nowWatched ? '✅' : '↩️',
-      nowWatched
-        ? { label: 'Undo', onClick: () => toggleEpisode(entry.showId, entry.season, entry.episode) }
-        : undefined,
-    )
     // Unchecking stays silent — no celebration, no reaction sheet.
-    if (!nowWatched) return
+    if (!nowWatched) {
+      showToast(`${epCode(entry)} marked unwatched`, '↩️')
+      return
+    }
 
     const after = useLibrary.getState()
     const updated = after.shows[entry.showId]
@@ -279,52 +276,71 @@ function CheckButton({
     const hitThousand =
       Math.floor(lifetimeAfter / 1000) > Math.floor(lifetimeBefore / 1000) && lifetimeAfter >= 1000
     const newBestStreak = streakAfter.longest > streakBefore.longest
-    let milestone = false
 
-    if (updated && nextEpisode(updated) === null) {
-      fireConfetti()
-      showToast(`All caught up on ${entry.showName} 🎉`, '🏆')
-      milestone = true
-    } else if (updated && seasonComplete(updated, s)) {
-      fireConfetti()
-      showToast(`Season ${s} complete! 🎉`, '🏆')
-      milestone = true
-    } else if (updated && isSeasonFinale(updated, s, e)) {
-      fireConfetti()
-      showToast(`Season ${s} finale watched 🎬`, '🏁')
-      milestone = true
-    } else if (hitThousand) {
-      fireConfetti()
-      showToast(`${lifetimeAfter.toLocaleString()} episodes watched! 🎉`, '🏆')
-      milestone = true
-    } else if (hitHundred) {
-      fireConfetti({ intensity: 'micro' })
-      showToast(`${lifetimeAfter} episodes watched! 🎉`, '💯')
-      milestone = true
-    } else if (newBestStreak) {
-      fireConfetti({ intensity: 'micro' })
-      showToast(`New best streak — ${streakAfter.longest} days! 🔥`, '🔥')
-      milestone = true
-    } else if (updated && isSeriesPremiere(updated, s, e)) {
-      fireConfetti({ intensity: 'micro' })
-      showToast(`${entry.showName} — series premiere! 🎉`, '🎬')
-      milestone = true
-    } else if (updated && isSeasonPremiere(updated, s, e)) {
-      fireConfetti({ intensity: 'micro' })
-      showToast(`Season ${s} premiere 🎬`, '🎬')
-      milestone = true
-    } else if (tenth) {
-      fireConfetti({ intensity: 'micro' })
-      showToast(`${lifetimeAfter} episodes watched! 🎉`, '🔟')
-      milestone = true
-    }
-
-    const episodeTitle = isTba(entry) ? undefined : entry.epName
+    // Sheet-worthy milestones match the documented Settings copy exactly
+    // (premieres, finales, completions) — round-number/streak celebrations
+    // stay confetti + toast only.
+    const caughtUp = updated ? nextEpisode(updated) === null : false
+    const reactionMilestone =
+      caughtUp ||
+      (updated
+        ? seasonComplete(updated, s) ||
+          isSeasonFinale(updated, s, e) ||
+          isSeriesPremiere(updated, s, e) ||
+          isSeasonPremiere(updated, s, e)
+        : false)
 
     // Checking an episode of a STALE show (no activity for >1 month before this
     // check) opens the EpisodeSheet in its 'pause-this' variant — takes
     // precedence over the reaction-frequency preference.
-    if (wasStale && updated && nextEpisode(updated) !== null) {
+    const openPause = wasStale && updated !== undefined && !caughtUp
+    // Reaction-sheet frequency: 'always' opens the deep-react sheet on every
+    // check-off, 'milestones' only on the celebrations above, 'never' skips.
+    const openReact =
+      !openPause &&
+      (reactionPrompt === 'always' || (reactionPrompt === 'milestones' && reactionMilestone))
+
+    // The reaction sheet confirms the check itself and carries its own Undo —
+    // a simultaneous toast stacked on top of the sheet and hid its controls.
+    if (!openReact) {
+      showToast(`${epCode(entry)} marked watched ✓`, '✅', {
+        label: 'Undo',
+        onClick: () => toggleEpisode(entry.showId, entry.season, entry.episode),
+      })
+    }
+
+    if (caughtUp) {
+      fireConfetti()
+      showToast(`All caught up on ${entry.showName} 🎉`, '🏆')
+    } else if (updated && seasonComplete(updated, s)) {
+      fireConfetti()
+      showToast(`Season ${s} complete! 🎉`, '🏆')
+    } else if (updated && isSeasonFinale(updated, s, e)) {
+      fireConfetti()
+      showToast(`Season ${s} finale watched 🎬`, '🏁')
+    } else if (hitThousand) {
+      fireConfetti()
+      showToast(`${lifetimeAfter.toLocaleString()} episodes watched! 🎉`, '🏆')
+    } else if (hitHundred) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${lifetimeAfter} episodes watched! 🎉`, '💯')
+    } else if (newBestStreak) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`New best streak — ${streakAfter.longest} days! 🔥`, '🔥')
+    } else if (updated && isSeriesPremiere(updated, s, e)) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${entry.showName} — series premiere! 🎉`, '🎬')
+    } else if (updated && isSeasonPremiere(updated, s, e)) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`Season ${s} premiere 🎬`, '🎬')
+    } else if (tenth) {
+      fireConfetti({ intensity: 'micro' })
+      showToast(`${lifetimeAfter} episodes watched! 🎉`, '🔟')
+    }
+
+    const episodeTitle = isTba(entry) ? undefined : entry.epName
+
+    if (openPause) {
       onOpenSheet({
         showId: entry.showId,
         showName: entry.showName,
@@ -333,20 +349,14 @@ function CheckButton({
         episodeTitle,
         variant: 'pause-this',
       })
-      return
-    }
-
-    // Reaction-sheet frequency: 'always' opens the deep-react sheet on every
-    // check-off, 'milestones' only on the celebrations above, 'never' skips.
-    const openSheet =
-      reactionPrompt === 'always' || (reactionPrompt === 'milestones' && milestone)
-    if (openSheet) {
+    } else if (openReact) {
       onOpenSheet({
         showId: entry.showId,
         showName: entry.showName,
         season: s,
         episode: e,
         episodeTitle,
+        onUndo: () => toggleEpisode(entry.showId, entry.season, entry.episode),
       })
     }
   }
@@ -443,10 +453,12 @@ function UpcomingListSkeleton() {
 
 // ---------- movies ----------
 
-function releaseChipLabel(m: SearchResult): string {
+/** Dated chip for not-yet-released titles; null once a film is out — inside
+    the "In theaters" rail an "Out now" chip just restated the section title. */
+function releaseChipLabel(m: SearchResult): string | null {
   if (!m.release_date) return 'TBA'
   const days = daysFromToday(m.release_date)
-  if (days <= 0) return 'Out now'
+  if (days <= 0) return null
   if (days === 1) return 'Tomorrow'
   if (days <= 30) return `in ${days} days`
   return parseIsoDate(m.release_date).toLocaleDateString('en-US', {
@@ -767,12 +779,10 @@ export default function Upcoming() {
 
           {entries.length === 0 ? (
             <div className="card upcoming-caughtup fade-in">
-              <div style={{ fontSize: 28, marginBottom: 8 }}>🎉</div>
-              You’re all caught up — none of your followed shows have a scheduled episode.
+              You’re all caught up — none of the shows you track have a scheduled episode.
             </div>
           ) : groups.length === 0 ? (
             <div className="card upcoming-caughtup fade-in">
-              <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
               Nothing matches these filters — try switching back to All.
             </div>
           ) : (
@@ -798,7 +808,7 @@ export default function Upcoming() {
           {truncatedCount > 0 && (
             <p style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 14 }}>
               Schedule checked for the {MAX_SHOW_FETCHES} shows most likely to be airing —{' '}
-              {truncatedCount} other followed {truncatedCount === 1 ? 'show was' : 'shows were'}{' '}
+              {truncatedCount} other tracked {truncatedCount === 1 ? 'show was' : 'shows were'}{' '}
               not checked.
             </p>
           )}
@@ -806,7 +816,7 @@ export default function Upcoming() {
       )}
 
       {/* "In theaters" (not "soon") — the rail includes already-released
-          titles badged "Out now". */}
+          titles; only not-yet-released ones carry a dated chip. */}
       <h2 className="section-title" style={{ marginTop: 36 }}>
         In theaters
       </h2>
@@ -818,12 +828,15 @@ export default function Upcoming() {
         <p style={{ color: 'var(--text-dim)' }}>No upcoming movies found.</p>
       ) : (
         <div className="media-row stagger">
-          {movies.slice(0, 12).map((m) => (
-            <div className="upcoming-movie" key={m.id}>
-              <PosterCard item={m} />
-              <span className="chip upcoming-release">📅 {releaseChipLabel(m)}</span>
-            </div>
-          ))}
+          {movies.slice(0, 12).map((m) => {
+            const chip = releaseChipLabel(m)
+            return (
+              <div className="upcoming-movie" key={m.id}>
+                <PosterCard item={m} />
+                {chip && <span className="chip upcoming-release">{chip}</span>}
+              </div>
+            )
+          })}
         </div>
       )}
 

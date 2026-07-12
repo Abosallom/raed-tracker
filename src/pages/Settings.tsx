@@ -247,27 +247,97 @@ function formatBytes(n: number): string {
 type SettingsTab = 'account' | 'app' | 'upcoming' | 'data'
 
 const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'account', label: '👤 Account' },
-  { id: 'app', label: '🎛️ App' },
-  { id: 'upcoming', label: '📅 Upcoming' },
-  { id: 'data', label: '💾 Data' },
+  { id: 'account', label: 'Account' },
+  { id: 'app', label: 'App' },
+  // "Upcoming filters", not "Upcoming" — the bare word read as a teaser for
+  // future features, not the Upcoming page's filter settings.
+  { id: 'upcoming', label: 'Upcoming filters' },
+  { id: 'data', label: 'Data' },
 ]
 
-const THEME_OPTIONS: { value: ThemePref; emoji: string; title: string; desc: string }[] = [
-  { value: 'auto', emoji: '🌗', title: 'Auto', desc: 'Sync with your device appearance' },
-  { value: 'dark', emoji: '🌙', title: 'Dark', desc: 'Dark grey, easy on the eyes' },
-  { value: 'light', emoji: '☀️', title: 'Light', desc: 'Bright surfaces, same yellow accent' },
+/* Monochrome line icons for the option rows — same stroke style as the
+   Profile shortcuts; color emoji read as leftover chrome after the app-wide
+   de-emoji sweep. (The emoji strings live on as toast icons only.) */
+const optIcon = (paths: React.ReactNode) => (
+  <svg
+    viewBox="0 0 24 24"
+    width="18"
+    height="18"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.8}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    {paths}
+  </svg>
+)
+
+const ICON_AUTO = optIcon(
+  <>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none" />
+  </>,
+)
+const ICON_MOON = optIcon(<path d="M19.5 14.5A7.5 7.5 0 1 1 9.5 4.5a6 6 0 1 0 10 10z" />)
+const ICON_SUN = optIcon(
+  <>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" />
+  </>,
+)
+const ICON_BUBBLE = optIcon(
+  <path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-5 4v-4H6a2 2 0 0 1-2-2z" />,
+)
+const ICON_FLAG = optIcon(<path d="M6 21V4m0 1h11l-2.5 4L17 13H6" />)
+const ICON_MUTE = optIcon(
+  <>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M6.5 6.5l11 11" />
+  </>,
+)
+
+const THEME_OPTIONS: {
+  value: ThemePref
+  emoji: string
+  icon: React.ReactNode
+  title: string
+  desc: string
+}[] = [
+  { value: 'auto', emoji: '🌗', icon: ICON_AUTO, title: 'Auto', desc: 'Sync with your device appearance' },
+  { value: 'dark', emoji: '🌙', icon: ICON_MOON, title: 'Dark', desc: 'Dark grey, easy on the eyes' },
+  { value: 'light', emoji: '☀️', icon: ICON_SUN, title: 'Light', desc: 'Bright surfaces, same yellow accent' },
 ]
 
-const REACTION_OPTIONS: { value: ReactionPrompt; emoji: string; title: string; desc: string }[] = [
-  { value: 'always', emoji: '💬', title: 'Always', desc: 'Open the react sheet after every check-off' },
+const REACTION_OPTIONS: {
+  value: ReactionPrompt
+  emoji: string
+  icon: React.ReactNode
+  title: string
+  desc: string
+}[] = [
+  {
+    value: 'always',
+    emoji: '💬',
+    icon: ICON_BUBBLE,
+    title: 'Always',
+    desc: 'Open the react sheet after every check-off',
+  },
   {
     value: 'milestones',
     emoji: '🏆',
+    icon: ICON_FLAG,
     title: 'Milestones only',
     desc: 'Only on premieres, finales and completions (default)',
   },
-  { value: 'never', emoji: '🚫', title: 'Never', desc: 'Just a toast — react inline on the show page' },
+  {
+    value: 'never',
+    emoji: '🚫',
+    icon: ICON_MUTE,
+    title: 'Never',
+    desc: 'Just a toast — react inline on the show page',
+  },
 ]
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -566,7 +636,7 @@ export default function Settings() {
 
           <section className="card">
             <div className="settings-card-head">
-              <div className="settings-card-title">🔐 Security &amp; sign-in</div>
+              <div className="settings-card-title">Security &amp; sign-in</div>
             </div>
             <p className="settings-card-desc">
               Email, password and session controls live on the account page.
@@ -585,7 +655,7 @@ export default function Settings() {
         <div key="app" className="settings-stack fade-in">
           <section className="card">
             <div className="settings-card-head">
-              <div className="settings-card-title">🎨 Theme</div>
+              <div className="settings-card-title">Theme</div>
             </div>
             <p className="settings-card-desc">
               Pick how Raed Tracker looks. Changes apply instantly — no reload.
@@ -604,7 +674,7 @@ export default function Settings() {
                     onChange={() => chooseTheme(opt.value)}
                   />
                   <span className="settings-theme-emoji" aria-hidden>
-                    {opt.emoji}
+                    {opt.icon}
                   </span>
                   <span className="settings-theme-text">
                     <span className="settings-theme-title">{opt.title}</span>
@@ -617,7 +687,7 @@ export default function Settings() {
 
           <section className="card">
             <div className="settings-card-head">
-              <div className="settings-card-title">💬 Reaction prompts</div>
+              <div className="settings-card-title">Reaction prompts</div>
             </div>
             <p className="settings-card-desc">
               Choose how often the “How did it feel?” sheet pops up after you check off an
@@ -641,7 +711,7 @@ export default function Settings() {
                     onChange={() => chooseReactionPrompt(opt.value)}
                   />
                   <span className="settings-theme-emoji" aria-hidden>
-                    {opt.emoji}
+                    {opt.icon}
                   </span>
                   <span className="settings-theme-text">
                     <span className="settings-theme-title">{opt.title}</span>
@@ -655,7 +725,7 @@ export default function Settings() {
           {/* ---------- Notifications ---------- */}
           <section className="card">
             <div className="settings-card-head">
-              <div className="settings-card-title">🔔 Notifications</div>
+              <div className="settings-card-title">Notifications</div>
             </div>
             <p className="settings-card-desc">
               Choose which in-app alerts you see while you use Raed Tracker.
@@ -665,7 +735,7 @@ export default function Settings() {
                 <span className="settings-toggle-text">
                   <span className="settings-toggle-title">Episode airs</span>
                   <span className="settings-toggle-desc">
-                    Banner when a new episode of a followed show drops
+                    Banner when a new episode of a show you track drops
                   </span>
                 </span>
                 <input
@@ -701,7 +771,7 @@ export default function Settings() {
           {/* ---------- Privacy ---------- */}
           <section className="card">
             <div className="settings-card-head">
-              <div className="settings-card-title">🔒 Privacy</div>
+              <div className="settings-card-title">Privacy</div>
             </div>
             <div className="settings-toggle-list">
               <label className="settings-toggle-row">
@@ -752,7 +822,7 @@ export default function Settings() {
           {/* ---------- Language ---------- */}
           <section className="card">
             <div className="settings-card-head">
-              <div className="settings-card-title">🌐 Language</div>
+              <div className="settings-card-title">Language</div>
             </div>
             <p className="settings-card-desc">
               Preferred languages for titles and discussion.
@@ -796,7 +866,7 @@ export default function Settings() {
 
           <section className="card">
             <div className="settings-card-head">
-              <div className="settings-card-title">ℹ️ About</div>
+              <div className="settings-card-title">About</div>
             </div>
             <p className="settings-card-desc">
               <b>Raed Tracker</b> — a TV Time-style tracker for the shows and movies you love.
@@ -826,7 +896,7 @@ export default function Settings() {
         <div key="upcoming" className="settings-stack fade-in">
           <section className="card">
             <div className="settings-card-head">
-              <div className="settings-card-title">📅 Upcoming schedule</div>
+              <div className="settings-card-title">Upcoming schedule</div>
             </div>
             <p className="settings-card-desc">
               Tune what shows up on the <Link to="/upcoming">Upcoming</Link> page. These filters
@@ -910,7 +980,7 @@ export default function Settings() {
         <div key="data" className="settings-stack fade-in">
           <section className="card">
             <div className="settings-card-head">
-              <div className="settings-card-title">🎬 Data source</div>
+              <div className="settings-card-title">Data source</div>
               <span className="settings-status">
                 <span
                   className="settings-dot"
@@ -968,7 +1038,7 @@ export default function Settings() {
 
           <section className="card">
             <div className="settings-card-head">
-              <div className="settings-card-title">💾 Your data</div>
+              <div className="settings-card-title">Your data</div>
             </div>
             <p className="settings-card-desc">
               Everything you track is stored <b>locally in this browser</b>, and — when you sign
@@ -985,7 +1055,7 @@ export default function Settings() {
 
             <div className="settings-actions">
               <button className="btn primary" onClick={exportData}>
-                ⬇️ Export backup
+                Export backup
               </button>
               <button className="btn" onClick={() => fileInputRef.current?.click()}>
                 ⬆️ Import backup
@@ -1015,7 +1085,7 @@ export default function Settings() {
           {wipedBackup !== null && (
             <section className="card">
               <div className="settings-card-head">
-                <div className="settings-card-title">🛟 Recovered library snapshot</div>
+                <div className="settings-card-title">Recovered library snapshot</div>
               </div>
               <p className="settings-card-desc">
                 Signing in to a different account replaced the library that was on this device.
@@ -1025,7 +1095,7 @@ export default function Settings() {
               </p>
               <div className="settings-actions">
                 <button className="btn primary" onClick={downloadWipedBackup}>
-                  ⬇️ Download snapshot
+                  Download snapshot
                 </button>
                 <button className="btn danger" onClick={() => void discardWipedBackup()}>
                   Discard
@@ -1036,7 +1106,7 @@ export default function Settings() {
 
           <section className="card">
             <div className="settings-card-head">
-              <div className="settings-card-title">🧹 Cached data</div>
+              <div className="settings-card-title">Cached data</div>
             </div>
             <p className="settings-card-desc">
               Raed Tracker caches posters and TMDB responses so it loads fast and works
@@ -1045,14 +1115,14 @@ export default function Settings() {
             </p>
             <div className="settings-actions">
               <button className="btn" disabled={clearing} onClick={() => void clearCache()}>
-                {clearing ? 'Clearing…' : '🧹 Clear cache'}
+                {clearing ? 'Clearing…' : 'Clear cache'}
               </button>
             </div>
           </section>
 
           <section className="card">
             <div className="settings-card-head">
-              <div className="settings-card-title">📥 Import from TV Time</div>
+              <div className="settings-card-title">Import from TV Time</div>
             </div>
             <p className="settings-card-desc">
               Moving from another tracker? Import your shows, watched episodes and movies from a
@@ -1060,7 +1130,7 @@ export default function Settings() {
             </p>
             <div className="settings-actions">
               <Link to="/migrate" className="btn primary">
-                📥 Import from TV Time
+                Import from TV Time
               </Link>
             </div>
           </section>

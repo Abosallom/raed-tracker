@@ -25,7 +25,6 @@ import {
   ErrorBox,
   MediaRow,
   PosterImage,
-  Rating,
   ReactionPicker,
   SkeletonDetail,
   formatMinutes,
@@ -371,39 +370,59 @@ export default function MovieDetail() {
             <div className="moviedetail-title">{detail.title}</div>
             {detail.tagline && <div className="moviedetail-tagline">“{detail.tagline}”</div>}
 
-            <div className="moviedetail-chips">
-              {year && <span className="chip">{year}</span>}
-              {detail.runtime != null && detail.runtime > 0 && (
-                <span className="chip">{formatMinutes(detail.runtime)}</span>
-              )}
-              <Rating value={detail.vote_average} />
-              {detail.genres.map((g) => (
-                <span key={g.id} className="chip">
-                  {g.name}
+            {/* One calm meta line instead of a chip wall — same treatment as
+                the show page hero; rating leads. */}
+            <div className="moviedetail-meta">
+              {detail.vote_average > 0 && (
+                <span className="moviedetail-meta-rating">
+                  ★ {detail.vote_average.toFixed(1)}
                 </span>
-              ))}
+              )}
+              <span className="moviedetail-meta-line">
+                {/* NBSP glues multi-word tokens and binds each '·' to the token
+                    before it — wraps happen between whole tokens (same fix as
+                    the show hero). */}
+                {[
+                  year,
+                  detail.runtime != null && detail.runtime > 0
+                    ? formatMinutes(detail.runtime)
+                    : null,
+                  detail.genres
+                    .slice(0, 2)
+                    .map((g) => g.name)
+                    .join(' · '),
+                ]
+                  .filter(Boolean)
+                  .map((t) => String(t).replace(/ /g, ' '))
+                  .join(' · ')}
+              </span>
             </div>
 
             <div className="moviedetail-actions">
+              {/* Watched is the single state control; everything else stays
+                  quiet or moves off the hero (matches the show page). */}
               <button
-                className={`btn moviedetail-watched-btn${watched ? ' is-watched' : ' primary'}`}
+                className={`btn${watched ? '' : ' primary'}`}
                 onClick={handleWatchedToggle}
               >
                 {watched ? '✓ Watched' : '+ Mark watched'}
               </button>
 
-              <button className="btn" onClick={handleWatchlistToggle}>
-                {onWatchlist ? '🔖 On watchlist' : '🔖 Add to watchlist'}
-              </button>
+              {!watched && (
+                <button className="btn" onClick={handleWatchlistToggle}>
+                  {onWatchlist ? '✓ Watchlist' : '+ Watchlist'}
+                </button>
+              )}
 
               <button className="btn" onClick={() => setAddListOpen(true)} title="Add to a list">
-                📋 Add to list
+                Add to list
               </button>
 
               {tracked && (
                 <button
-                  className={`btn moviedetail-fav${tracked.favorite ? ' is-fav' : ''}`}
-                  title={tracked.favorite ? 'Unfavorite' : 'Favorite'}
+                  className="btn"
+                  title={tracked.favorite ? 'Remove from favorites' : 'Add to favorites'}
+                  style={tracked.favorite ? { color: 'var(--yellow)' } : undefined}
                   onClick={() => {
                     const wasFavorite = tracked.favorite
                     toggleFavoriteMovie(movieId)
@@ -413,43 +432,37 @@ export default function MovieDetail() {
                     )
                   }}
                 >
-                  {tracked.favorite ? '★' : '☆'}
-                </button>
-              )}
-
-              {trailerKey && (
-                <a
-                  className="btn moviedetail-trailer-btn"
-                  href={youtubeUrl(trailerKey)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  ▶ YouTube trailer
-                </a>
-              )}
-              {detail.imdb_id && (
-                <a
-                  className="btn moviedetail-imdb-btn"
-                  href={imdbTitleUrl(detail.imdb_id)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  IMDb ↗
-                </a>
-              )}
-
-              {tracked && (
-                <button
-                  className="btn danger"
-                  onClick={() => {
-                    removeMovie(movieId)
-                    showToast(`Removed ${detail.title} from library`, '🗑️')
-                  }}
-                >
-                  Remove from library
+                  {tracked.favorite ? '★ Favorite' : '☆ Favorite'}
                 </button>
               )}
             </div>
+
+            {/* External links live on one quiet row — exits shouldn't
+                outshine the core actions above. */}
+            {(trailerKey || detail.imdb_id) && (
+              <div className="moviedetail-links">
+                {trailerKey && (
+                  <a
+                    className="moviedetail-link"
+                    href={youtubeUrl(trailerKey)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    ▶ Trailer
+                  </a>
+                )}
+                {detail.imdb_id && (
+                  <a
+                    className="moviedetail-link"
+                    href={imdbTitleUrl(detail.imdb_id)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    IMDb ↗
+                  </a>
+                )}
+              </div>
+            )}
 
             {watched && (
               <div className="moviedetail-feel-card">
@@ -498,6 +511,21 @@ export default function MovieDetail() {
           </div>
           <MediaRow items={recs} />
         </>
+      )}
+
+      {/* Destructive action lives at the very bottom, away from the hero. */}
+      {tracked && (
+        <div className="moviedetail-remove-row">
+          <button
+            className="btn danger small"
+            onClick={() => {
+              removeMovie(movieId)
+              showToast(`Removed ${detail.title} from library`, '🗑️')
+            }}
+          >
+            Remove from library
+          </button>
+        </div>
       )}
 
       {addListOpen && (

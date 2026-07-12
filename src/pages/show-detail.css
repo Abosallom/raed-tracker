@@ -98,6 +98,11 @@
   margin-top: 4px;
 }
 
+/* Secondary actions revealed by the hero "···" disclosure. */
+.show-detail-actions-more {
+  margin-top: 0;
+}
+
 .show-detail-progress-card {
   display: flex;
   flex-direction: column;
@@ -213,37 +218,18 @@
   margin-bottom: 0;
 }
 
-/* season progress ring (watched/aired for the selected season) */
-
-.show-detail-season-ring {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding-bottom: 8px; /* optically aligns with the tabs' scrollbar padding */
-}
-
-/* The watched/aired fraction beside the ring — turns an ambiguous spinning
-   ring into legible progress. */
-.show-detail-season-ring-frac {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text-dim);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.show-detail-season-ring-fill {
-  transition: stroke-dasharray 0.5s cubic-bezier(0.22, 1, 0.36, 1), stroke 0.3s ease;
-}
-
 .show-detail-season-tabs {
   display: flex;
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 8px;
-  scrollbar-width: thin;
+  /* No scrollbar track under the chips — clipping signals overflow. */
+  scrollbar-width: none;
   margin-bottom: 14px;
+}
+
+.show-detail-season-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .show-detail-season-tab {
@@ -332,9 +318,7 @@
   border-bottom: none;
 }
 
-.show-detail-ep.watched {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
+/* Watched rows carry no tint — done is quiet, to-do is where the eye goes. */
 
 /* brief accent ring on the auto-scrolled "up next" episode */
 .show-detail-ep.spotlight {
@@ -386,9 +370,13 @@
 .show-detail-ep-name {
   font-weight: 600;
   font-size: 14px;
-  white-space: nowrap;
+  /* Two lines before truncating — one-line clamps made 4 of 7 titles
+     unreadable at 375px. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .show-detail-ep-meta {
@@ -432,10 +420,14 @@
   border-color: var(--border);
 }
 
-/* When the picker expands inside the main column, let it wrap. */
-.show-detail-ep-main .reaction-picker {
+/* Expanded reaction picker: a full-width row below the episode content (the
+   row wraps just for it), so the six emoji sit on one line. */
+.show-detail-ep {
   flex-wrap: wrap;
-  margin-top: 4px;
+}
+
+.show-detail-ep-reactrow {
+  flex-basis: 100%;
 }
 
 .show-detail-ep-toggle {
@@ -464,17 +456,23 @@
   border-radius: 50%;
 }
 
-.show-detail-ep-toggle:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  transform: scale(1.06);
+/* Hover affordance only on real pointers (sticky touch :hover otherwise
+   leaves a lit circle after every tap). */
+@media (hover: hover) {
+  .show-detail-ep-toggle:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: scale(1.06);
+  }
 }
 
-/* matches the Watch Next queue check: outlined circle -> accent fill */
+/* Watched = quiet dim check, not a solid amber disc — columns of filled
+   discs made the DONE state the loudest thing on the page. Filled amber
+   stays reserved for the next-up action (queue check / Continue pill). */
 .show-detail-ep-toggle.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #101010;
+  background: transparent;
+  border-color: var(--text-faint);
+  color: var(--text-faint);
   animation: show-detail-watch-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -570,13 +568,18 @@
     padding: 0 16px;
     pointer-events: none;
     opacity: 0;
+    /* visibility flips AFTER the fade so the hidden pill is also removed
+       from the tab order / accessibility tree. */
+    visibility: hidden;
     transform: translateY(14px);
-    transition: opacity 0.22s ease, transform 0.22s ease;
+    transition: opacity 0.22s ease, transform 0.22s ease, visibility 0s linear 0.22s;
   }
 
   .show-detail-quickbar.visible {
     opacity: 1;
+    visibility: visible;
     transform: translateY(0);
+    transition-delay: 0s;
     pointer-events: auto;
   }
 
@@ -633,8 +636,7 @@
   .show-detail-ep-toggle,
   .show-detail-quickbar,
   .show-detail-quickbar-btn,
-  .show-detail-countdown-dot,
-  .show-detail-season-ring-fill {
+  .show-detail-countdown-dot {
     animation: none !important;
     transition: none !important;
   }

@@ -7,6 +7,32 @@ import { useLibrary } from '../store/library'
 import { mockComments } from '../api/mockData'
 import { timeAgo } from './shared'
 
+/** Neutral monochrome initial tile — emoji avatars for other commenters read
+    as decoration noise; the user's own emoji avatar stays (it's their pick). */
+function AuthorInitial({ author }: { author: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        width: 32,
+        height: 32,
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: '50%',
+        background: 'var(--bg-elev-2)',
+        border: '1px solid var(--border)',
+        color: 'var(--text-dim)',
+        fontSize: 14,
+        fontWeight: 700,
+      }}
+    >
+      {(author.trim()[0] ?? '?').toUpperCase()}
+    </div>
+  )
+}
+
 export function CommentsSection({ mediaKey, title }: { mediaKey: string; title?: string }) {
   const comments = useLibrary((s) => s.comments)
   const addComment = useLibrary((s) => s.addComment)
@@ -41,8 +67,8 @@ export function CommentsSection({ mediaKey, title }: { mediaKey: string; title?:
       <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
         <div style={{ fontSize: 26 }}>{profile.avatar}</div>
         <input
-          style={{ flex: 1 }}
-          placeholder="Share your thoughts… (no spoilers!)"
+          style={{ flex: 1, minWidth: 0 }}
+          placeholder="Share your thoughts"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -52,8 +78,11 @@ export function CommentsSection({ mediaKey, title }: { mediaKey: string; title?:
             }
           }}
         />
+        {/* Post only earns the amber fill once there's something to post —
+            a filled button next to an empty field was the loudest thing on
+            the page while the real primary action sits in the hero. */}
         <button
-          className="btn primary"
+          className={`btn${text.trim() ? ' primary' : ''}`}
           disabled={!text.trim()}
           onClick={() => {
             if (text.trim()) {
@@ -68,7 +97,11 @@ export function CommentsSection({ mediaKey, title }: { mediaKey: string; title?:
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {all.map((c) => (
           <div key={c.id} style={{ display: 'flex', gap: 10 }}>
-            <div style={{ fontSize: 24 }}>{c.avatar}</div>
+            {c.isMine ? (
+              <div style={{ fontSize: 24 }}>{c.avatar}</div>
+            ) : (
+              <AuthorInitial author={c.author} />
+            )}
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13.5 }}>
                 <b>{c.author}</b>{' '}

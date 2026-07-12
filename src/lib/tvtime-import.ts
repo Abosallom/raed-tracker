@@ -64,6 +64,7 @@ export type DetectedKind =
   | 'official watch/watchlist records'
   | 'official followed shows'
   | 'episode emotions'
+  | 'tvtime-direct'
   | 'unknown'
 
 export interface FileDiagnostic {
@@ -752,7 +753,12 @@ export function mergeParsedFiles(files: ParsedFile[]): TvTimeImport {
   for (const f of files) {
     if (!f.primary) continue
     for (const s of f.shows) {
-      if (s.watchLater) {
+      // A "watch later" show is watchlist-only ONLY when nothing has been
+      // watched. If it carries watched episodes the flag is stale (TV Time
+      // exports e.g. a 96-episode Attack on Titan as watch_later) — import it
+      // as a real tracked show, and keep it OUT of watchLaterShows so its
+      // episodes aren't later suppressed from the official CSV on merge.
+      if (s.watchLater && s.episodes.length === 0) {
         watchLaterShows.set(showKey(s.name), s)
         continue
       }
@@ -912,8 +918,10 @@ export function mergeParsedFiles(files: ParsedFile[]): TvTimeImport {
       episodes: f.episodes.length + f.shows.reduce((n, s) => n + s.episodes.length, 0),
       movies: f.movies.filter((m) => m.watched).length,
       watchlist:
-        f.movies.filter((m) => !m.watched).length + f.shows.filter((s) => s.watchLater).length,
-      shows: f.shows.filter((s) => !s.watchLater).length + f.follows.length,
+        f.movies.filter((m) => !m.watched).length +
+        f.shows.filter((s) => s.watchLater && s.episodes.length === 0).length,
+      shows:
+        f.shows.filter((s) => !s.watchLater || s.episodes.length > 0).length + f.follows.length,
       emotions: f.emotions.length,
     })),
   }

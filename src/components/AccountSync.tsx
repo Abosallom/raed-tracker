@@ -41,7 +41,7 @@ export function AccountSyncCard() {
   return (
     <section className="card">
       <div className="settings-card-head">
-        <div className="settings-card-title">☁️ Account & sync</div>
+        <div className="settings-card-title">Account & sync</div>
         <span className="settings-status">
           <span
             className="settings-dot"

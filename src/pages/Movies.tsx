@@ -130,7 +130,7 @@ function DiscoverRail({ items, onAdd }: { items: SearchResult[]; onAdd: (item: S
   return (
     <section className="movies-disc fade-in" aria-label="Discover more movies">
       <div className="movies-disc-head">
-        <span className="movies-disc-eyebrow">✨ Discover more</span>
+        <span className="movies-disc-eyebrow">Discover more</span>
         <Link className="movies-disc-all" to="/search">
           Browse all →
         </Link>
@@ -148,7 +148,7 @@ function DiscoverRailSkeleton() {
   return (
     <section className="movies-disc" aria-hidden="true">
       <div className="movies-disc-head">
-        <span className="movies-disc-eyebrow">✨ Discover more</span>
+        <span className="movies-disc-eyebrow">Discover more</span>
       </div>
       <div className="movies-disc-rail">
         {Array.from({ length: 6 }, (_, i) => (
@@ -366,13 +366,23 @@ function MosaicTile({
     <div className="movies-tile">
       <Link className="movies-tile-link" to={`/movie/${id}`} title={title}>
         <PosterImage path={poster_path} title={title} />
-        <span className="movies-tile-overlay" aria-hidden="true">
-          <span className="movies-tile-text">
-            <span className="movies-tile-name">{title}</span>
-            {meta && <span className="movies-tile-meta">{meta}</span>}
+        {/* Hover overlay carries the meta only — the title now lives in the
+            always-visible caption below (bare posters were unidentifiable,
+            and the overlay never shows on touch). */}
+        {meta && (
+          <span className="movies-tile-overlay" aria-hidden="true">
+            <span className="movies-tile-text">
+              <span className="movies-tile-meta">{meta}</span>
+            </span>
           </span>
-        </span>
+        )}
+        {emotion && (
+          <span className="movies-tile-emotion" title="Your reaction">
+            {emotion}
+          </span>
+        )}
       </Link>
+      <div className="movies-tile-caption">{title}</div>
       <button
         className={`movies-tile-btn check${checked ? ' on' : ''}`}
         title={checked ? 'Mark unwatched' : 'Mark watched'}
@@ -390,11 +400,6 @@ function MosaicTile({
       >
         ✕
       </button>
-      {emotion && (
-        <span className="movies-tile-emotion" title="Your reaction">
-          {emotion}
-        </span>
-      )}
     </div>
   )
 }
@@ -420,7 +425,6 @@ function UpcomingRow({ item }: { item: SearchResult }) {
         <div className="movies-upmeta">
           {chip && (
             <span className={`chip movies-upchip${chip.future ? ' future' : ''}`}>
-              {chip.future ? '🗓️ ' : ''}
               {chip.label}
             </span>
           )}
@@ -738,10 +742,8 @@ export default function Movies() {
     <div>
       <div className="movies-head">
         <div>
+          {/* No marketing subtitle — the segments already say what's here. */}
           <h1 className="page-title">Movies</h1>
-          <p className="page-subtitle">
-            Your movie hub — what to watch, what you've seen, what's next.
-          </p>
         </div>
       </div>
 
@@ -768,7 +770,7 @@ export default function Movies() {
             title="Filter & sort"
             onClick={() => setSheetOpen(true)}
           >
-            <span aria-hidden="true">⚙</span> Filters
+            Filters
             {filterCount > 0 && <span className="movies-filter-badge">{filterCount}</span>}
           </button>
         )}
@@ -786,12 +788,6 @@ export default function Movies() {
 
       {tab === 'watchlist' && (
         <>
-          {discover === null ? (
-            <DiscoverRailSkeleton />
-          ) : (
-            <DiscoverRail items={discover} onAdd={addDiscover} />
-          )}
-
           {watchShown.length === 0 ? (
             filterActive && watchItems.length > 0 ? (
               <div className="movies-empty-mini fade-in">
@@ -826,6 +822,19 @@ export default function Movies() {
                 ))}
               </div>
             </>
+          )}
+
+          {/* Discovery follows the user's own queue and never re-offers
+              titles already in the library / on the watch list. */}
+          {discover === null ? (
+            <DiscoverRailSkeleton />
+          ) : (
+            <DiscoverRail
+              items={discover.filter(
+                (d) => !movies[d.id] && !watchlist.some((w) => w.type === 'movie' && w.id === d.id),
+              )}
+              onAdd={addDiscover}
+            />
           )}
         </>
       )}

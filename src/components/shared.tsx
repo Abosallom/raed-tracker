@@ -77,12 +77,12 @@ export function PosterCard({
           View →
         </span>
       </div>
-      {item.vote_average > 0 && (
-        <div className="poster-badge">★ {item.vote_average.toFixed(1)}</div>
-      )}
       <div className="poster-title">{item.name}</div>
+      {/* Rating rides the caption line — stamped on the art it collided with
+          poster wordmarks (e.g. "EMERGE★6.9E"). */}
       <div className="poster-sub">
         {subtitle ?? [year, item.media_type === 'tv' ? 'Show' : 'Movie'].filter(Boolean).join(' · ')}
+        {item.vote_average > 0 && ` · ★ ${item.vote_average.toFixed(1)}`}
       </div>
     </Link>
   )

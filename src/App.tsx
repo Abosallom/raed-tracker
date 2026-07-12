@@ -260,6 +260,7 @@ function Nav({
     destinations: Shows / Movies / Explore / Profile. ('/' Home stays routable
     via the .mobile-brand logo link and the desktop sidebar.) */
 function TabBar({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: boolean }) {
+  const { pathname } = useLocation()
   const tab = (to: string, Icon: IconComp, label: string, extra?: ReactNode) => (
     // end on "/": the root NavLink would otherwise be active on every route.
     <NavLink to={to} end={to === '/'} className={({ isActive }) => `tabbar-item${isActive ? ' active' : ''}`}>
@@ -278,7 +279,9 @@ function TabBar({ showsBadge, exploreDot }: { showsBadge: number; exploreDot: bo
         '/',
         IconTv,
         'Shows',
-        showsBadge > 0 ? (
+        // No badge while Shows is the active tab — the page header already
+        // shows the count, and three renderings of one number is noise.
+        showsBadge > 0 && pathname !== '/' ? (
           <span className="tab-badge" aria-label={`${showsBadge} shows with unwatched episodes`}>
             {showsBadge > 99 ? '99+' : showsBadge}
           </span>
