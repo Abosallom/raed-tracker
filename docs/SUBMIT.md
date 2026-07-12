@@ -19,6 +19,13 @@ It appears under the app (and TestFlight) after ~10 min of processing.
 Future uploads: bump the build number in Xcode, re-archive, re-run
 `xcodebuild -exportArchive … -exportOptionsPlist uploadOptions.plist`.
 
+### DONE by assistant: App Store screenshots
+8 screenshots at 1320×2868 (6.9" spec) in ~/Desktop/RaedTracker-AppStore/AppStore-6.9/,
+ordered for the listing: Explore hero, watch-next list, Upcoming, show
+detail, Keep Watching, catch-up prompt, Stats, Profile. Captured from the
+iPhone 17 Pro Max simulator with a real (One Piece + Agent Kim) library,
+dark theme. Drag them into App Store Connect → screenshots (6.9" slot).
+
 ### 2. Create a reviewer demo account (signups are admin-only)
 In your app's `/admin` console, add a member — e.g. username `appreviewer`,
 a password you'll paste into the review notes. Reviewers cannot sign up
