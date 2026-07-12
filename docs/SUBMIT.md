@@ -90,3 +90,18 @@ acceptable to declare if asked).
 **Review notes:** `Demo account — username: appreviewer, password: <set in
 /admin>. Sign in via Profile → Account. TV/movie episode tracker; data from
 TMDB; TV Time import supported.`
+
+## Cowork session 2026-07-12 — completed autonomously
+- ✅ Reviewer demo account CREATED in-app (/admin): appreviewer / RaedReview2026 (Members=5)
+- ✅ Listing text saved: description, keywords, promo text, support+marketing URLs, copyright, subtitle "Your show & movie tracker"
+- ✅ Build 1.0 attached to version (pending version save — blocked by phone)
+- ✅ Reviewer sign-in + notes filled (appreviewer/RaedReview2026)
+- ✅ Pricing = FREE (all 175 regions); Availability = all countries
+- ✅ App Privacy PUBLISHED: Email + Other User Content → App Functionality, linked to identity, NOT tracking + privacy policy URL
+- ✅ App Information: category Entertainment, Content Rights = "Yes, has rights" (TMDB free/attributed), Age Rating = 9+
+
+## Irreducible remainder (only YOU can do — 4 items, ~5 min)
+1. PHONE NUMBER: App Review Information → Contact Information → phone (required; blocks the version Save). Then click Save on the version page — this locks in the attached build + reviewer info.
+2. SCREENSHOTS: version page → Previews and Screenshots → drag the 8 PNGs from ~/Desktop/RaedTracker-AppStore/AppStore-6.9/ into the iPhone 6.5"/6.9" slot (order 01-08 baked into filenames).
+3. EU TRADER STATUS: the yellow banner / Business section — your legal self-classification (free hobby app by an individual = typically "not a trader"; only you can declare it).
+4. SUBMIT: version page → "Add for Review" → Submit. (Needs 1-3 done first.)
