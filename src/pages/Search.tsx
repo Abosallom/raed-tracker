@@ -35,6 +35,7 @@ import {
   watchedByCount,
   watcherCluster,
 } from '../api/social'
+import { fetchLiveFeed, socialLiveEnabled } from '../api/social-live'
 import type { GroupSort } from '../api/groups'
 import { GROUPS, loadJoined, saveJoined, sortGroups } from '../api/groups'
 import './search.css'
@@ -848,11 +849,26 @@ function ActivityTab({
     return m
   }, [trendTv.data, trendMv.data])
 
-  const feed = useMemo(
+  const seededFeed = useMemo(
     () => generateActivityFeed(shows, movies, fallback, 24),
     [shows, movies, fallback],
   )
 
+  // Real activity from the people you follow takes precedence; the seeded feed
+  // only fills in when you follow no one yet (or in demo mode).
+  const [liveFeed, setLiveFeed] = useState<ActivityItem[] | null>(null)
+  useEffect(() => {
+    if (!socialLiveEnabled()) return
+    let alive = true
+    void fetchLiveFeed(24).then((rows) => {
+      if (alive && rows.length > 0) setLiveFeed(rows)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const feed = liveFeed && liveFeed.length > 0 ? liveFeed : seededFeed
   const hasLibrary = Object.keys(shows).length + Object.keys(movies).length > 0
 
   if (feed.length === 0) {

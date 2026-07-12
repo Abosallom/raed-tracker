@@ -20,6 +20,7 @@ import type {
   WatchRecord,
 } from '../types'
 import { episodeKey } from '../types'
+import { logActivity } from '../api/social-live'
 
 export function showToSnapshot(s: ShowDetail): ShowSnapshot {
   const counts: Record<number, number> = {}
@@ -167,8 +168,10 @@ interface LibraryState {
   toggleListItem: (listId: string, item: Omit<ListItem, 'addedAt'>) => void
 
   // ----- social graph -----
-  /** Follow/unfollow a seeded SocialUser. */
+  /** Follow/unfollow a member (local; the follows table is written by the UI). */
   toggleFollow: (userId: string) => void
+  /** Replace the follow set from the authoritative follows table (union-merged). */
+  setFollowingIds: (ids: string[]) => void
 
   // ----- numeric ratings (1-10; undefined clears) -----
   setShowRating: (id: number, rating: number | undefined) => void
@@ -318,6 +321,18 @@ export const useLibrary = create<LibraryState>()(
             },
           },
         })
+        if (nowWatched) {
+          // Publish to the real social feed (no-op when signed out / demo).
+          void logActivity({
+            kind: 'watched',
+            mediaType: 'tv',
+            mediaId: show.snapshot.id,
+            mediaName: show.snapshot.name,
+            poster_path: show.snapshot.poster_path,
+            season,
+            episode,
+          })
+        }
         return nowWatched
       },
 
@@ -590,6 +605,11 @@ export const useLibrary = create<LibraryState>()(
             : [...st.following, userId],
         })),
 
+      // Reconcile the local follow set with the authoritative follows table
+      // (union: keep any local-only follows made while the query was in flight).
+      setFollowingIds: (ids) =>
+        set((st) => ({ following: [...new Set([...ids, ...st.following])] })),
+
       setShowRating: (id, rating) =>
         set((st) => {
           const show = st.shows[id]
@@ -663,6 +683,15 @@ export const useLibrary = create<LibraryState>()(
             [id]: { ...m, watched: nowWatched ? { watchedAt: now() } : null },
           },
         })
+        if (nowWatched) {
+          void logActivity({
+            kind: 'watched',
+            mediaType: 'movie',
+            mediaId: m.snapshot.id,
+            mediaName: m.snapshot.title,
+            poster_path: m.snapshot.poster_path,
+          })
+        }
         return nowWatched
       },
 

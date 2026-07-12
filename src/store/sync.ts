@@ -30,6 +30,7 @@ import type {
   WatchlistItem,
 } from '../types'
 import { supabase } from '../api/supabase'
+import { ensureProfile } from '../api/social-live'
 import { isAbsorbingCrossTabWrite, useLibrary } from './library'
 
 /**
@@ -957,6 +958,11 @@ function connect(user: { id: string; email?: string }) {
   }
   void pullAndMerge()
   subscribeRealtime(user.id)
+  // Publish/refresh the member's public social profile so they show up to
+  // other real members (username + avatar from the local profile).
+  const p = useLibrary.getState().profile
+  const shows = Object.keys(useLibrary.getState().shows).length
+  void ensureProfile({ username: p.name, avatar: p.avatar, showsWatched: shows })
 }
 
 /** Wire everything up. Call once at app startup; safe no-op without config. */
